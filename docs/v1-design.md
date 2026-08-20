@@ -10,15 +10,14 @@ Merge both through the use of Stanza, which already divides input into sentences
 
 ### Term extraction
 
-Terms are gonna be Wiktionary page titles, identified by a binary tree corresponding to a normalized
-polish notation representation of the Universal Dependencies' dependency tree that Stanza produces
-for them.
+Terms are gonna be Wiktionary page titles, identified by their Universal Dependencies' dependency
+tree.
 
 #### One-time setup
 
 Download the whole list of Wiktionary page titles. For each, apply Stanza, and from the dependency
-tree produce its UD dependency tree, where the arrow's label are represented as mere nodes, and
-store them (pointing to the original page title).
+tree produce its UD dependency tree, where the arrow's label (deprel) are represented as mere nodes,
+and store them (pointing to the original page title).
 
 Optimizations may come later.
 
