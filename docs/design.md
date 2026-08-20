@@ -24,7 +24,7 @@ Source format normalization's output
 
 A list of strings, each of which should be a sentence
 
-### 3. Word extraction
+### 3. Term extraction
 
 #### Input
 
@@ -39,27 +39,38 @@ all the terms that appear in the sentence, lemmatized.
 
 #### Input
 
-Word extraction's output
+Term extraction's output, and optionally a pre-existing list of glosses (defined below).
 
 #### Output
 
-A list of cards.
+A list of glosses
 
-Each card is composed by:
-- Its index
-- Its lemmatized form
-- Its actual form in the text (it may be already lemmatized)
-- The data that'll be available in Anki (definition, audio, IPA, examples)
+Each gloss is composed by:
+- The actual form its corresponding term takes in the text
+- The lemmatized form of the term
+- Data
+  - Etymology
+  - IPA phonetics
+  - Definition
+  - Examples
+- A set of glosses this gloss may depend upon
 
-For every lemmatized term, a card is introduced with its data. If the original term is inflected, an
-inflected card should be introduced as well.
 
-The inflected card should explain its relationship to the lemmatized one. E.g., for “corrió”, it
-should explain that it's the indicative past tense for “correr” in first person.
+The stage makes, for every term in the received list of terms, at least one gloss corresponding to
+it. If it's inflected, it should also fetch and make another gloss for precisely the lemmatized
+form, upon which the inflected one depends.
 
-Cards *must not* be repeated.
+The inflected gloss' definition should explain its relationship to the lemmatized one. E.g., for
+“corrió”, it should explain that it's the indicative past tense for “correr” in first person.
 
-### 5. Shuffling
+Glosses *must not* be repeated (as identified by their actual form in the source and definition).
+
+The glosses' index must be increasing with their ocurrence in the original source.
+
+This stage must do sense disambiguation from the Wiktionary page, so as not to clog the produced
+cards with useless translations.
+
+### 5. Deck construction
 
 #### Input
 
@@ -67,10 +78,53 @@ Definition fetching's output
 
 #### Output
 
-A list of shuffled index, with two properties:
+A list of cards.
 
-- A card's dependency appears necessarily before
+For every gloss, it should make at least two cards:
+- Recognition card
+  - Challenge
+    - Term as it appears in the source
+    - Examples
+  - Answer
+    - Etymology
+    - IPA phonetics
+    - Definition
+  - Dependencies
+- Production card
+  - Challenge
+    - Definition
+  - Answer
+    - Term as it appears in the source
+    - IPA phonetics
+    - Etymology
+  - Dependencies
+
+The production card must depend on the recognition card. This stage will later also have a
+translation stage, in case the fetched language doesn't match the mother language.
+
+### 6. Shuffling
+
+#### Input
+
+Deck consturction's output
+
+#### Output
+
+A list of shuffled cards, with two properties:
+
+- A card's dependency appears necessarily before. Use stable topological sort keyed by shuffled
+  indexes.
 - The shuffling only happens inside windows of 20 cards
+
+### 7. Anki output
+
+#### Input
+
+Shuffling's output
+
+#### Output
+
+Dump an Anki deck to disk
 
 ## Future possibilities
 
@@ -106,13 +160,16 @@ A less redundant list of cards.
 Whenever there's a closed rule for a given inflection, the rule should be explained in a card a few
 cards after the first three examples.
 
+### Etymology resolution
+
+This stage could actually fetch the etymology up until a point where it's explained in the mother
+language.
+
 ## Details
 
-### Definition fetching
+### V1
 
-The main source of truth here must be Wiktionary. The inflected form must be looked up first
-
-All lookups must be cached.
+See [v1 design doc](./v1-design.md).
 
 ## Test cases
 
