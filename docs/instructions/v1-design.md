@@ -4,6 +4,8 @@
 
 Omit. Expect text as input.
 
+We'll also assume English as the mother language.
+
 ## Sentencing and term extraction
 
 Merge both through the use of Stanza, which already divides input into sentences.
@@ -15,9 +17,9 @@ tree.
 
 #### One-time setup
 
-Download the whole list of Wiktionary page titles. For each, apply Stanza, and from the dependency
-tree produce its UD dependency tree, where the arrow's label (deprel) are represented as mere nodes,
-and store them (pointing to the original page title).
+Download the whole list of English Wiktionary page titles. For each, apply Stanza, and from the
+dependency tree produce its UD dependency tree, where the arrow's label (deprel) are represented as
+mere nodes, and store them (pointing to the original page title).
 
 Optimizations may come later.
 

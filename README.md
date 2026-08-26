@@ -7,7 +7,16 @@ in the target language.
 
 ## Structure
 
-### `docs/design.md`
+### `docs/instructions/`
+
+Everything inside this directory is intended to be written only by humans, so as to have a clear
+ownership division. It also keeps human reasoning and decisions separate from AI.
+
+### `docs/execution/`
+
+This directory is intended to persist design choices/notes from AI agents.
+
+### `docs/instructions/design.md`
 
 This document should be the single source of truth for the design. Purposefully terse, so that a
 human reader can get the gist of it quickly. Details may be offloaded to other documents, thus

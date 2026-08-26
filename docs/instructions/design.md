@@ -33,7 +33,7 @@ Sentencing's output
 #### Output
 
 List of `(sentence, list of terms)` pairs (all the sentences), where the list of terms contains
-all the terms that appear in the sentence, lemmatized.
+all the terms that appear in the sentence, in the inflected form they appear in.
 
 ### 4. Definition fetching
 
