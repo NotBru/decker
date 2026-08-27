@@ -32,6 +32,19 @@ okay, however, if two subtrees have share a branch.
 From the resulting set of trees, extract their Wiktionary page titles. Those are terms corresponding
 to that sentence.
 
+## Definition fetching
+
+Wiktionary *first*. Form-of entries are welcome. Fetch all that is available:
+- Etymology
+- IPA phonetics
+- Definition
+- Examples
+- Actual audio
+
+The whole page should be cached (without audio).
+
+Sense disambiguation must be done via ollama to a local parametrizable model. Default: "gemma4".
+
 ### Test cases
 
 Do not test.

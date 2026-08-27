@@ -46,7 +46,8 @@ Term extraction's output, and optionally a pre-existing list of glosses (defined
 A list of glosses
 
 Each gloss is composed by:
-- The actual form its corresponding term takes in the text
+- The inflected form its corresponding term takes in the text, written as it'd be found in
+  Wiktionary.
 - The lemmatized form of the term
 - Data
   - Etymology
@@ -63,7 +64,7 @@ form, upon which the inflected one depends.
 The inflected gloss' definition should explain its relationship to the lemmatized one. E.g., for
 “corrió”, it should explain that it's the indicative past tense for “correr” in first person.
 
-Glosses *must not* be repeated (as identified by their actual form in the source and definition).
+Glosses *must not* be repeated, as identified by the inflected form they have.
 
 The glosses' index must be increasing with their ocurrence in the original source.
 
@@ -83,7 +84,7 @@ A list of cards.
 For every gloss, it should make at least two cards:
 - Recognition card
   - Challenge
-    - Term as it appears in the source
+    - Gloss' term
     - Examples
   - Answer
     - Etymology
@@ -94,7 +95,7 @@ For every gloss, it should make at least two cards:
   - Challenge
     - Definition
   - Answer
-    - Term as it appears in the source
+    - Gloss' term
     - IPA phonetics
     - Etymology
   - Dependencies
