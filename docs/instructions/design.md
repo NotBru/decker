@@ -58,18 +58,20 @@ Each gloss is composed by:
 
 
 The stage makes, for every term in the received list of terms, at least one gloss corresponding to
-it. If it's inflected, it should also fetch and make another gloss for precisely the lemmatized
-form, upon which the inflected one depends.
+it. If the gloss is describing an inflection, it should also fetch and make another gloss for
+precisely the lemmatized form, upon which the inflected one depends.
 
 The inflected gloss' definition should explain its relationship to the lemmatized one. E.g., for
 “corrió”, it should explain that it's the indicative past tense for “correr” in first person.
 
-Glosses *must not* be repeated, as identified by the inflected form they have.
+Glosses *must not* be repeated, as identified by the inflected form they have plus their definition
+(their sense).
 
 The glosses' index must be increasing with their ocurrence in the original source.
 
-This stage must do sense disambiguation from the Wiktionary page, so as not to clog the produced
-cards with useless translations.
+This stage must do sense disambiguation by removing glosses whose definition doesn't fit the usage
+of the sentence they correspond to, so as not to clog the produced cards with useless translations
+nor the deck with useless cards.
 
 ### 5. Deck construction
 
