@@ -128,6 +128,8 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if payloads is None:
         return None
     entries = _entries(payloads.get("definition"), lang)
+    if not entries and _is_split(payloads):
+        payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
         return None
     etymology, ipa, audio = _from_html(payloads.get("parse"), entries[0].language)
@@ -139,6 +141,50 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         ipa=ipa,
         audio_url=audio,
     )
+
+
+#: Wiktionary moves the language sections of an oversized page onto subpages
+#: and leaves this footer behind in their place.
+_SPLIT_MARKER = "mammoth-page-footer"
+
+#: The two subpages it splits them into, by the language's English name.
+_SPLIT_SUBPAGES = ("{title}/languages A to L", "{title}/languages M to Z")
+
+
+def _is_split(payloads: dict) -> bool:
+    """Whether this page keeps its language sections on subpages.
+
+    `a` carries hundreds of languages, so Wiktionary renders only Translingual
+    and English and replaces the rest with a footer of links. Every endpoint
+    agrees -- the definition API returns `en` alone and the raw wikitext has no
+    `==Spanish==` -- so this is not truncation to work around but a split to
+    follow, and the sections really are somewhere else.
+    """
+    parse = payloads.get("parse")
+    if not isinstance(parse, dict):
+        return False
+    return _SPLIT_MARKER in parse.get("parse", {}).get("text", "")
+
+
+def _from_split(
+    title: str, payloads: dict, *, edition: str, lang: str, refresh: bool
+) -> tuple[dict, list]:
+    """Look for ``lang`` on the subpages a split page hands its sections to.
+
+    Which of the two holds it depends on the language's English name, which is
+    not what we are given, so both are tried. The payloads of whichever one
+    answers are returned with it, since the etymology and the reading have to
+    come from the same place as the definitions.
+    """
+    for pattern in _SPLIT_SUBPAGES:
+        subpage = pattern.format(title=title)
+        found = _payloads(subpage, edition=edition, refresh=refresh)
+        if found is None:
+            continue
+        entries = _entries(found.get("definition"), lang)
+        if entries:
+            return found, entries
+    return payloads, []
 
 
 def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
@@ -155,10 +201,39 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
     parse = _get_json(PARSE_URL.format(edition=edition, title=quoted))
     payloads = {"definition": definition, "parse": parse}
 
+    if _transient_failure(definition):
+        #: Wiktionary renders a Lua timeout *into the page*, with a 200 and a
+        #: well-formed body, so nothing below this notices that the
+        #: definitions are error text. Cached, it is permanent: every later
+        #: run reads the file and asks the model to choose between fifteen
+        #: copies of the same message. `de` and `o` were both caught this way.
+        #: The page is still returned -- a degraded run beats no run -- but it
+        #: is not written, so the next run has a chance at the real thing.
+        print(
+            f"[decker] {title!r} came back as a Wiktionary error page; "
+            "using it once, not caching it",
+            file=sys.stderr,
+        )
+        return payloads
+
     path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "wt", encoding="utf-8") as out:
         json.dump(payloads, out, ensure_ascii=False)
     return payloads
+
+
+#: Wiktionary's server-side failures that come back as page text under a 200.
+_TRANSIENT = (
+    "The time allocated for running Lua modules has expired",
+    "Lua error",
+    "script error",
+)
+
+
+def _transient_failure(definition: object) -> bool:
+    """Whether a definition payload is Wiktionary reporting its own failure."""
+    text = json.dumps(definition, ensure_ascii=False).lower()
+    return any(marker.lower() in text for marker in _TRANSIENT)
 
 
 def _get_json(url: str) -> dict | list | None:
