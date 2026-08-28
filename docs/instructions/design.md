@@ -1,6 +1,7 @@
 # Design document
 
-The tool is a pipeline.
+The tool is a pipeline that incrementally constructs an Anki deck that teaches everything needed to
+know before consuming something in a language that's needed to learn.
 
 ## Stage overview
 
@@ -39,7 +40,9 @@ all the terms that appear in the sentence, in the inflected form they appear in.
 
 #### Input
 
-Term extraction's output, and optionally a pre-existing list of glosses (defined below).
+- Term extraction's output
+- Optionally, a pre-existing list of glosses (defined below).
+- Optionally, previous deck information, when updating a previously-constructed deck.
 
 #### Output
 
@@ -56,11 +59,13 @@ Each gloss is composed by:
   - Examples
 - A set of glosses this gloss may depend upon
 
-
 The stage makes, for every term in the received list of terms, at least one gloss corresponding to
 it. If the gloss is describing a word in terms of another (e.g. inflections are described in terms
 of their lemma, or diminutives in term of another noun), it should also fetch and make another gloss
 for the referenced words, upon which the first one depends.
+
+Glosses that are already explained in the previously constructed deck (when provided) should be
+removed from the pipeline at this stage.
 
 The inflected gloss' definition should explain its relationship to the lemmatized one. E.g., for
 “corrió”, it should explain that it's the indicative past tense for “correr” in first person.
@@ -79,7 +84,7 @@ nor the deck with useless cards.
 
 #### Input
 
-Definition fetching's output
+Definition fetching's output.
 
 #### Output
 
