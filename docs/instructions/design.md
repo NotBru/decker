@@ -109,10 +109,22 @@ For every gloss, it should make at least two cards:
     - Etymology
   - Dependencies
 
-The production card must depend on the recognition card. This stage will later also have a
-translation stage, in case the fetched language doesn't match the mother language.
+The production card must depend on the recognition card.
 
-### 6. Shuffling
+### 6. Mother language translation
+
+#### Input
+
+Deck construction's output.
+
+#### Output
+
+A list of cards.
+
+The same list of cards as before, but the mother language is translated from English to the mother
+language.
+
+### 7. Shuffling
 
 #### Input
 
@@ -127,7 +139,7 @@ A list of shuffled cards, with two properties:
 - The shuffling only happens inside windows of 140 cards, which corresponds to a week of learning
   under default values.
 
-### 7. Anki output
+### 8. Anki output
 
 #### Input
 
