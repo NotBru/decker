@@ -119,7 +119,8 @@ A list of shuffled cards, with two properties:
 
 - A card's dependency appears necessarily before. Use stable topological sort keyed by shuffled
   indexes.
-- The shuffling only happens inside windows of 20 cards
+- The shuffling only happens inside windows of 140 cards, which corresponds to a week of learning
+  under default values.
 
 ### 7. Anki output
 
@@ -132,6 +133,11 @@ Shuffling's output
 Dump an Anki deck to disk
 
 ## Future possibilities
+
+### Closed-form writting schemes
+
+Should identify whenever the target language's writing system differs from the original (even if
+it's just pronounciation) and teach it
 
 ### Concept identification
 

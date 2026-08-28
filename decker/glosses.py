@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from decker import pages
-from decker.disambiguation import DEFAULT_MODEL, Disambiguator
+from decker.disambiguation import Disambiguator
+from decker.ollama import DEFAULT_MODEL
 from decker.pages import Page, Sense
 from decker.terms import Term
 

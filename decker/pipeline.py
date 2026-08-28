@@ -1,8 +1,10 @@
-"""The v1 pipeline, from source text to glosses.
+"""The v1 pipeline, from source text to a shuffled deck of cards.
 
 Source format normalization is omitted in v1: the input is already text.
-Sentencing and term extraction share Stanza's parse of the document, and
-definition fetching turns the terms they produce into glosses.
+Sentencing and term extraction share Stanza's parse of the document,
+definition fetching turns the terms they produce into glosses, and deck
+construction and shuffling turn those into the cards Anki is handed. Each
+function here stops the pipeline one stage further along.
 """
 
 from __future__ import annotations
@@ -10,11 +12,14 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 
-from decker import trees, wiktionary
+from decker import cards as deck_cards
+from decker import shuffling, trees, wiktionary
+from decker.cards import Card
 from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
 from decker.nlp import pipeline
 from decker.terms import Term, extract
+from decker.translation import SOURCE_LANGUAGE
 from decker.wiktionary import TitleIndex
 
 #: v1 assumes English as the mother language, so glosses -- and therefore the
@@ -98,6 +103,28 @@ def define(
         audio=audio,
         refresh=refresh_pages,
     )
+
+
+def deck(
+    text: str,
+    *,
+    target_lang: str,
+    mother_language: str = SOURCE_LANGUAGE,
+    seed: int | None = None,
+    window: int = shuffling.WINDOW,
+    translate: bool = True,
+    **define_arguments,
+) -> list[Card]:
+    """Run every stage: text, terms, glosses, cards, and the order to learn them."""
+    glosses = define(text, target_lang=target_lang, **define_arguments)
+    built = deck_cards.build(
+        glosses,
+        mother_language=mother_language,
+        model=define_arguments.get("model"),
+        host=define_arguments.get("host"),
+        translate=translate,
+    )
+    return shuffling.shuffle(built, seed=seed, window=window)
 
 
 def build_index(

@@ -1,7 +1,8 @@
 """Glosses as a readable document, one heading each.
 
-v1 stops at definition fetching, so a heading here is a gloss, not yet the
-recognition/production pair the design's deck construction will make from it.
+A heading here is a gloss, not the recognition/production pair deck
+construction makes from it: this document is for reading the glosses a run
+produced, which is easier done before they are cut into card faces.
 Audio appears as Wiktionary's own link rather than the cached sound file: the
 cache path is of no use to a reader of the document, and the link is there
 whether or not the run downloaded anything.
@@ -42,9 +43,8 @@ def render(
         f"# {title}",
         "",
         f"{len(glosses)} glosses, in the order their terms occur — one per sense, so a "
-        "word used in two meanings appears twice. v1 stops at definition fetching, so "
-        "each heading is one gloss; deck construction turns each into a recognition "
-        "card and a production card.",
+        "word used in two meanings appears twice. Each heading is one gloss; deck "
+        "construction turns each into a recognition card and a production card.",
         "",
     ]
     by_index = {gloss.index: gloss for gloss in glosses}
@@ -73,7 +73,7 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
     if gloss.lemma != gloss.surface:
         facts.append(f"**lemma** {gloss.lemma}")
     facts.append(
-        f"**entry** [{gloss.entry}]({_url(gloss.entry, edition, gloss.language)})"
+        f"**entry** [{gloss.entry}]({entry_url(gloss.entry, edition, gloss.language)})"
     )
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
@@ -123,7 +123,8 @@ def _file_name(url: str) -> str:
     return urllib.parse.unquote(posixpath.basename(url))
 
 
-def _url(title: str, edition: str, language: str) -> str:
+def entry_url(title: str, edition: str, language: str) -> str:
+    """The Wiktionary URL of one entry, at its own language's section."""
     return WIKTIONARY.format(
         edition=edition,
         title=urllib.parse.quote(title.replace(" ", "_"), safe=""),

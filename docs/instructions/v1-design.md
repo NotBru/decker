@@ -43,7 +43,17 @@ Wiktionary *first*. Form-of entries are welcome. Fetch all that is available:
 
 The whole page should be cached (without audio).
 
-Sense disambiguation must be done via ollama to a local parametrizable model. Default: "gemma4".
+Sense disambiguation must be done via ollama to a parametrizable model. Default: "gemma4".
+
+## Deck construction
+
+No further notes on the overall design.
+
+Translate via ollama as above. Default "gemma4" as well.
+
+## Shuffling and Anki output
+
+No further notes on the overall design.
 
 ### Test cases
 

@@ -8,12 +8,13 @@ import json
 import sys
 from pathlib import Path
 
-from decker import markdown, pipeline
-from decker.disambiguation import DEFAULT_HOST, DEFAULT_MODEL
+from decker import anki, markdown, pipeline, shuffling
+from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL
+from decker.translation import SOURCE_LANGUAGE
 
 #: Every stage runs in one go; the subcommands below stop the pipeline early.
-DEFAULT_COMMAND = "define"
-COMMANDS = ("extract", "define", "index")
+DEFAULT_COMMAND = "deck"
+COMMANDS = ("extract", "define", "deck", "index")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,8 +26,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="decker",
         description=(
             "Build language-learning material from a text. With no subcommand the "
-            "whole pipeline runs, which is what `define` does; `extract` and `index` "
-            "stop it early."
+            "whole pipeline runs, which is what `deck` does; `extract`, `define` and "
+            "`index` stop it early."
         ),
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -51,15 +52,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     define = subcommands.add_parser(
-        "define", help="fetch definitions and build the glosses of a source text"
+        "define", help="fetch definitions and build the glosses, and stop there"
     )
-    define.add_argument(
-        "source",
-        nargs="?",
-        default="-",
-        help="source text file, or - for standard input",
-    )
-    _add_language_arguments(define)
+    _add_source_arguments(define)
+    _add_definition_arguments(define)
     define.add_argument(
         "--format",
         choices=("text", "json", "markdown"),
@@ -69,32 +65,52 @@ def main(argv: list[str] | None = None) -> int:
     define.add_argument(
         "--out", help="write the output to this file instead of standard output"
     )
-    define.add_argument(
-        "--whole-index",
+
+    deck = subcommands.add_parser(
+        "deck", help="run the whole pipeline and write an Anki deck"
+    )
+    _add_source_arguments(deck)
+    _add_definition_arguments(deck)
+    deck.add_argument(
+        "--format",
+        choices=("apkg", "text", "json"),
+        default="apkg",
+        help="write an Anki package, or dump the cards for reading",
+    )
+    deck.add_argument(
+        "--out",
+        help="where to write the deck (default: the source's name, with .apkg)",
+    )
+    deck.add_argument(
+        "--name", help="name of the deck inside Anki (default: the source's name)"
+    )
+    deck.add_argument(
+        "--mother-lang",
+        default=SOURCE_LANGUAGE,
+        help=(
+            "language to write the cards in, named as a word rather than a code "
+            f"(default: {SOURCE_LANGUAGE}, the edition's own, which needs no "
+            "translation)"
+        ),
+    )
+    deck.add_argument(
+        "--no-translate",
         action="store_true",
-        help="parse every Wiktionary title, instead of only those the text could use",
+        help="leave the cards in the edition's language whatever --mother-lang says",
     )
-    define.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"ollama model used for sense disambiguation (default: {DEFAULT_MODEL})",
+    deck.add_argument(
+        "--seed",
+        type=int,
+        help="seed for the shuffle, so a deck can be built the same way twice",
     )
-    define.add_argument(
-        "--ollama-host",
-        help=f"ollama endpoint (default: $OLLAMA_HOST, else {DEFAULT_HOST})",
-    )
-    define.add_argument(
-        "--no-disambiguate",
-        action="store_true",
-        help="keep every sense of a page instead of asking the model to choose",
-    )
-    define.add_argument(
-        "--no-audio", action="store_true", help="do not download pronunciation files"
-    )
-    define.add_argument(
-        "--refresh-pages",
-        action="store_true",
-        help="re-fetch pages even if they are already cached",
+    deck.add_argument(
+        "--window",
+        type=int,
+        default=shuffling.WINDOW,
+        help=(
+            "shuffle cards no further than this many places from where the source "
+            f"put them (default: {shuffling.WINDOW}, a week of learning)"
+        ),
     )
 
     index = subcommands.add_parser(
@@ -107,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_index(arguments)
     if arguments.command == "define":
         return _run_define(arguments)
+    if arguments.command == "deck":
+        return _run_deck(arguments)
     return _run_extract(arguments)
 
 
@@ -124,6 +142,62 @@ def _add_language_arguments(parser: argparse.ArgumentParser) -> None:
         "--refresh-titles",
         action="store_true",
         help="re-download the title dump even if it is already cached",
+    )
+
+
+def _add_source_arguments(parser: argparse.ArgumentParser) -> None:
+    """The source text, its language, and how much of the index to build."""
+    parser.add_argument(
+        "source",
+        nargs="?",
+        default="-",
+        help="source text file, or - for standard input",
+    )
+    _add_language_arguments(parser)
+    parser.add_argument(
+        "--whole-index",
+        action="store_true",
+        help="parse every Wiktionary title, instead of only those the text could use",
+    )
+
+
+def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
+    """What definition fetching needs: a model, and what to do without one."""
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"ollama model used to choose senses and translate (default: {DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--ollama-host",
+        help=f"ollama endpoint (default: $OLLAMA_HOST, else {DEFAULT_HOST})",
+    )
+    parser.add_argument(
+        "--no-disambiguate",
+        action="store_true",
+        help="keep every sense of a page instead of asking the model to choose",
+    )
+    parser.add_argument(
+        "--no-audio", action="store_true", help="do not download pronunciation files"
+    )
+    parser.add_argument(
+        "--refresh-pages",
+        action="store_true",
+        help="re-fetch pages even if they are already cached",
+    )
+
+
+def _definition_arguments(arguments: argparse.Namespace) -> dict:
+    """Those same arguments, as the pipeline's keywords."""
+    return dict(
+        edition=arguments.edition,
+        whole_index=arguments.whole_index,
+        refresh_titles=arguments.refresh_titles,
+        model=arguments.model,
+        host=arguments.ollama_host,
+        disambiguate=not arguments.no_disambiguate,
+        audio=not arguments.no_audio,
+        refresh_pages=arguments.refresh_pages,
     )
 
 
@@ -164,14 +238,7 @@ def _run_define(arguments: argparse.Namespace) -> int:
     glosses = pipeline.define(
         _source_text(arguments.source),
         target_lang=arguments.target_lang,
-        edition=arguments.edition,
-        whole_index=arguments.whole_index,
-        refresh_titles=arguments.refresh_titles,
-        model=arguments.model,
-        host=arguments.ollama_host,
-        disambiguate=not arguments.no_disambiguate,
-        audio=not arguments.no_audio,
-        refresh_pages=arguments.refresh_pages,
+        **_definition_arguments(arguments),
     )
     if arguments.format == "json":
         rendered = (
@@ -197,6 +264,84 @@ def _run_define(arguments: argparse.Namespace) -> int:
     else:
         sys.stdout.write(rendered)
     return 0
+
+
+def _run_deck(arguments: argparse.Namespace) -> int:
+    cards = pipeline.deck(
+        _source_text(arguments.source),
+        target_lang=arguments.target_lang,
+        mother_language=arguments.mother_lang,
+        translate=not arguments.no_translate,
+        seed=arguments.seed,
+        window=arguments.window,
+        **_definition_arguments(arguments),
+    )
+    name = arguments.name or _document_title(arguments.source)
+
+    if arguments.format == "apkg":
+        out = Path(arguments.out or f"{_document_stem(arguments.source)}.apkg")
+        anki.write(
+            cards,
+            out,
+            name=name,
+            source=_document_title(arguments.source),
+            edition=arguments.edition or pipeline.MOTHER_EDITION,
+        )
+        print(f"[decker] wrote {out}", file=sys.stderr)
+        return 0
+
+    if arguments.format == "json":
+        rendered = (
+            json.dumps(
+                [dataclasses.asdict(card) for card in cards],
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+    else:
+        rendered = "".join(
+            _format_card(card, position)
+            for position, card in enumerate(cards, start=1)
+        )
+
+    if arguments.out:
+        Path(arguments.out).write_text(rendered, encoding="utf-8")
+        print(f"[decker] wrote {arguments.out}", file=sys.stderr)
+    else:
+        sys.stdout.write(rendered)
+    return 0
+
+
+def _format_card(card, position: int) -> str:
+    """One card as a few lines, in the order it is to be studied."""
+    heading = f"{position}. [{card.kind}] card {card.index}, gloss {card.gloss}"
+    if card.depends_on:
+        heading += f"  after {', '.join(str(index) for index in card.depends_on)}"
+    lines = [heading]
+    lines += [f"    ? {piece}" for piece in _side(card.challenge)]
+    lines += [f"    = {piece}" for piece in _side(card.answer)]
+    return "\n".join(lines) + "\n\n"
+
+
+def _side(side) -> list[str]:
+    pieces = []
+    if side.term:
+        pieces.append(side.term)
+    if side.definition:
+        pieces.append(side.definition)
+    pieces += list(side.examples)
+    if side.ipa:
+        pieces.append(" ".join(side.ipa))
+    if side.etymology:
+        pieces.append(side.etymology)
+    if side.audio:
+        pieces.append(Path(side.audio).name)
+    return pieces
+
+
+def _document_stem(source: str) -> str:
+    return "deck" if source == "-" else Path(source).stem
 
 
 def _document_title(source: str) -> str:
