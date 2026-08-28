@@ -32,17 +32,48 @@ design wins and the code is wrong.
 - Wikimedia answered a burst of back-to-back requests with HTTP 429. Requests are now spaced half a
   second apart and a 429 or 503 is waited out, honouring `Retry-After` when the server sends one.
 
+- A page whose definitions come back as Wiktionary's own failure text — a Lua timeout, rendered into
+  the page under a normal 200 — is used for the run but never written to the cache. Cached, such a
+  page is permanent: `de` and `o` had sat there long enough that every run asked the model to choose
+  between fifteen copies of `The time allocated for running Lua modules has expired`. Not writing it
+  costs one degraded run and lets the next one get the real page.
+
+- A title too large for one page keeps its language sections on `<title>/languages A to L` and
+  `<title>/languages M to Z`, and shows a footer of links in their place. `a` is the one such title
+  the Barbapedro text reaches: the definition API returns English alone, and so does the raw
+  wikitext, so this is a split to follow rather than truncation to work around — parsing the HTML
+  instead would have missed it just the same. When a page has that footer and no section for the
+  language, both subpages are tried and the payloads of whichever answers are used whole, so the
+  reading and the etymology come from the same place as the definitions. The gloss keeps the
+  original title, since `a` is the word and the subpage is only where Wiktionary filed it.
+
 ## Glosses
 
 - A term is glossed from the first of its entries that actually has a section in the target
   language. `El` matched both the `El` page (a Semitic deity, no Spanish section) and `el`; the
   first is skipped and the article is what gets glossed.
 
-- The lemma gets a gloss of its own only when its page is a *different* page from the one the
-  inflected form was glossed from. `corrió` and `correr` are two pages, so there are two glosses and
-  the first depends on the second. `Lo`, whose own page has no Spanish section, is glossed straight
-  from `él`; a second gloss carrying the same definitions would be the repetition the design
-  forbids.
+- Dependencies come from the definition, not from the parse. A sense that describes its word in
+  terms of another names that word in its own text — `diminutive of pata`, `apocopic form of mío`,
+  `first/third-person singular imperfect indicative of ser` — and that word is glossed and depended
+  upon. Keying off Stanza's lemma instead had missed the whole class where the two disagree:
+  `patita`, `mi` and `larguísimo` all lemmatize to themselves, so they carried no dependency while
+  their definitions pointed at `pata`, `mío` and `largo`, none of which were glossed at all.
+
+  Only the pointing sense gets the edge, which is why `era` the noun ("threshing floor") no longer
+  claims to be a form of `ser` while `era` the verb still does, and why the interjection senses of
+  `vaya` stand alone while its imperative sense depends on `ir`.
+
+  Wiktionary names the referenced word in the sense that *opens* a part-of-speech block and lets the
+  lines beneath it continue bare, so a bare line inherits the block's word — but only a block whose
+  first sense names one, and only for lines that are themselves grammatical description. Keying off
+  any sense in the block let `ir`, whose tenth definition mentions the past participle of reflexive
+  verbs, hand `reflexive` to its neighbours.
+
+  A referenced word is glossed at one sense: the one its pointer relies on, asked for on its own
+  prompt. `patita` depends on `pata` as "paw, foot, leg", not on all eight of its senses. Resolution
+  recurses, and the chain of titles being resolved is carried down so a pair defined in terms of each
+  other cannot loop.
 
 - A gloss carries one sense, not a page's worth: every sense that survives disambiguation becomes a
   gloss of its own. Identity is then the pair the design names — the inflected form plus that one
@@ -93,6 +124,21 @@ design wins and the code is wrong.
   through a forwarded port, say — is named by the environment or by `--ollama-host`, so no one
   machine's network is written into the code. Ollama has no authentication, so it is never bound
   anywhere but a loopback or a tunnel.
+
+- Both prompts put their fixed instructions first and the sentence, the surface and the sense
+  listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
+  the tail, and on a laptop's CPU that prefill is nearly the whole cost of a call: the answer is a
+  handful of tokens while the listing that precedes it is hundreds. Written the other way round —
+  sentence first, instructions after the listing — consecutive calls shared only their opening line
+  and re-read everything. A one-line restatement of the task still follows the listing, because
+  instructions far from the end of a long prompt are the ones a small model drifts from; it sits
+  past the point where the prefix has already diverged, so it costs nothing.
+
+- The model's own reasoning is turned off wherever the client takes the argument. The answer is a
+  handful of numbers under a schema, so a chain of thought buys nothing and costs the entire call:
+  `qwen3:1.7b` spent 4222 thinking tokens and 80 seconds on a question it answers in 2.3 seconds
+  with `think=False`. A client that rejects the argument is asked again without it, and not asked
+  with it again for the rest of the run.
 
 - When ollama cannot be reached, or answers something unusable, the gloss keeps every sense and a
   warning is printed once. The design says disambiguation *must* happen, so this is a degraded run,
