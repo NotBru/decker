@@ -11,6 +11,7 @@ dependency always before what depends on it.
 
 from __future__ import annotations
 
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -69,6 +70,13 @@ class _Builder:
     seen: dict[tuple[str, str], int] = field(default_factory=dict)
     #: Pages already looked up this run, misses included.
     fetched: dict[str, Page | None] = field(default_factory=dict)
+    #: Per page, which of its definitions describe it in terms of what.
+    refs: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
+
+    def references_of(self, page: Page) -> dict[str, tuple[str, ...]]:
+        if page.title not in self.refs:
+            self.refs[page.title] = references(page)
+        return self.refs[page.title]
 
     def page(self, title: str) -> Page | None:
         if title not in self.fetched:
@@ -132,27 +140,6 @@ class _Builder:
         self.seen[key] = index
         return index
 
-    def add_all(
-        self,
-        page: Page,
-        *,
-        surface: str,
-        lemma: str,
-        senses: tuple[Sense, ...],
-        depends_on: tuple[int, ...] = (),
-    ) -> tuple[int, ...]:
-        """One gloss per sense, in the order the page lists them."""
-        return tuple(
-            self.add(
-                page,
-                surface=surface,
-                lemma=lemma,
-                sense=sense,
-                depends_on=depends_on,
-            )
-            for sense in senses
-        )
-
     def _audio(self, page: Page) -> str | None:
         if not self.audio or page.audio_url is None:
             return None
@@ -204,27 +191,117 @@ def _gloss_term(builder: _Builder, term: Term, sentence: str) -> None:
     marked = mark_occurrence(sentence, term.spans)
     page, senses = _pooled_senses(builder, candidates, term, marked)
     surface = _spelling(term, page)
-    depends_on: tuple[int, ...] = ()
-    if term.lemma != surface and term.lemma != page.title:
-        lemma_page = builder.page(term.lemma)
-        if lemma_page is not None:
-            #: Every surviving sense of the lemma is a dependency: the form-of
-            #: line names the lemma, not one of its meanings, so the word has
-            #: to be known before the inflection of it can be.
-            depends_on = builder.add_all(
-                lemma_page,
-                surface=term.lemma,
-                lemma=term.lemma,
-                senses=_senses(builder, lemma_page, term.lemma, term.lemma, marked),
-            )
+    for sense in senses:
+        builder.add(
+            page,
+            surface=surface,
+            lemma=term.lemma,
+            sense=sense,
+            depends_on=_referenced(builder, page, sense, marked, frozenset({page.title})),
+        )
 
-    builder.add_all(
-        page,
-        surface=surface,
-        lemma=term.lemma,
-        senses=senses,
-        depends_on=depends_on,
-    )
+
+def _referenced(
+    builder: _Builder,
+    page: Page,
+    sense: Sense,
+    marked: str,
+    chain: frozenset[str],
+) -> tuple[int, ...]:
+    """Gloss the words ``sense`` describes its own word in terms of.
+
+    A definition that only points somewhere -- `diminutive of pata` -- teaches
+    nothing unless the word it points at is learned too, and that word is named
+    in the definition rather than in the parse, so it is often not the term's
+    lemma and often not in the text at all. One sense of it is wanted, the one
+    the pointer relies on, so each reference is a single gloss. The chain of
+    titles already being resolved keeps a pair that defines each other in terms
+    of the other from looping.
+    """
+    dependencies = []
+    for title in builder.references_of(page).get(sense.definition, ()):
+        if title in chain:
+            continue
+        target = builder.page(title)
+        if target is None:
+            continue
+        labelled = target.senses
+        kept = builder.disambiguator.keep(
+            tuple(one for _, one in labelled),
+            sentence=marked,
+            surface=title,
+            title=f'"{title}"',
+            language=target.language,
+            parts_of_speech=tuple(part for part, _ in labelled),
+            single=True,
+        )
+        if not kept:
+            continue
+        dependencies.append(
+            builder.add(
+                target,
+                surface=title,
+                lemma=title,
+                sense=kept[0],
+                depends_on=_referenced(
+                    builder, target, kept[0], marked, chain | {title}
+                ),
+            )
+        )
+    return tuple(dependencies)
+
+
+#: Words that mark a definition as describing its word in terms of another,
+#: rather than giving a meaning of its own.
+_GRAMMAR = re.compile(
+    r"\b(inflection|form|spelling|participle|gerund|degree|diminutive|augmentative"
+    r"|superlative|clipping|abbreviation|accusative|dative|nominative|genitive"
+    r"|vocative|singular|plural|indicative|subjunctive|imperative|imperfect"
+    r"|preterite|conditional|(?:first|second|third)-person)\b",
+    re.IGNORECASE,
+)
+#: The referenced word itself, after the "of" such a definition hangs it on.
+_TARGET = re.compile(r"\bof\s+([^\s,;:.()\[\]“”\"]+)")
+
+
+def _targets(definition: str, own: str) -> tuple[str, ...]:
+    """The words ``definition`` describes its own word in terms of."""
+    if not _GRAMMAR.search(definition):
+        return ()
+    found = []
+    for match in _TARGET.finditer(definition):
+        target = match.group(1).strip("“”\"'")
+        if target and target != own and target not in found:
+            found.append(target)
+    return tuple(found)
+
+
+def references(page: Page) -> dict[str, tuple[str, ...]]:
+    """Per definition of ``page``, the words it describes that word in terms of.
+
+    Wiktionary names the referenced word once per part-of-speech block and lets
+    the lines under it continue -- `inflection of ir: ...present subjunctive`
+    followed by a bare `third-person singular imperative`. A bare line is only
+    given the block's word when it is itself grammatical description, so a real
+    definition sitting in the same block does not inherit a dependency.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for entry in page.entries:
+        for sense in entry.senses:
+            if targets := _targets(sense.definition, page.title):
+                found[sense.definition] = targets
+        #: Only a block that *opens* by naming the word is a form-of block.
+        #: Keying off any sense let `ir`, whose tenth definition mentions the
+        #: past participle of reflexive verbs, hand `reflexive` to its
+        #: neighbours as though it were their lemma.
+        first = entry.senses[0].definition if entry.senses else ""
+        block = found.get(first, ())
+        if not block:
+            continue
+        for sense in entry.senses:
+            if sense.definition not in found and _GRAMMAR.search(sense.definition):
+                found[sense.definition] = block
+    return found
 
 
 def mark_occurrence(sentence: str, spans: tuple[tuple[int, int], ...]) -> str:
@@ -302,18 +379,3 @@ def _spelling(term: Term, page: Page) -> str:
     if term.surface.lower() == page.title.lower():
         return page.title
     return term.surface
-
-
-def _senses(
-    builder: _Builder, page: Page, surface: str, lemma: str, sentence: str
-) -> tuple[Sense, ...]:
-    """The senses of ``page`` that this occurrence actually uses."""
-    labelled = page.senses
-    return builder.disambiguator.keep(
-        tuple(sense for _, sense in labelled),
-        sentence=sentence,
-        surface=surface,
-        title=page.title,
-        language=page.language,
-        parts_of_speech=tuple(part for part, _ in labelled),
-    )
