@@ -169,6 +169,14 @@ design wins and the code is wrong.
   and dropped those files silently. The half-second floor between requests and the `Retry-After`
   backoff were already there for pages; audio simply was not using them.
 
+- The User-Agent is built from decker's own installed metadata — `decker/1.0.0
+  (https://github.com/NotBru/decker; Build an Anki deck …)` — so the version keeps itself current
+  and there is no string to update by hand. The contact is the **homepage**, chosen by that label
+  rather than by being first in the list: it is the only way Wikimedia has to reach a human before
+  blocking the client, and every install sends the same string, so which URL it is should be a
+  decision and not an artefact of the order `[project.urls]` happens to be written in. Any other
+  URL stands in only when there is no homepage at all.
+
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
   the User-Agent policy or a blocked address, neither of which the next request will escape. So it

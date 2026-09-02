@@ -33,10 +33,20 @@ DUMP_URL = (
 def _user_agent() -> str:
     """Identify decker to Wikimedia, as its policy asks, from its own metadata."""
     metadata = importlib.metadata.metadata("decker")
-    contacts = [
-        url.split(",", 1)[1].strip()
-        for url in metadata.get_all("Project-URL") or ()
-        if "," in url
+    #: The homepage is the contact, named rather than taken by position: this
+    #: URL is the only way Wikimedia has to reach a human before blocking the
+    #: client, so which one it is should be a decision and not an artefact of
+    #: the order the project's URLs happen to be written in. Any other URL
+    #: stands in only if there is no homepage at all.
+    urls = [
+        (label.strip().casefold(), url.strip())
+        for label, _, url in (
+            entry.partition(",") for entry in metadata.get_all("Project-URL") or ()
+        )
+        if url
+    ]
+    contacts = [url for label, url in urls if label == "homepage"] + [
+        url for label, url in urls if label != "homepage"
     ]
     contact = f"{contacts[0]}; " if contacts else ""
     return f"decker/{metadata['Version']} ({contact}{metadata['Summary']})"
