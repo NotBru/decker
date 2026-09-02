@@ -1,2 +1,4 @@
 barbapedro.txt
 barbapedro-terms.md
+__pycache__/
+*.py[cod]
