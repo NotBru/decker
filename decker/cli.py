@@ -226,6 +226,19 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         "--no-audio", action="store_true", help="do not download pronunciation files"
     )
     parser.add_argument(
+        "--refresh-answers",
+        action="store_true",
+        help="ask the model again instead of reusing answers it already gave",
+    )
+    parser.add_argument(
+        "--previous",
+        metavar="DECK.apkg",
+        help=(
+            "a deck built earlier: the glosses it already teaches are left out, "
+            "so the run makes only what is new"
+        ),
+    )
+    parser.add_argument(
         "--refresh-pages",
         action="store_true",
         help="re-fetch pages even if they are already cached",
@@ -243,7 +256,27 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         disambiguate=not arguments.no_disambiguate,
         audio=not arguments.no_audio,
         refresh_pages=arguments.refresh_pages,
+        refresh_answers=arguments.refresh_answers,
+        known=_taught(arguments.previous),
     )
+
+
+def _taught(previous: str | None) -> frozenset[str]:
+    """What a previously built deck already teaches, or nothing."""
+    if not previous:
+        return frozenset()
+    keys = anki.taught(previous)
+    print(
+        f"[decker] {len(keys)} glosses already taught by {Path(previous).name}",
+        file=sys.stderr,
+    )
+    if not keys:
+        print(
+            "[decker] that deck records no gloss keys -- decks built before "
+            "decker 1.1 carry none, and every gloss will be made again",
+            file=sys.stderr,
+        )
+    return keys
 
 
 def _source_text(source: str) -> str:

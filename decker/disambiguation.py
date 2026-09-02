@@ -80,6 +80,8 @@ class Disambiguator:
 
     model: str = DEFAULT_MODEL
     host: str | None = None
+    #: Ask the model again even when the answer is cached.
+    refresh: bool = False
     enabled: bool = True
     session: Session = field(init=False)
 
@@ -87,6 +89,7 @@ class Disambiguator:
         self.session = Session(
             model=self.model,
             host=self.host,
+            refresh=self.refresh,
             what="sense disambiguation",
             fallback="keeping every sense",
         )

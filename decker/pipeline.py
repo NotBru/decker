@@ -85,6 +85,8 @@ def define(
     disambiguate: bool = True,
     audio: bool = True,
     refresh_pages: bool = False,
+    refresh_answers: bool = False,
+    known: frozenset[str] = frozenset(),
 ) -> list[Gloss]:
     """Run the v1 pipeline the whole way, from text to glosses."""
     sentences = run(
@@ -103,6 +105,8 @@ def define(
         disambiguate=disambiguate,
         audio=audio,
         refresh=refresh_pages,
+        refresh_answers=refresh_answers,
+        known=known,
     )
     pages.report()
     return glosses
@@ -126,6 +130,7 @@ def deck(
         model=define_arguments.get("model"),
         host=define_arguments.get("host"),
         translate=translate,
+        refresh_answers=define_arguments.get("refresh_answers", False),
     )
     return shuffling.shuffle(built, seed=seed, window=window)
 

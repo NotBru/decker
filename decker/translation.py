@@ -87,6 +87,8 @@ class Translator:
     mother_lang: str = SOURCE_LANG
     model: str = DEFAULT_MODEL
     host: str | None = None
+    #: Ask the model again even when the answer is cached.
+    refresh: bool = False
     enabled: bool = True
     session: Session = field(init=False)
     #: Glosses already translated this run, keyed by the text asked about: a
@@ -104,6 +106,7 @@ class Translator:
         self.session = Session(
             model=self.model,
             host=self.host,
+            refresh=self.refresh,
             what="translation",
             fallback=f"leaving the cards in {SOURCE_LANGUAGE}",
         )

@@ -190,6 +190,40 @@ design wins and the code is wrong.
   every fetch that was tried came back. 404 is not counted, being an answer rather than a failure:
   it is how Wiktionary says a title has no entry.
 
+- Incrementality, which the design puts at this stage: given `--previous DECK.apkg`, glosses that
+  deck already teaches are left out. A gloss's identity is `gloss_key(surface, definition)`, a hash
+  of the pair `_Builder.seen` already keys on — the design's own identity for a gloss, an inflected
+  form and a sense. The definition hashed is Wiktionary's, **never the translated text**, so a deck
+  built for a speaker of Spanish and one built for a speaker of German agree about what they teach.
+  The note GUIDs could not serve: they hash the translated definition, so they differ by mother
+  language and cannot be computed before translating.
+
+- The filtering happens **after** disambiguation, not before, and this is the choice most worth
+  revisiting. A skipped gloss costs its disambiguation call and saves its translation call, where
+  filtering senses before the disambiguator ran would save both. It is not done because the
+  disambiguator chooses among a numbered list of senses: remove some and it is answering a
+  different question, and quietly changing which senses it picks is a worse price than a call.
+
+- A dependency the previous deck already teaches is simply not depended upon. If `auswandern` is
+  known and `auswanderte` is new, the new card carries no dependency, because the ordering it
+  encoded — meet the lemma first — has already happened.
+
+- Measured on two Deutsche Welle articles: the second reused 66 of its 165 glosses, 40%. Both were
+  built `--no-disambiguate`, so read that as the shape of the saving rather than its size.
+
+- Model answers are cached on disk, under `answers/` beside the pages. Both stages send a prompt
+  that is a pure function of what they are asking about, at temperature zero, so the answer is a
+  pure function of the request: the same model asked the same thing under the same schema has
+  already said what it is going to say. The key is the model, the schema and the prompt together —
+  the model because two of them answer differently, the schema because it decides the shape of the
+  answer, and the prompt because it carries everything else, so editing a prompt in the source
+  invalidates its answers without anyone having to remember to. `--refresh-answers` asks again.
+
+  This was the one part of a run that was not cached, and it was all of the cost: pages, titles and
+  recordings were already kept, so a second run of the same text repeated the whole of its wall
+  clock and none of its work. It is also what makes an interrupted run cheap — a tunnel that drops
+  eight minutes in used to mean starting over.
+
 - Both prompts put their fixed instructions first and the sentence, the surface and the sense
   listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
   the tail, and on a laptop's CPU that prefill is nearly the whole cost of a call: the answer is a

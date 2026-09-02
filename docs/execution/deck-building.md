@@ -190,6 +190,20 @@ source of truth: where one of these contradicts them, the design wins and the co
   attribution is appended whatever the flag says, since that is the licence's requirement and not
   a decoration — the flag replaces the provenance sentence, never the credit.
 
+- A deck records what it teaches, so it can be handed back as `--previous`. Each note carries its
+  gloss's key as the tag `decker::gloss::<hash>`, and `anki.taught` reads them out of the package.
+  A tag rather than a field: a new field changes the note type of every deck already built, while a
+  tag is something Anki carries, exports and imports without being told — so a deck the user has
+  studied, edited and re-exported still answers the question. The deck is the record for the same
+  reason: it is what the user has, what they move between machines, and what survives deleting
+  everything else. Decks built before this carry no keys, and `--previous` on one says so rather
+  than silently deciding nothing is new.
+
+- **Not done:** new cards still number their `due` from 1, so importing an incremental deck into an
+  existing one interleaves the new cards with the old rather than queueing them after. Fixing it
+  means reading the previous deck's highest `due` and offsetting, which is small, but it changes
+  what shuffling's window means across a join and that deserves its own thought.
+
 ## Known gaps
 
 - Every card lands in one deck with no subdecks, tags beyond `recognition`/`production`, or

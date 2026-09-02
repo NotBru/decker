@@ -10,10 +10,12 @@ with the stage that writes them.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything. It is measured rather than guessed: on the
@@ -49,6 +51,8 @@ class Session:
 
     model: str = DEFAULT_MODEL
     host: str | None = None
+    #: Ask again even when the answer is already on disk.
+    refresh: bool = False
     #: What the run goes without, named in the warning below, so a degraded
     #: run says which stage lost its model rather than only that one did.
     what: str = "the model"
@@ -69,13 +73,64 @@ class Session:
         return self._client
 
     def ask(self, prompt: str, schema: dict) -> dict | None:
-        """The model's answer to one prompt, decoded, or ``None`` if it has none."""
+        """The model's answer to one prompt, decoded, or ``None`` if it has none.
+
+        Answers are kept on disk between runs. Both stages send a prompt that
+        is a pure function of what they are asking about, at temperature zero,
+        so the answer is a pure function of the request: the same model asked
+        the same thing under the same schema has already said what it is going
+        to say. Nothing else in a run is recomputed -- pages, titles and
+        recordings are all cached -- so before this, a second run of the same
+        text repeated the whole of its cost and none of its work.
+        """
+        path = self._remembered(prompt, schema)
+        if path is not None and not self.refresh and path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass  # a half-written or unreadable answer is simply asked again
         try:
             response = self._chat(prompt, schema)
-            return json.loads(response["message"]["content"])
+            answer = json.loads(response["message"]["content"])
         except Exception as error:  # ollama down, model missing, bad JSON
             self.warn(str(error))
             return None
+        if path is not None:
+            self._remember(path, answer)
+        return answer
+
+    def _remembered(self, prompt: str, schema: dict) -> "Path | None":
+        """Where this exact question's answer is kept, if anywhere.
+
+        The model is part of the key because two models answer differently,
+        and the schema is because it decides the shape of the answer. The
+        prompt carries everything else, so editing a prompt in the source
+        invalidates its answers without anyone having to remember to.
+        """
+        try:
+            from decker.wiktionary import cache_dir
+        except Exception:
+            return None
+        question = json.dumps(
+            [self.model, schema, prompt], sort_keys=True, ensure_ascii=False
+        )
+        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()[:32]
+        return cache_dir() / "answers" / f"{digest}.json"
+
+    @staticmethod
+    def _remember(path: "Path", answer: object) -> None:
+        """Keep an answer, or carry on without keeping it."""
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            #: Written beside and moved into place, so a run interrupted
+            #: mid-write leaves no half-answer for the next one to read.
+            temporary = path.with_suffix(".part")
+            temporary.write_text(
+                json.dumps(answer, ensure_ascii=False), encoding="utf-8"
+            )
+            temporary.replace(path)
+        except OSError:
+            pass
 
     def warn(self, reason: str) -> None:
         """Say once that the run is going without this model."""

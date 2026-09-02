@@ -13,6 +13,9 @@ twice and importing both updates the notes instead of doubling them.
 from __future__ import annotations
 
 import hashlib
+import sqlite3
+import tempfile
+import zipfile
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -34,6 +37,10 @@ CREDIT = (
 #: default is the input file's name and a scratch name has no business in a
 #: deck's permanent metadata. The second is not the caller's: attribution is
 #: the licence's requirement, so it is appended whatever the first says.
+#: What a note says about which gloss it teaches. Read back by
+#: :func:`taught`, so a later run can leave those glosses out.
+GLOSS_TAG = "decker::gloss::"
+
 PROVENANCE = "Built by decker from {source}."
 ATTRIBUTION = (
     "Definitions, examples, etymologies and pronunciations come from "
@@ -128,6 +135,38 @@ def write(
     return path
 
 
+def taught(path: str | Path) -> frozenset[str]:
+    """The gloss keys a previously built deck already teaches.
+
+    The deck is the record, rather than a sidecar file decker would have to
+    keep beside it: a deck is what the user has, what they move between
+    machines, and what they would still have after deleting everything else.
+    Keys ride on the notes as tags, so a deck exported by Anki after the user
+    has studied and edited it still answers this question.
+    """
+    with zipfile.ZipFile(path) as package:
+        names = package.namelist()
+        inner = next(
+            (name for name in ("collection.anki21", "collection.anki2") if name in names),
+            None,
+        )
+        if inner is None:
+            raise ValueError(f"{path} does not look like an Anki package")
+        with tempfile.TemporaryDirectory() as directory:
+            package.extract(inner, directory)
+            connection = sqlite3.connect(Path(directory) / inner)
+            try:
+                rows = connection.execute("select tags from notes").fetchall()
+            finally:
+                connection.close()
+    return frozenset(
+        tag[len(GLOSS_TAG):]
+        for (tags,) in rows
+        for tag in (tags or "").split()
+        if tag.startswith(GLOSS_TAG)
+    )
+
+
 def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
     credit = CREDIT.format(
         entry=entry_url(card.entry, edition, card.language),
@@ -158,7 +197,10 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
         #: Identity is the card itself -- which gloss, which side -- so a
         #: rebuilt deck updates the note it already made for that card.
         guid=genanki.guid_for(card.kind, card.entry, _identity(card)),
-        tags=[card.kind],
+        #: The gloss key rides as a tag rather than a field: a field would
+        #: change the note type of every deck already built, and a tag is
+        #: something Anki carries, exports and imports without being told.
+        tags=[card.kind] + ([GLOSS_TAG + card.key] if card.key else []),
         due=due,
     )
 

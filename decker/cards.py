@@ -57,6 +57,9 @@ class Card:
     answer: Side
     #: Indexes of the cards this one must appear after.
     depends_on: tuple[int, ...] = ()
+    #: The gloss's :func:`decker.glosses.gloss_key`, written into the deck so
+    #: a later run can tell what this deck already teaches.
+    key: str = ""
 
 
 @dataclass
@@ -80,6 +83,7 @@ def build(
     model: str | None = None,
     host: str | None = None,
     translate: bool = True,
+    refresh_answers: bool = False,
 ) -> list[Card]:
     """Turn definition fetching's output into the design's list of cards."""
     translator = Translator(
@@ -87,6 +91,7 @@ def build(
         model=model or default_model(),
         host=host,
         enabled=translate,
+        refresh=refresh_answers,
     )
     builder = _Builder()
     for gloss in glosses:
@@ -113,6 +118,7 @@ def _pair(
     recognition = builder.add(
         kind=RECOGNITION,
         gloss=gloss.index,
+        key=gloss.key,
         entry=gloss.entry,
         language=gloss.language,
         challenge=Side(term=gloss.surface, examples=examples),
@@ -130,6 +136,7 @@ def _pair(
     builder.add(
         kind=PRODUCTION,
         gloss=gloss.index,
+        key=gloss.key,
         entry=gloss.entry,
         language=gloss.language,
         challenge=Side(definition=definition),

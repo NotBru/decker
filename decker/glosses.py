@@ -11,6 +11,7 @@ dependency always before what depends on it.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from collections import Counter
@@ -25,6 +26,20 @@ from decker.terms import Term
 
 if TYPE_CHECKING:
     from decker.pipeline import SentenceTerms
+
+
+def gloss_key(surface: str, definition: str) -> str:
+    """A gloss's identity, as a string that survives leaving the process.
+
+    The design identifies a gloss by its inflected form and its sense, which
+    is what `_Builder.seen` already keys on. This is the same pair, hashed, so
+    it can be written into a deck and read back out of one: the definition it
+    hashes is Wiktionary's own, never the translated text, so a deck built for
+    a speaker of Spanish and one built for a speaker of German agree about
+    which glosses they teach.
+    """
+    digest = hashlib.sha256(f"{surface}\n{definition}".encode())
+    return digest.hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -55,6 +70,8 @@ class Gloss:
     audios: tuple[str, ...] = ()
     #: Indexes of the glosses this one depends upon.
     depends_on: tuple[int, ...] = ()
+    #: :func:`gloss_key` of this gloss, carried so a deck can record it.
+    key: str = ""
 
 
 @dataclass
@@ -73,6 +90,10 @@ class _Builder:
     fetched: dict[str, Page | None] = field(default_factory=dict)
     #: Per page, which of its definitions describe it in terms of what.
     refs: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
+    #: Glosses a previously built deck already teaches, by key.
+    known: frozenset[str] = frozenset()
+    #: How many were dropped for being in it.
+    skipped: int = 0
 
     def references_of(self, page: Page) -> dict[str, tuple[str, ...]]:
         if page.title not in self.refs:
@@ -116,11 +137,19 @@ class _Builder:
         lemma: str,
         sense: Sense,
         depends_on: tuple[int, ...] = (),
-    ) -> int:
-        """Append a gloss, or return the index of the one already standing."""
+    ) -> int | None:
+        """Append a gloss, or the index of one already standing, or nothing.
+
+        Nothing when a previously built deck already teaches it: the design
+        has such glosses leave the pipeline here, at definition fetching, and
+        a caller that was going to depend on this one simply does not.
+        """
         key = (surface, sense.definition)
         if key in self.seen:
             return self.seen[key]
+        if gloss_key(surface, sense.definition) in self.known:
+            self.skipped += 1
+            return None
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -136,6 +165,7 @@ class _Builder:
                 audio_urls=page.audio_urls,
                 audios=self._audios(page),
                 depends_on=depends_on,
+                key=gloss_key(surface, sense.definition),
             )
         )
         self.seen[key] = index
@@ -159,10 +189,15 @@ def build(
     disambiguate: bool = True,
     audio: bool = True,
     refresh: bool = False,
+    refresh_answers: bool = False,
+    known: frozenset[str] = frozenset(),
 ) -> list[Gloss]:
     """Turn term extraction's output into the design's list of glosses."""
     disambiguator = Disambiguator(
-        model=model or default_model(), host=host, enabled=disambiguate
+        model=model or default_model(),
+        host=host,
+        enabled=disambiguate,
+        refresh=refresh_answers,
     )
     builder = _Builder(
         edition=edition,
@@ -170,10 +205,16 @@ def build(
         disambiguator=disambiguator,
         audio=audio,
         refresh=refresh,
+        known=known,
     )
     for sentence in sentences:
         for term in sentence.terms:
             _gloss_term(builder, term, sentence.text)
+    if builder.skipped:
+        print(
+            f"[decker] {builder.skipped} glosses already taught, left out",
+            file=sys.stderr,
+        )
     print(f"[decker] {len(builder.glosses)} glosses", file=sys.stderr)
     return builder.glosses
 
@@ -239,6 +280,8 @@ def _referenced(
         )
         if not kept:
             continue
+        #: A dependency the previous deck already teaches comes back as
+        #: nothing, and is simply not depended upon: the learner has met it.
         dependencies.append(
             builder.add(
                 target,
@@ -250,7 +293,7 @@ def _referenced(
                 ),
             )
         )
-    return tuple(dependencies)
+    return tuple(index for index in dependencies if index is not None)
 
 
 #: Words that mark a definition as describing its word in terms of another,
