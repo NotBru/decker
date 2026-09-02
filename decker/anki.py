@@ -108,8 +108,7 @@ def write(
     models = {RECOGNITION: _recognition_model(), PRODUCTION: _production_model()}
     media = []
     for position, card in enumerate(cards, start=1):
-        if card.answer.audio:
-            media.append(card.answer.audio)
+        media.extend(card.answer.audios)
         deck.add_note(_note(card, models[card.kind], due=position, edition=edition))
 
     path = Path(path)
@@ -131,7 +130,7 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             card.answer.definition or "",
             _readings(card.answer.ipa),
             card.answer.etymology or "",
-            _sound(card.answer.audio),
+            _sounds(card.answer.audios),
             credit,
         ]
     else:
@@ -160,17 +159,21 @@ def _identity(card: Card) -> str:
     return f"{term}\n{definition}"
 
 
-def _lines(values: tuple[str, ...]) -> str:
-    return "<br>".join(values)
+def _lines(values: tuple[object, ...]) -> str:
+    return "<br>".join(str(value) for value in values)
 
 
 def _readings(ipa: tuple[str, ...]) -> str:
     return " ".join(ipa)
 
 
-def _sound(path: str | None) -> str:
-    """Anki's own reference to a media file, which is the file's bare name."""
-    return f"[sound:{Path(path).name}]" if path else ""
+def _sounds(paths: tuple[str, ...]) -> str:
+    """Anki's own references to media files, which are the files' bare names.
+
+    A page with several recordings puts them all on the card, in the order
+    Wiktionary lists them; Anki plays them one after another.
+    """
+    return "".join(f"[sound:{Path(path).name}]" for path in paths)
 
 
 def _recognition_model() -> genanki.Model:

@@ -17,8 +17,9 @@ import sys
 from dataclasses import dataclass, field
 
 from decker.glosses import Gloss
-from decker.ollama import DEFAULT_MODEL
-from decker.translation import SOURCE_LANGUAGE, Translator
+from decker.ollama import default_model
+from decker.pages import Example
+from decker.translation import SOURCE_LANG, Translator
 
 RECOGNITION = "recognition"
 PRODUCTION = "production"
@@ -30,11 +31,11 @@ class Side:
 
     term: str | None = None
     definition: str | None = None
-    examples: tuple[str, ...] = ()
+    examples: tuple[Example, ...] = ()
     ipa: tuple[str, ...] = ()
     etymology: str | None = None
     #: Cached sound file, on the face that names the pronunciation.
-    audio: str | None = None
+    audios: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,15 +76,15 @@ class _Builder:
 def build(
     glosses: list[Gloss],
     *,
-    mother_language: str = SOURCE_LANGUAGE,
+    mother_lang: str = SOURCE_LANG,
     model: str | None = None,
     host: str | None = None,
     translate: bool = True,
 ) -> list[Card]:
     """Turn definition fetching's output into the design's list of cards."""
     translator = Translator(
-        mother_language=mother_language,
-        model=model or DEFAULT_MODEL,
+        mother_lang=mother_lang,
+        model=model or default_model(),
         host=host,
         enabled=translate,
     )
@@ -96,6 +97,7 @@ def build(
             target_language=gloss.language,
         )
         _pair(builder, gloss, definition, examples, etymology)
+    translator.report()
     print(f"[decker] {len(builder.cards)} cards", file=sys.stderr)
     return builder.cards
 
@@ -104,7 +106,7 @@ def _pair(
     builder: _Builder,
     gloss: Gloss,
     definition: str,
-    examples: tuple[str, ...],
+    examples: tuple[Example, ...],
     etymology: str | None,
 ) -> None:
     """The recognition and production cards of one gloss, in that order."""
@@ -120,7 +122,7 @@ def _pair(
             definition=definition,
             ipa=gloss.ipa,
             etymology=etymology,
-            audio=gloss.audio,
+            audios=gloss.audios,
         ),
         depends_on=_after(builder, gloss),
     )

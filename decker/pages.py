@@ -31,6 +31,13 @@ PARSE_URL = (
     "?action=parse&page={title}&prop=text&formatversion=2&format=json"
 )
 
+#: What joins an example sentence to its rendering when something shows the
+#: two together. It is only ever written, never read back: the halves travel
+#: apart all the way to the card, so a sentence carrying the separator itself
+#: -- eight of the examples in a warm cache do -- is no longer something
+#: decker can cut in the wrong place.
+EXAMPLE_SEPARATOR = " — "
+
 #: IPA spans hold rhymes and syllabifications too; only these are a reading.
 _IPA_DELIMITERS = ("/", "[")
 
@@ -50,11 +57,33 @@ _PARAGRAPH = re.compile(r"<p\b[^>]*>(.*?)</p>", re.DOTALL)
 
 
 @dataclass(frozen=True)
+class Example:
+    """One example sentence, and the edition's rendering of it if it has one.
+
+    The halves answer to different rules -- the sentence is the target
+    language and is the very thing a card teaches, the rendering is the
+    edition's prose and is the only half a translator may touch -- so they are
+    kept apart while they are data and joined only where they are shown.
+    """
+
+    #: The example itself, in the language being taught.
+    sentence: str
+    #: The edition's rendering of it, when Wiktionary carries one.
+    rendering: str | None = None
+
+    def __str__(self) -> str:
+        """The pair as a card, a document or the terminal shows it."""
+        if self.rendering is None:
+            return self.sentence
+        return f"{self.sentence}{EXAMPLE_SEPARATOR}{self.rendering}"
+
+
+@dataclass(frozen=True)
 class Sense:
     """One numbered definition of a page, with the examples under it."""
 
     definition: str
-    examples: tuple[str, ...] = ()
+    examples: tuple[Example, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,7 +104,10 @@ class Page:
     entries: tuple[Entry, ...] = ()
     etymology: str | None = None
     ipa: tuple[str, ...] = ()
-    audio_url: str | None = None
+    #: Every recording the language section offers, in the order it lists
+    #: them. A page can carry several -- `el` has one for Spain and one for
+    #: Colombia -- and which of them a learner wants is not decker's to guess.
+    audio_urls: tuple[str, ...] = ()
 
     @property
     def senses(self) -> list[tuple[str, Sense]]:
@@ -132,14 +164,14 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
         return None
-    etymology, ipa, audio = _from_html(payloads.get("parse"), entries[0].language)
+    etymology, ipa, audios = _from_html(payloads.get("parse"), entries[0].language)
     return Page(
         title=title,
         language=entries[0].language,
         entries=tuple(entries),
         etymology=etymology,
         ipa=ipa,
-        audio_url=audio,
+        audio_urls=audios,
     )
 
 
@@ -304,45 +336,65 @@ def _entries(definition: dict | None, lang: str) -> list[Entry]:
     return entries
 
 
-def _examples(sense: dict) -> list[str]:
-    """Examples of one sense, the translated ones rendered as a pair."""
+def _examples(sense: dict) -> list[Example]:
+    """Examples of one sense, each with its rendering where there is one."""
     examples = []
     for parsed in sense.get("parsedExamples", ()):
         text = strip_html(parsed.get("example", ""))
         translation = strip_html(parsed.get("translation", ""))
         if text and translation:
-            examples.append(f"{text} — {translation}")
+            examples.append(Example(text, translation))
         elif text:
-            examples.append(text)
+            examples.append(Example(text))
     if examples:
         return examples
-    return [strip_html(example) for example in sense.get("examples", ()) if example]
+    return [
+        Example(strip_html(example))
+        for example in sense.get("examples", ())
+        if example
+    ]
 
 
 def _from_html(
     parse: dict | None, language: str
-) -> tuple[str | None, tuple[str, ...], str | None]:
-    """Pull etymology, IPA and audio out of the rendered page."""
+) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
+    """Pull etymology, IPA and every recording out of the rendered page."""
     if not isinstance(parse, dict):
-        return None, (), None
+        return None, (), ()
     html = parse.get("parse", {}).get("text")
     if not isinstance(html, str):
-        return None, (), None
+        return None, (), ()
     section = _language_section(html, language)
     if section is None:
-        return None, (), None
+        return None, (), ()
 
     ipa = tuple(
         reading
         for raw in _IPA.findall(section)
         if (reading := strip_html(raw)).startswith(_IPA_DELIMITERS)
     )
-    audio = _AUDIO.search(section)
-    return (
-        _etymology(section),
-        ipa,
-        f"https:{audio.group(1)}" if audio else None,
-    )
+    return _etymology(section), ipa, _audios(section)
+
+
+def _audios(section: str) -> tuple[str, ...]:
+    """Every recording the section offers, one file apiece, in page order.
+
+    Every recording, because a section that lists two has two to give: `el`
+    carries one for Spain and one for Colombia, and which of them a learner
+    wants is not decker's to guess. One file apiece, because Wikimedia
+    transcodes each recording into several formats -- the same clip arrives as
+    both `.ogg` and `.mp3` -- and those are one recording, not two; a card
+    holding both would simply play it twice. The transcodes of a recording
+    share everything but that last extension, which is what they are grouped
+    on, and `.ogg` is the one kept: it is the format the source is served as.
+    """
+    recordings: dict[str, str] = {}
+    for match in _AUDIO.finditer(section):
+        url = f"https:{match.group(1)}"
+        recording, _, extension = url.rpartition(".")
+        if recording not in recordings or extension == "ogg":
+            recordings[recording] = url
+    return tuple(recordings.values())
 
 
 def _language_section(html: str, language: str) -> str | None:

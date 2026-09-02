@@ -16,13 +16,31 @@ import sys
 from dataclasses import dataclass
 
 #: The model is parametrizable; this is the design's default, for every stage
-#: that asks a model anything.
-DEFAULT_MODEL = "gemma4"
+#: that asks a model anything. It is measured rather than guessed: on the
+#: eight etymologies that came back untranslated from a German run, this one
+#: answers all eight once the translation schema requires the field, where
+#: gemma3:4b echoes its English input back on three of them -- a well-formed
+#: answer nothing downstream can catch. It pulls from the registry like any
+#: other tag; what it costs is size -- 9.6 GB against gemma3:4b's 3.3 -- so a
+#: host without the room degrades and says so, naming what it does hold.
+DEFAULT_MODEL = "gemma4:latest"
 
 #: Ollama has no authentication, so it is never exposed beyond a loopback or a
 #: tunnel. The fallback is ollama's own default; a host reached through a
 #: tunnel -- a forwarded GPU box, say -- is named by ``OLLAMA_HOST``.
 DEFAULT_HOST = "http://localhost:11434"
+
+#: A model can be named once for a whole shell, the way the host is. The two
+#: have to agree, and rarely do by accident: a tunnelled GPU box and a laptop's
+#: own ollama hold different tags, so a host named in the environment and a
+#: model left to its default is exactly how a run ends up asking for something
+#: that is not there.
+MODEL_VARIABLE = "DECKER_MODEL"
+
+
+def default_model() -> str:
+    """The model a run uses when it is not told one."""
+    return os.environ.get(MODEL_VARIABLE) or DEFAULT_MODEL
 
 
 @dataclass
@@ -63,9 +81,41 @@ class Session:
         """Say once that the run is going without this model."""
         if self._warned:
             return
-        tail = f"; {self.fallback}" if self.fallback else ""
-        print(f"[decker] {self.what} unavailable ({reason}){tail}", file=sys.stderr)
         self._warned = True
+        tail = f"; {self.fallback}" if self.fallback else ""
+        print(
+            f"[decker] {self.what} unavailable ({reason}){self._held()}{tail}",
+            file=sys.stderr,
+        )
+
+    def _held(self) -> str:
+        """What the host does have, when it does not have what was asked for.
+
+        A missing model otherwise comes back as its own name thrown back at
+        the run, which reads the same whether the tag is misspelled, the host
+        is the wrong one, or the model was simply never pulled there. Naming
+        the tags the host holds tells those three apart in one line, and it is
+        asked for once, on the way to a warning that was already going to be
+        printed.
+        """
+        try:
+            response = self.client().list()
+        except Exception:  # the host is unreachable; the warning says so
+            return ""
+        entries = getattr(response, "models", None)
+        if entries is None and isinstance(response, dict):
+            entries = response.get("models", ())
+        names = []
+        for entry in entries or ():
+            #: ollama's client has returned both objects and plain dicts.
+            name = getattr(entry, "model", None)
+            if name is None and isinstance(entry, dict):
+                name = entry.get("model") or entry.get("name")
+            if name:
+                names.append(str(name))
+        if not names:
+            return ""
+        return f"; the host holds {', '.join(sorted(names))}"
 
     def _chat(self, prompt: str, schema: dict):
         """One call, with the model's own reasoning turned off if it has any.

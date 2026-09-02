@@ -77,8 +77,11 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
     )
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
-    if gloss.audio_url:
-        facts.append(f"**audio** [{_file_name(gloss.audio_url)}]({gloss.audio_url})")
+    if gloss.audio_urls:
+        facts.append(
+            "**audio** "
+            + " ".join(f"[{_file_name(url)}]({url})" for url in gloss.audio_urls)
+        )
     lines += [" · ".join(facts), ""]
 
     if gloss.depends_on:

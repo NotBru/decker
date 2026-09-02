@@ -19,7 +19,7 @@ from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
 from decker.nlp import pipeline
 from decker.terms import Term, extract
-from decker.translation import SOURCE_LANGUAGE
+from decker.translation import SOURCE_LANG
 from decker.wiktionary import TitleIndex
 
 #: v1 assumes English as the mother language, so glosses -- and therefore the
@@ -109,7 +109,7 @@ def deck(
     text: str,
     *,
     target_lang: str,
-    mother_language: str = SOURCE_LANGUAGE,
+    mother_lang: str = SOURCE_LANG,
     seed: int | None = None,
     window: int = shuffling.WINDOW,
     translate: bool = True,
@@ -119,7 +119,7 @@ def deck(
     glosses = define(text, target_lang=target_lang, **define_arguments)
     built = deck_cards.build(
         glosses,
-        mother_language=mother_language,
+        mother_lang=mother_lang,
         model=define_arguments.get("model"),
         host=define_arguments.get("host"),
         translate=translate,

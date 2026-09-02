@@ -8,9 +8,9 @@ import json
 import sys
 from pathlib import Path
 
-from decker import anki, markdown, pipeline, shuffling
-from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL
-from decker.translation import SOURCE_LANGUAGE
+from decker import anki, languages, markdown, pipeline, shuffling
+from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
+from decker.translation import SOURCE_LANG
 
 #: Every stage runs in one go; the subcommands below stop the pipeline early.
 DEFAULT_COMMAND = "deck"
@@ -86,10 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     deck.add_argument(
         "--mother-lang",
-        default=SOURCE_LANGUAGE,
+        type=_language_code,
+        default=SOURCE_LANG,
         help=(
-            "language to write the cards in, named as a word rather than a code "
-            f"(default: {SOURCE_LANGUAGE}, the edition's own, which needs no "
+            "language code to write the cards in, like --target-lang "
+            f"(default: {SOURCE_LANG}, the edition's own, which needs no "
             "translation)"
         ),
     )
@@ -126,6 +127,21 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.command == "deck":
         return _run_deck(arguments)
     return _run_extract(arguments)
+
+
+def _language_code(value: str) -> str:
+    """A language code, checked while the flags are still being read.
+
+    A code decker cannot name would reach the model as itself -- cards written
+    for "a speaker of pt-", which is worse than a run that never starts.
+    """
+    code = value.strip().casefold()
+    if not languages.known(code):
+        raise argparse.ArgumentTypeError(
+            f"unknown language code {value!r}: --mother-lang takes a code, the way "
+            "--target-lang does (en, es, pt...)"
+        )
+    return code
 
 
 def _add_language_arguments(parser: argparse.ArgumentParser) -> None:
@@ -165,8 +181,11 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
     """What definition fetching needs: a model, and what to do without one."""
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"ollama model used to choose senses and translate (default: {DEFAULT_MODEL})",
+        default=default_model(),
+        help=(
+            "ollama model used to choose senses and translate "
+            f"(default: ${MODEL_VARIABLE}, else {DEFAULT_MODEL})"
+        ),
     )
     parser.add_argument(
         "--ollama-host",
@@ -270,7 +289,7 @@ def _run_deck(arguments: argparse.Namespace) -> int:
     cards = pipeline.deck(
         _source_text(arguments.source),
         target_lang=arguments.target_lang,
-        mother_language=arguments.mother_lang,
+        mother_lang=arguments.mother_lang,
         translate=not arguments.no_translate,
         seed=arguments.seed,
         window=arguments.window,
@@ -330,13 +349,12 @@ def _side(side) -> list[str]:
         pieces.append(side.term)
     if side.definition:
         pieces.append(side.definition)
-    pieces += list(side.examples)
+    pieces += [str(example) for example in side.examples]
     if side.ipa:
         pieces.append(" ".join(side.ipa))
     if side.etymology:
         pieces.append(side.etymology)
-    if side.audio:
-        pieces.append(Path(side.audio).name)
+    pieces += [Path(audio).name for audio in side.audios]
     return pieces
 
 
@@ -363,8 +381,7 @@ def _format_gloss(gloss) -> str:
     lines += [f"      · {example}" for example in gloss.examples]
     if gloss.etymology:
         lines.append(f"    etymology: {gloss.etymology}")
-    if gloss.audio:
-        lines.append(f"    audio: {gloss.audio}")
+    lines += [f"    audio: {audio}" for audio in gloss.audios]
     return "\n".join(lines) + "\n\n"
 
 

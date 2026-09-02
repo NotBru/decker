@@ -32,18 +32,43 @@ source of truth: where one of these contradicts them, the design wins and the co
   connection: `Translator.needed` is false whenever `--mother-lang` is English, and the stage costs
   the run nothing at all.
 
-- `--mother-lang` names a language as a word — `Spanish`, not `es` — because the name goes into a
-  prompt rather than into an API. It is the same reason page fetching takes the language's name from
-  the payload instead of keeping a table: nowhere in decker is there a code-to-name map to fall out
-  of date.
+- `--mother-lang` takes a code — `pt`, not `Portuguese` — because `--target-lang` does, and a caller
+  should not have to remember which flag wants which shape. The word the prompt needs is made below
+  the flag, in `decker/languages.py`, from the table Stanza already ships (`lcode2lang`, four
+  hundred codes): a dependency decker already has, so there is still no map here to fall out of
+  date, and still nothing fetched. An unknown code is refused while the flags are read rather than
+  reaching the model as itself — cards written for "a speaker of pt-" are worse than a run that
+  never starts.
+
+- The comparison that decides whether to translate at all is made on codes, not on names, so
+  `--mother-lang en` and an unset flag are the same run. Names appear at one point only: the prompt.
+
+- The translated examples come back with the prompt's own list markers still on them —
+  `- Mi tío es…` — from a model small enough to copy the bullet along with the sentence: qwen3:1.7b
+  does it on every call. The marker belongs to the prompt, not the sentence, so it is stripped off
+  again before the sentence reaches a card.
 
 - One call per gloss, carrying the definition, the examples and the etymology together, cached by
   the text asked about. A sense met by two terms is one call, and the three pieces of one gloss
   never disagree about how a word was rendered.
 
-- The examples come back one for one or not at all. An example is a sentence and its rendering, so a
-  model that drops or merges one has changed which sentence teaches what; a card quoting an
-  untranslated right sentence is better than one quoting a translated wrong sentence.
+- An example is carried as a pair — `pages.Example`, the sentence and the edition's rendering of it
+  — and never as one string the translator cuts back up. The halves answer to opposite rules: the
+  sentence is the target language and is the very thing the card teaches, the rendering is the
+  prose and is the only half a model may touch. Only the rendering is sent, so no answer can rewrite
+  a sentence. Joining them first and splitting on the em dash looked equivalent and was not: the
+  separator occurs *inside* sentences too — eight of the 4,529 examples in a warm cache, among them
+  `¿Te das? — Me doy. — Do you surrender? — I surrender.` — and each of those sent Spanish to the
+  model and put the answer back on the card. Splitting from either end fails on a different one of
+  them; keeping the halves apart fails on none. The separator is now only ever written, by
+  `Example.__str__`, where the two are shown together. Three of the four outputs are unchanged by
+  this — the deck, the Markdown and the terminal all render the pair through that one method — and
+  the fourth, `--format json`, now carries `{"sentence": …, "rendering": …}` where it carried one
+  joined string, which is the shape the data was always in.
+
+- The examples come back one for one or not at all. A model that drops or merges one has changed
+  which sentence teaches what; a card quoting an untranslated right sentence is better than one
+  quoting a translated wrong sentence.
 
 - The prompt asks for the target language to be left alone — the example sentences, the headword,
   the forms a definition names — since those are the thing being taught and not prose about it.
@@ -107,11 +132,57 @@ source of truth: where one of these contradicts them, the design wins and the co
   package Anki's own schema reads back with its due numbers in order, its media listed, and its
   dependencies all ahead of what needs them. The window bound was measured on 400 synthetic cards.
 
-- No model was reachable while this was written, so the translation prompt has never been answered
-  by a live one: what is tested is that a mother language of English asks nothing, and that an
-  unreachable host leaves the cards in English with one warning. The disambiguation refactor is in
-  the same position — the degraded path is exercised, the answering path is not. Both want a run
-  against the GPU box before the deck is trusted.
+- The translation prompt has now been answered by a live model: three sentences of `barbapedro.txt`
+  into German, `gemma4:latest` on the GPU box, 57 glosses and 114 cards with no warning raised, so
+  every call was answered. The pair invariant held on all 41 examples that carry a rendering — every
+  sentence reached its card in Spanish, every rendering came back German. The final run, with the
+  schema requiring both fields, reported `4 fields kept their English: 4 definition echoed` — no
+  etymology failures at all, where the first run left sixteen, and no examples refused. The package
+  it wrote carries 41 media files over 114 notes, six of which hold more than one recording; `el`'s
+  card plays both its Spain and its Colombia file.
+
+- Two things the tally cannot do, both worth knowing before trusting the number. It cannot tell a
+  lazy echo from a translation that is legitimately the same string — a loanword, a proper noun, a
+  definition that is one word shared by both languages — so a count of echoes is an upper bound.
+  And it counts without naming: the run says four definitions echoed, not which four, because the
+  count is taken at the call and the gloss is not carried to it. Naming them is the obvious next
+  improvement and was not made.
+
+- **16 of 86 etymologies came back in English** on calls that succeeded, and the cause was this
+  module, not the model: `etymology` was not in `SCHEMA["required"]`, so ollama's structured output
+  let the model omit it, and `_etymology` turns an absent field into the text that was sent. The
+  card then carried the English original with nothing in the run saying so. Requiring the field
+  translates all eight failing etymologies, verified against the pages in the cache. What was ruled
+  out on the way: length (the failures were *shorter*), citation density (44% against 41%), prompt
+  wording, examples crowding the field out, and randomness — an identical call repeats itself 79
+  times in 80.
+
+- Removing the prompt's "if there is no etymology, answer with an empty one" was tried and is
+  **worse**: it fixed one case on one model and broke three on the other. The line stays.
+
+- `examples` is required for the same reason, and it measures larger: on ten cached glosses of four
+  renderings each, requiring the field translated 36 of 36 where leaving it optional translated 11,
+  refusing 25 — the model returned an array of the wrong length or none at all, and the whole set
+  fell back untranslated. The measurement overstates the everyday case, though: those inputs put
+  renderings from several senses behind one sense's definition, which decker never does, and the
+  German run against the real pipeline refused none. Read it as insurance that measured well under
+  stress, not as a bug the run was hitting.
+
+- A run now says how much prose reached the cards untranslated, because until it did, this cost four
+  probes to find. `Translator.kept` counts the two shapes that get there — a field answered empty,
+  which the fallbacks replace with what was sent, and a field echoed back verbatim, which no schema
+  can refuse — and `report()` prints one line before the card count:
+  `[decker] 4 fields kept their English: 1 definition empty, 1 etymology echoed, 1 example echoed,
+  1 examples refused`. Silence means every field came back in the mother language.
+
+- Neither the schema nor the fallback can catch an *echo* — a model answering with the English it
+  was given. `gemma3:4b` does this on three of the eight; it is a well-formed non-empty string and
+  passes every check there is. A run cannot currently say how many fields failed to translate, and
+  that is the gap that made this cost four probes to find.
+
+- A few definitions came back untranslated too (`servilleta` as `Servilleta`), and one example kept
+  English words inside German prose — `Ich bin kein sailor; ich bin ein captain`. Those are the
+  model, and nothing here refuses a partly-translated answer.
 
 ## Known gaps
 

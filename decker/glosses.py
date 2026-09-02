@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 
 from decker import pages
 from decker.disambiguation import Disambiguator
-from decker.ollama import DEFAULT_MODEL
-from decker.pages import Page, Sense
+from decker.ollama import default_model
+from decker.pages import Example, Page, Sense
 from decker.terms import Term
 
 if TYPE_CHECKING:
@@ -45,14 +45,14 @@ class Gloss:
     definition: str
     #: The language section the data was read from, as Wiktionary names it.
     language: str = ""
-    examples: tuple[str, ...] = ()
+    examples: tuple[Example, ...] = ()
     etymology: str | None = None
     ipa: tuple[str, ...] = ()
     #: Wiktionary's sound file for the entry, if it has one. Kept whether or
     #: not the file itself was downloaded: a document wants the link.
-    audio_url: str | None = None
-    #: Cached sound file, if Wiktionary had one and audio was not turned off.
-    audio: str | None = None
+    audio_urls: tuple[str, ...] = ()
+    #: Cached sound files, for whichever of the above were downloaded.
+    audios: tuple[str, ...] = ()
     #: Indexes of the glosses this one depends upon.
     depends_on: tuple[int, ...] = ()
 
@@ -133,19 +133,20 @@ class _Builder:
                 examples=sense.examples,
                 etymology=page.etymology,
                 ipa=page.ipa,
-                audio_url=page.audio_url,
-                audio=self._audio(page),
+                audio_urls=page.audio_urls,
+                audios=self._audios(page),
                 depends_on=depends_on,
             )
         )
         self.seen[key] = index
         return index
 
-    def _audio(self, page: Page) -> str | None:
-        if not self.audio or page.audio_url is None:
-            return None
-        path = pages.audio_path(page.audio_url)
-        return str(path) if path else None
+    def _audios(self, page: Page) -> tuple[str, ...]:
+        """Every recording of the page, downloaded, minus the ones that failed."""
+        if not self.audio:
+            return ()
+        paths = (pages.audio_path(url) for url in page.audio_urls)
+        return tuple(str(path) for path in paths if path)
 
 
 def build(
@@ -161,7 +162,7 @@ def build(
 ) -> list[Gloss]:
     """Turn term extraction's output into the design's list of glosses."""
     disambiguator = Disambiguator(
-        model=model or DEFAULT_MODEL, host=host, enabled=disambiguate
+        model=model or default_model(), host=host, enabled=disambiguate
     )
     builder = _Builder(
         edition=edition,

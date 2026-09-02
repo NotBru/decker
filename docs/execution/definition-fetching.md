@@ -119,11 +119,30 @@ design wins and the code is wrong.
   model answers with the numbers it keeps, under a JSON schema. On `El perro corrió hacia la puerta` this cut `la` from
   eleven senses to the article alone and `correr` from thirteen to three.
 
-- The default model is the design's `gemma4`. The host defaults to `$OLLAMA_HOST`, falling back to
+- The default model is `gemma4:latest`, chosen by measurement rather than by what pulls cleanly:
+  on the eight etymologies a German run left in English it answers all eight, where `gemma3:4b`
+  echoes its English input back on three of them — an answer no schema and no fallback can tell
+  from a good one. It pulls from the registry like any other tag; the cost is size — 9.6 GB against
+  `gemma3:4b`'s 3.3 — so a host without the room degrades and says so, naming what it does hold. A model can also be
+  named for a whole shell as `$DECKER_MODEL`, the way the host is named by `$OLLAMA_HOST`, because
+  those two are exactly the pair that has to agree: a tunnelled GPU box and a laptop's own ollama
+  hold different tags, so a host set in the environment and a model left to its default is the
+  ordinary way a run asks for something that is not there. When it does, the warning names the tags
+  the host *does* hold — a missing model otherwise comes back as its own name thrown back, which
+  reads the same whether the tag is misspelled, the host is the wrong one, or it was never pulled.
+  The host defaults to `$OLLAMA_HOST`, falling back to
   `http://localhost:11434`, ollama's own default. A server that lives elsewhere — a GPU box reached
   through a forwarded port, say — is named by the environment or by `--ollama-host`, so no one
   machine's network is written into the code. Ollama has no authentication, so it is never bound
   anywhere but a loopback or a tunnel.
+
+- Every recording in the language section is fetched, not the first. A page can list several — `el`
+  has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
+  the design says to fetch all that is available, and taking the first drops the rest silently.
+  Wikimedia transcodes each recording into several formats, so the same clip arrives as `.ogg` and
+  `.mp3`; those are one recording and not two, and a card holding both would just play it twice.
+  They are grouped on everything but the last extension and the `.ogg` kept, being what the source
+  is served as. `el` goes from one file to two recordings; `casi`, which has one, stays at one.
 
 - Both prompts put their fixed instructions first and the sentence, the surface and the sense
   listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
@@ -165,12 +184,25 @@ design wins and the code is wrong.
 
 ## Known gaps
 
-- IPA is collected from the whole language section, so a page whose section covers several entries
-  offers all of their readings: `el` comes back with `/el/ [el] /eɾ/ /e/ /a/`.
+- IPA is collected from the whole language section. This was written up as a defect, citing `el`
+  coming back with `/el/ [el] /eɾ/ /e/ /a/`; reading the page says otherwise. Four of those five are
+  `el`'s own — the main reading, then Andalusian `/eɾ/` and rapid-speech `/e/`, both under `el`'s
+  single Pronunciation heading. Only `/a/` comes from further down the page. Dialectal variants are
+  the word's, and a learner is better off seeing them, so the readings stay as they are. What is
+  genuinely wrong is small and structural: a page whose language section holds several etymologies
+  pools their pronunciation blocks, and separating them means splitting the section by sub-heading.
+  Left for v2.
 
-- Audio is the first media file in the language section, which can belong to a neighbouring entry —
-  the `el` gloss is handed a recording of `él`.
+- Audio was also written up as fetching a neighbouring entry's recording — the `el` gloss handed a
+  recording of `él`. That is wrong too. The file Wiktionary lists under `el`'s own *Audio (Spain)*
+  is merely *named* after `él` upstream, presumably by whoever uploaded it. Decker was reading the
+  right section; a filename check would have rejected the file Wiktionary itself offers. Both claims
+  came from reading the code and the filename rather than the page, which is the mistake worth
+  remembering here.
 
 - The REST payload lists usage notes among the definitions, so `la` arrives with sentences like
-  *Used primarily in Spain* as if they were senses. Disambiguation drops them in practice, but a run
-  with `--no-disambiguate` shows them.
+  *Used primarily in Spain* as if they were senses. **Accepted for v1.** The payload gives them no
+  marker of any kind — they are plain `definition` strings with no examples, and so are plenty of
+  real senses — so telling them apart means matching the HTML's *Usage notes* headings back against
+  the REST text, which is fragile coupling for a case disambiguation already drops. It shows only
+  under `--no-disambiguate`.

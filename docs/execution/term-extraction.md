@@ -59,6 +59,14 @@ wins and the code is wrong.
 
 ## Known gaps
 
+All three below are **accepted for v1**, in the order they should be taken up afterwards. The
+design's subtree identification is implemented and works; these are places where Stanza's parse and
+Wiktionary's titles disagree about what a word is, and each needs new machinery rather than a fix.
+The multiword-token one is first: it has a known starting point (`word.parent`), it affects the
+commonest words in three of decker's languages, and `del` and `al` will occur in almost any Spanish
+text. The context-dependent parse is second and open-ended. Hungarian is last, and may not be
+reachable within this design at all — both halves fail for unrelated reasons.
+
 - An expression whose parse in context differs from its parse in isolation is missed. Alone,
   `de cuando en cuando` nests: the first `cuando` is the root and the second hangs off it as an
   `advmod`. Inside `Lo visito de cuando en cuando`, the nesting flattens — both `cuando`s become
