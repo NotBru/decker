@@ -148,7 +148,7 @@ def _add_language_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--target-lang",
         required=True,
-        help="language of the source text, as a Stanza language code (en, de, es...)",
+        help="language of the source text, as a language code (en, de, es...)",
     )
     parser.add_argument(
         "--edition",
