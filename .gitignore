@@ -4,3 +4,7 @@ barbapedro*
 *.apkg
 __pycache__/
 *.py[cod]
+
+# Environment, local to this machine.
+.devcontainer/
+.python-version
