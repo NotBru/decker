@@ -144,6 +144,25 @@ design wins and the code is wrong.
   They are grouped on everything but the last extension and the `.ogg` kept, being what the source
   is served as. `el` goes from one file to two recordings; `casi`, which has one, stays at one.
 
+- A form-of header is put back onto the readings under it. Wiktionary writes a form with one
+  reading inline — `third-person singular preterite indicative of correr` — and a form with several
+  as a header naming the lemma with a nested list beneath it. The REST payload flattens the second
+  shape into siblings: first a header sense holding every reading glued together, then each reading
+  alone, without the lemma. Disambiguation then keeps one of the readings, correctly, and the card
+  loses the only thing an inflected form has to say — what it is an inflection *of*. `auswanderte`
+  reached a deck meaning no more than "first/third-person singular preterite".
+
+  `_unflattened` prefixes each reading with the header and drops the header as a sense of its own,
+  it being a container rather than a meaning: as a card it would claim the word is all of its
+  readings at once. The test is containment, not wording — the header sense is literally its first
+  clause followed by every child concatenated, so each child appears in it verbatim, and *every*
+  later sense must be one, which keeps this off an entry that merely has a colon in its first
+  definition. Across the cached pages it fired on 162 entries of 9,572 and left none of the shape
+  behind. It is not a German problem: Spanish `cuenta`, Portuguese `tormenta`, Catalan `para` and
+  Italian `tormenta` all have it, since what decides is how many readings a form has, not which
+  language it is in. This is the same class as the usage-notes gap below — structure the REST
+  flattening loses — but unlike that one it is detectable without guessing.
+
 - Both prompts put their fixed instructions first and the sentence, the surface and the sense
   listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
   the tail, and on a laptop's CPU that prefill is nearly the whole cost of a call: the answer is a
