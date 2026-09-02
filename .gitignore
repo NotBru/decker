@@ -1,4 +1,6 @@
-barbapedro.txt
-barbapedro-terms.md
+# Source texts and anything decker makes from them: the inputs are
+# copyrighted (barbapedro is a children's book) and the outputs quote them.
+barbapedro*
+*.apkg
 __pycache__/
 *.py[cod]
