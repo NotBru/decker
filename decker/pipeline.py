@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass
 
 from decker import cards as deck_cards
+from decker import pages
 from decker import shuffling, trees, wiktionary
 from decker.cards import Card
 from decker.glosses import Gloss
@@ -93,7 +94,7 @@ def define(
         whole_index=whole_index,
         refresh_titles=refresh_titles,
     )
-    return build_glosses(
+    glosses = build_glosses(
         sentences,
         target_lang=target_lang,
         edition=edition or MOTHER_EDITION,
@@ -103,6 +104,8 @@ def define(
         audio=audio,
         refresh=refresh_pages,
     )
+    pages.report()
+    return glosses
 
 
 def deck(

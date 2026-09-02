@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
@@ -269,7 +270,41 @@ def _transient_failure(definition: object) -> bool:
     return any(marker.lower() in text for marker in _TRANSIENT)
 
 
-def _fetch(url: str, *, decode: Callable[[bytes], object] | None = None) -> object:
+class Refused(Exception):
+    """Wikimedia refused the client itself, rather than the resource asked for.
+
+    A 403 is not a page that is missing (404) and not a rate limit that will
+    pass (429): it is the request being turned away, almost always over the
+    User-Agent policy or an IP block. Nothing later in the run will fare any
+    better, so this is raised rather than counted, and the run stops on the
+    first one instead of scrolling hundreds of them and finishing with a
+    suspiciously thin deck.
+    """
+
+
+#: Fetches that gave up, by kind. A page decker cannot get is a gloss it
+#: cannot make, and until these were counted the only way to notice was to
+#: read the deck and find it thin.
+FAILURES: Counter[str] = Counter()
+
+
+def report() -> None:
+    """Say how many fetches failed, if any did."""
+    if not FAILURES:
+        return
+    parts = ", ".join(f"{count} {kind}" for kind, count in sorted(FAILURES.items()))
+    print(
+        f"[decker] {sum(FAILURES.values())} fetches failed: {parts}",
+        file=sys.stderr,
+    )
+
+
+def _fetch(
+    url: str,
+    *,
+    what: str = "request",
+    decode: Callable[[bytes], object] | None = None,
+) -> object:
     """One request, paced with every other, waiting out throttling.
 
     Everything decker asks Wikimedia for goes through here -- API payloads and
@@ -288,13 +323,17 @@ def _fetch(url: str, *, decode: Callable[[bytes], object] | None = None) -> obje
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return None
+            if error.code == 403:
+                raise Refused(url) from error
             if error.code not in (429, 503) or attempt == MAX_ATTEMPTS - 1:
                 print(f"[decker] {url}: HTTP {error.code}", file=sys.stderr)
+                FAILURES[f"{what}: HTTP {error.code}"] += 1
                 return None
             time.sleep(_retry_after(error, attempt))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             if attempt == MAX_ATTEMPTS - 1:
                 print(f"[decker] {url}: {error}", file=sys.stderr)
+                FAILURES[f"{what}: unreachable"] += 1
                 return None
             time.sleep(BACKOFF**attempt)
     return None
@@ -302,7 +341,9 @@ def _fetch(url: str, *, decode: Callable[[bytes], object] | None = None) -> obje
 
 def _get_json(url: str) -> dict | list | None:
     """Fetch and decode one API response, waiting out throttling."""
-    answer = _fetch(url, decode=lambda body: json.loads(body.decode("utf-8")))
+    answer = _fetch(
+        url, what="page", decode=lambda body: json.loads(body.decode("utf-8"))
+    )
     return answer if isinstance(answer, (dict, list)) else None
 
 
@@ -487,7 +528,7 @@ def audio_path(url: str, *, download: bool = True) -> Path | None:
         return path
     if not download:
         return None
-    data = _fetch(url)
+    data = _fetch(url, what="audio")
     if not isinstance(data, bytes):
         return None
     path.parent.mkdir(parents=True, exist_ok=True)

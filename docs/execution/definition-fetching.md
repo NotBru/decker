@@ -169,6 +169,19 @@ design wins and the code is wrong.
   and dropped those files silently. The half-second floor between requests and the `Retry-After`
   backoff were already there for pages; audio simply was not using them.
 
+- A 403 stops the run, and nothing else does. It is the one status that says the *client* was
+  refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
+  the User-Agent policy or a blocked address, neither of which the next request will escape. So it
+  raises `pages.Refused`, the CLI prints what happened, what decker calls itself, and why it
+  stopped, and exits 2. Counting these instead would mean scrolling hundreds of them and finishing
+  "successfully" with a deck missing most of its glosses.
+
+- Every other fetch that gives up is counted and reported: `[decker] 2 fetches failed: 1 audio:
+  unreachable, 1 page: HTTP 500`. A page decker cannot get is a gloss it cannot make, and until
+  this line existed the only way to notice was to read the deck and find it thin. Silence means
+  every fetch that was tried came back. 404 is not counted, being an answer rather than a failure:
+  it is how Wiktionary says a title has no entry.
+
 - Both prompts put their fixed instructions first and the sentence, the surface and the sense
   listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
   the tail, and on a laptop's CPU that prefill is nearly the whole cost of a call: the answer is a

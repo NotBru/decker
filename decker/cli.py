@@ -8,7 +8,8 @@ import json
 import sys
 from pathlib import Path
 
-from decker import anki, languages, markdown, pipeline, shuffling
+from decker import anki, languages, markdown, pages, pipeline, shuffling
+from decker.wiktionary import USER_AGENT
 from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
 from decker.translation import SOURCE_LANG
 
@@ -18,6 +19,24 @@ COMMANDS = ("extract", "define", "deck", "index")
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except pages.Refused as refusal:
+        #: Loudly, and with a non-zero status: every later fetch would be
+        #: refused the same way, and a run that carried on would finish
+        #: "successfully" with a deck missing most of its glosses.
+        print(
+            f"[decker] Wikimedia refused the request (HTTP 403) for {refusal}.\n"
+            "[decker] That is the client being turned away, not a missing page: "
+            "usually the User-Agent policy or a blocked address.\n"
+            f"[decker] decker identifies itself as {USER_AGENT!r}.\n"
+            "[decker] Nothing further would succeed, so the run stopped here.",
+            file=sys.stderr,
+        )
+        return 2
+
+
+def _main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or (argv[0] not in COMMANDS and argv[0] not in ("-h", "--help")):
         argv.insert(0, DEFAULT_COMMAND)
