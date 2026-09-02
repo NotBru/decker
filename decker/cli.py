@@ -85,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
         "--name", help="name of the deck inside Anki (default: the source's name)"
     )
     deck.add_argument(
+        "--description",
+        help=(
+            "what the deck says it was built from (default: the source's name); "
+            "Wiktionary's attribution is appended either way"
+        ),
+    )
+    deck.add_argument(
         "--mother-lang",
         type=_language_code,
         default=SOURCE_LANG,
@@ -304,6 +311,7 @@ def _run_deck(arguments: argparse.Namespace) -> int:
             out,
             name=name,
             source=_document_title(arguments.source),
+            description=arguments.description,
             edition=arguments.edition or pipeline.MOTHER_EDITION,
         )
         print(f"[decker] wrote {out}", file=sys.stderr)

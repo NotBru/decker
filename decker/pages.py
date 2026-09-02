@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
@@ -268,14 +269,22 @@ def _transient_failure(definition: object) -> bool:
     return any(marker.lower() in text for marker in _TRANSIENT)
 
 
-def _get_json(url: str) -> dict | list | None:
-    """Fetch and decode one API response, waiting out throttling."""
+def _fetch(url: str, *, decode: Callable[[bytes], object] | None = None) -> object:
+    """One request, paced with every other, waiting out throttling.
+
+    Everything decker asks Wikimedia for goes through here -- API payloads and
+    sound files alike -- because the rate limit counts them together. Audio
+    used to have its own one-shot download with no pacing and no retry, which
+    is how a single run collected eighteen `429 Your bot is making too many
+    requests` and silently dropped the files.
+    """
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(MAX_ATTEMPTS):
         _pace()
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode("utf-8"))
+                body = response.read()
+            return body if decode is None else decode(body)
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return None
@@ -289,6 +298,12 @@ def _get_json(url: str) -> dict | list | None:
                 return None
             time.sleep(BACKOFF**attempt)
     return None
+
+
+def _get_json(url: str) -> dict | list | None:
+    """Fetch and decode one API response, waiting out throttling."""
+    answer = _fetch(url, decode=lambda body: json.loads(body.decode("utf-8")))
+    return answer if isinstance(answer, (dict, list)) else None
 
 
 def _pace() -> None:
@@ -472,12 +487,8 @@ def audio_path(url: str, *, download: bool = True) -> Path | None:
         return path
     if not download:
         return None
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data = response.read()
-    except (urllib.error.URLError, TimeoutError) as error:
-        print(f"[decker] {url}: {error}", file=sys.stderr)
+    data = _fetch(url)
+    if not isinstance(data, bytes):
         return None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)

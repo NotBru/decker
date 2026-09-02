@@ -163,6 +163,12 @@ design wins and the code is wrong.
   language it is in. This is the same class as the usage-notes gap below — structure the REST
   flattening loses — but unlike that one it is detectable without guessing.
 
+- Every request to Wikimedia goes through one paced, retrying fetch — API payloads and sound files
+  alike — because the rate limit counts them together. Audio used to have a download of its own with
+  no pacing and no retry, so one run collected eighteen `429 Your bot is making too many requests`
+  and dropped those files silently. The half-second floor between requests and the `Retry-After`
+  backoff were already there for pages; audio simply was not using them.
+
 - Both prompts put their fixed instructions first and the sentence, the surface and the sense
   listing last. Ollama keeps the prefill of a prompt's common prefix between calls and re-reads only
   the tail, and on a laptop's CPU that prefill is nearly the whole cost of a call: the answer is a

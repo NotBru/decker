@@ -29,9 +29,15 @@ CREDIT = (
     '<a href="{license}">CC BY-SA 4.0</a>'
 )
 
-DESCRIPTION = (
-    "Built by decker from {source}. Definitions, examples, etymologies and "
-    'pronunciations come from <a href="{home}">Wiktionary</a>, used under '
+#: What a deck says of itself, in two halves. The first is where the cards
+#: came from and is the caller's to replace with ``--description``, since the
+#: default is the input file's name and a scratch name has no business in a
+#: deck's permanent metadata. The second is not the caller's: attribution is
+#: the licence's requirement, so it is appended whatever the first says.
+PROVENANCE = "Built by decker from {source}."
+ATTRIBUTION = (
+    "Definitions, examples, etymologies and pronunciations come from "
+    '<a href="{home}">Wiktionary</a>, used under '
     '<a href="{license}">CC BY-SA 4.0</a>; each card links to the entry it '
     "was taken from."
 )
@@ -92,6 +98,7 @@ def write(
     *,
     name: str,
     source: str = "a text",
+    description: str | None = None,
     edition: str = "en",
 ) -> Path:
     """Write ``cards``, in the order given, as an Anki package at ``path``."""
@@ -99,10 +106,14 @@ def write(
     deck = genanki.Deck(
         _stable_id(f"deck:{name}"),
         name,
-        DESCRIPTION.format(
-            source=source,
-            home=WIKTIONARY_HOME.format(edition=edition),
-            license=LICENSE_URL,
+        " ".join(
+            (
+                description or PROVENANCE.format(source=source),
+                ATTRIBUTION.format(
+                    home=WIKTIONARY_HOME.format(edition=edition),
+                    license=LICENSE_URL,
+                ),
+            )
         ),
     )
     models = {RECOGNITION: _recognition_model(), PRODUCTION: _production_model()}

@@ -184,6 +184,12 @@ source of truth: where one of these contradicts them, the design wins and the co
   English words inside German prose — `Ich bin kein sailor; ich bin ein captain`. Those are the
   model, and nothing here refuses a partly-translated answer.
 
+- `--description` sets what a deck says it was built from. The default is the input file's name,
+  which is fine when the file is named for its source and wrong when it is not: a scratch file
+  called `dw.txt` put `Built by decker from dw.` into a deck's permanent metadata. Wiktionary's
+  attribution is appended whatever the flag says, since that is the licence's requirement and not
+  a decoration — the flag replaces the provenance sentence, never the credit.
+
 ## Known gaps
 
 - Every card lands in one deck with no subdecks, tags beyond `recognition`/`production`, or
