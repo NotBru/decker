@@ -14,7 +14,8 @@ ownership division. It also keeps human reasoning and decisions separate from AI
 
 ### `docs/execution/`
 
-This directory is intended to persist design choices/notes from AI agents.
+This directory is intended to persist design choices/notes from AI agents. I don't read much of it
+tbh.
 
 ### `docs/instructions/design.md`
 
