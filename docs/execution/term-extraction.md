@@ -59,13 +59,30 @@ wins and the code is wrong.
 
 ## Known gaps
 
-All three below are **accepted for v1**, in the order they should be taken up afterwards. The
+All four below are **accepted for v1**, in the order they should be taken up afterwards. The
 design's subtree identification is implemented and works; these are places where Stanza's parse and
 Wiktionary's titles disagree about what a word is, and each needs new machinery rather than a fix.
-The multiword-token one is first: it has a known starting point (`word.parent`), it affects the
+Foreign names come first: it is the only one that puts a confidently wrong card in front of a
+learner rather than quietly dropping a right one, and any German news text will trip it. The
+multiword-token one is second: it has a known starting point (`word.parent`), it affects the
 commonest words in three of decker's languages, and `del` and `al` will occur in almost any Spanish
-text. The context-dependent parse is second and open-ended. Hungarian is last, and may not be
+text. The context-dependent parse is third and open-ended. Hungarian is last, and may not be
 reachable within this design at all — both halves fail for unrelated reasons.
+
+- A foreign name embedded in the source is taken apart, and whichever of its words happen to exist
+  in the target language are glossed as though they were it. `Trans-Caspian Enterprise Fund`, in
+  a German article, produced a card teaching `Trans` as *Tran* — whale oil — and another teaching
+  `Fund` as a find, when the text means an English company name. `Caspian` and `Enterprise` were
+  dropped safely, and only because no German entry exists for them; `Sokolov`, `IJS`, `52`, `21`
+  and `200` were dropped the same way, each with a line on stderr. So the safety here is an
+  accident of coverage, not a rule: a fragment survives exactly when it collides with a real word
+  of the target language, which is also exactly when the card it makes is most convincing and most
+  wrong.
+
+  This is the worst-behaved gap of the four, because the others lose a term and this one invents
+  one. A fix has to decide that a span is a name in a foreign language before glossing its parts.
+  Stanza's NER, or simply refusing to gloss a word inside a capitalised multi-word run that also
+  contains an unglossable word, would both be starting points; neither is v1 work.
 
 - An expression whose parse in context differs from its parse in isolation is missed. Alone,
   `de cuando en cuando` nests: the first `cuando` is the root and the second hangs off it as an
