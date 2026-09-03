@@ -215,6 +215,18 @@ design wins and the code is wrong.
   character. Uncovered REST senses fell from 203 to 106, and a fresh sample of those is entirely
   usage notes and collocation boxes.
 
+- **The page cache is keyed by source, not just by title.** A page from a mirror and a page from
+  Wikimedia are not interchangeable — the mirror's carries no media, since no dump does — so they
+  cannot share a file. They did, and a single `--refresh-pages` against the mirror silently replaced
+  upstream pages with mirror ones; a deck built afterwards would have lost its audio with nothing
+  saying so. A named host now gets its own directory, `pages-<edition>@<host>`, and the default
+  source keeps the plain name so nothing already cached moves.
+
+- **A source that offers no recordings at all says so once.** Losing every recording and every word
+  happening to have none look identical on a card. `[decker] no recordings offered by this source`
+  is printed when audio is on, glosses were made, and not one page offered a file — which is what a
+  local mirror always looks like.
+
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
   the User-Agent policy or a blocked address, neither of which the next request will escape. So it

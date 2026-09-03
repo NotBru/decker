@@ -90,6 +90,9 @@ class _Builder:
     fetched: dict[str, Page | None] = field(default_factory=dict)
     #: Per page, which of its definitions describe it in terms of what.
     refs: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
+    #: How many recordings the pages offered, so a run that ends with none
+    #: can say why instead of looking like every word simply has no audio.
+    offered: int = 0
     #: Glosses a previously built deck already teaches, by key.
     known: frozenset[str] = frozenset()
     #: How many were dropped for being in it.
@@ -175,6 +178,7 @@ class _Builder:
         """Every recording of the page, downloaded, minus the ones that failed."""
         if not self.audio:
             return ()
+        self.offered += len(page.audio_urls)
         paths = (pages.audio_path(url) for url in page.audio_urls)
         return tuple(str(path) for path in paths if path)
 
@@ -210,6 +214,15 @@ def build(
     for sentence in sentences:
         for term in sentence.terms:
             _gloss_term(builder, term, sentence.text)
+    if audio and builder.glosses and not builder.offered:
+        #: A source that carries no media at all is not the same as a word
+        #: that happens to have no recording, and the two look identical on
+        #: a card. A local mirror is the ordinary reason: media is in no dump.
+        print(
+            "[decker] no recordings offered by this source; cards will have no "
+            "audio (a local Wiktionary carries none: media is in no dump)",
+            file=sys.stderr,
+        )
     if builder.skipped:
         print(
             f"[decker] {builder.skipped} glosses already taught, left out",

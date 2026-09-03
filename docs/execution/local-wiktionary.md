@@ -107,5 +107,9 @@ rendered page rather than from `/api/rest_v1/page/definition/`, which no MediaWi
 `define` run over one sentence produced 16 glosses with their dependencies, examples, etymologies
 and readings intact, with nothing leaving the machine.
 
-What still leaves it is audio, and only audio: no dump carries media. `--no-audio` closes that at
-the cost of the recordings.
+Nothing leaves it, audio included. The mirror's pages carry no media — `File:` pages are not in
+`pages-articles` and the files are in no dump — so no recording is offered and none is fetched.
+Bru's decision, 2026-09-03, is that this stays: **no audio with the mirror.** Commons URLs could be
+constructed from filenames without the page's help, and that is exactly the narrow leak the mirror
+exists to remove, so it is not done. A run against the mirror says once that it found no
+recordings, since silence and absence look the same on a card.

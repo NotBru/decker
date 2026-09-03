@@ -154,6 +154,21 @@ def strip_html(fragment: str) -> str:
     return stripper.text()
 
 
+def pages_dir(edition: str) -> str:
+    """The cache directory for one edition, per source.
+
+    A page from a mirror and a page from Wikimedia are not interchangeable --
+    the mirror's carries no media, since no dump does -- so they cannot share
+    a file. Keyed only by title, a refresh against one silently replaced the
+    other, and a deck built afterwards lost its audio without anything saying
+    so. The default source keeps the plain name, so nothing already cached
+    moves.
+    """
+    if not HOST:
+        return f"pages-{edition}"
+    return f"pages-{edition}@{re.sub(r'[^\w.\-]', '_', HOST)}"
+
+
 def page_cache_path(title: str, edition: str) -> Path:
     """Where a title's raw payloads are kept.
 
@@ -161,7 +176,7 @@ def page_cache_path(title: str, edition: str) -> Path:
     the directory or collide with another.
     """
     safe = urllib.parse.quote(title, safe="")
-    return cache_dir() / f"pages-{edition}" / f"{safe}.json.gz"
+    return cache_dir() / pages_dir(edition) / f"{safe}.json.gz"
 
 
 def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page | None:
