@@ -196,12 +196,21 @@ design wins and the code is wrong.
   pages whose `parse` payload was cached as null after a failed fetch, which is a hole in the cache
   rather than in the reading.
 
-  But a normalised comparison — ignoring the CSS that leaks into REST definition text — still shows
-  **213 senses lost across 84 pages**, `malo` and `bueno` worst. That is a real regression and its
-  cause is not yet found: sub-sense lists nested deeper than a list item's direct children, and a
-  walk that assumed the section's top level, were both tried and neither moved the number. Until
-  that is understood, `fetch` still reads senses from the REST payload and the HTML path is unused
-  code. It should not be switched over on the strength of the 1,402.
+  An earlier note here claimed 213 senses lost across 84 pages and called it a real regression.
+  That was **the measurement, not the reader**. Two mistakes: comparing truncated keys, when the
+  HTML sense carries a grammatical label the REST text omits (`(with ser) bad (of bad quality)`
+  against `bad (of bad quality)`), which pushes the shared words past the truncation window; and
+  before that, exact string matching against REST text with CSS leaked into it. Comparing whole
+  normalised strings by containment gives **132 across 42 pages**.
+
+  Most of what remains is the REST payload's junk, correctly dropped: usage notes as before, and
+  the collocation boxes an entry embeds in its definition list — `Games and sports`,
+  `Domains of study…`, `With infinitives: …` all arrive as senses of `bueno` through REST and are
+  not senses. Of `la`'s six, five are usage notes.
+
+  One genuine loss is confirmed — `la`'s `accusative of ella, ello, and usted` — so the reader is
+  not yet perfect and the residue has not been counted exactly. `fetch` still reads the REST
+  payload; switching over wants that residue quantified first, not the 1,402 alone.
 
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from

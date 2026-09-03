@@ -107,7 +107,7 @@ It still cannot be *used*: senses come from `/api/rest_v1/page/definition/`, a W
 that no MediaWiki serves, and a fetch against the mirror returns nothing.
 
 Reading senses from the rendered HTML is the missing piece and is written but not switched on —
-1,402 of 1,516 cached pages agree exactly with the REST payload, and 84 still lose senses for
-reasons not yet understood. `definition-fetching.md` has the measurements. Until that closes, this
+1,402 of 1,516 cached pages agree exactly with the REST payload, and the residue is smaller than
+first measured and mostly the REST payload's own junk. `definition-fetching.md` has the measurements. Until that closes, this
 mirror is a browsable dictionary and a proof that local rendering works, not yet a source decker
 can read.
