@@ -187,12 +187,17 @@ design wins and the code is wrong.
 - **Senses are read from the rendered page, not from the REST endpoint.** `_entries_from_html`
   walks the page the way Wiktionary structures it: a heading names the part of speech, the list
   under it holds one sense per item, a nested list holds its sub-senses, and an example arrives as
-  `e-example` plus `e-translation` rather than as one string to cut apart. The REST payload is kept
-  only as a fallback, for the handful of pages whose render failed once and was cached as nothing.
+  `e-example` plus `e-translation` rather than as one string to cut apart.
 
-- This is what lets a run be pointed at a local mirror, since `/api/rest_v1/page/definition/` is a
-  Wikimedia service that no MediaWiki serves. The request for it is now optional and made quietly:
-  a mirror answers 301 to every one, and that is not a failure worth a line per page.
+- **The REST endpoint is no longer asked for at all**, so a title costs one request rather than two
+  and nothing quietly reaches for a second source. There was briefly a fallback to it, for the two
+  cached pages — `correr` and `corrió` of 1,742 — whose `parse` request had failed long ago and
+  been cached as null. Those were refreshed instead: a fallback for a fault that can no longer
+  occur is a path nothing exercises and every reader has to reason about. `_payloads` now fetches
+  the rendered page first and returns nothing when it fails, so a failed render is never written.
+
+- This is also what lets a run be pointed at a local mirror, since `/api/rest_v1/page/definition/`
+  is a Wikimedia service that no MediaWiki serves.
 
 - What the change is worth, beyond the mirror: **usage notes stop arriving as senses**, because they
   live under their own heading — `la` gave six senses through REST, five of them notes, and gives

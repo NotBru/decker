@@ -37,7 +37,6 @@ HOST_VARIABLE = "DECKER_WIKTIONARY_HOST"
 DEFAULT_ORIGIN = "https://{edition}.wiktionary.org"
 HOST: str | None = os.environ.get(HOST_VARIABLE)
 
-DEFINITION_PATH = "/api/rest_v1/page/definition/{title}"
 PARSE_PATH = (
     "/w/api.php?action=parse&page={title}&prop=text&formatversion=2&format=json"
 )
@@ -177,11 +176,6 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         return None
     language = name_of(lang)
     entries = _entries_from_html(payloads.get("parse"), language)
-    if not entries:
-        #: A page whose rendered HTML never arrived -- a `parse` request that
-        #: failed and was cached as nothing -- still has its senses in the
-        #: REST payload, where a mirror has none to offer.
-        entries = _entries(payloads.get("definition"), lang)
     if not entries and _is_split(payloads):
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
@@ -236,9 +230,7 @@ def _from_split(
         found = _payloads(subpage, edition=edition, refresh=refresh)
         if found is None:
             continue
-        entries = _entries_from_html(found.get("parse"), name_of(lang)) or _entries(
-            found.get("definition"), lang
-        )
+        entries = _entries_from_html(found.get("parse"), name_of(lang))
         if entries:
             return found, entries
     return payloads, []
@@ -260,10 +252,7 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
     parse = _get_json(base + PARSE_PATH.format(title=quoted))
     if parse is None:
         return None
-    #: Quietly: a mirror serves no such endpoint, and its absence is not a
-    #: failure now that the senses are read from the rendered page.
-    definition = _get_json(base + DEFINITION_PATH.format(title=quoted), quiet=True)
-    payloads = {"definition": definition, "parse": parse}
+    payloads = {"parse": parse}
 
     if _transient_failure(parse):
         #: Wiktionary renders a Lua timeout *into the page*, with a 200 and a
@@ -398,93 +387,6 @@ def _retry_after(error: urllib.error.HTTPError, attempt: int) -> float:
         except ValueError:
             pass
     return BACKOFF**attempt
-
-
-def _entries(definition: dict | None, lang: str) -> list[Entry]:
-    """Read the REST payload's entries for one language code."""
-    if not isinstance(definition, dict):
-        return []
-    entries = []
-    for block in definition.get(lang, ()):
-        senses = tuple(
-            Sense(
-                definition=strip_html(sense.get("definition", "")),
-                examples=tuple(_examples(sense)),
-            )
-            for sense in block.get("definitions", ())
-            if strip_html(sense.get("definition", ""))
-        )
-        senses = _unflattened(senses)
-        if senses:
-            entries.append(
-                Entry(
-                    language=block.get("language", lang),
-                    part_of_speech=block.get("partOfSpeech", ""),
-                    senses=senses,
-                )
-            )
-    return entries
-
-
-#: A header sense names the lemma and ends in a colon: `inflection of
-#: auswandern:`. The colon is only a cheap pre-filter; what actually decides is
-#: the containment test below.
-_HEADER = re.compile(r"^(.*?\b\w+:)\s")
-
-
-def _unflattened(senses: tuple[Sense, ...]) -> tuple[Sense, ...]:
-    """Senses with a form-of header put back onto the readings under it.
-
-    A form with one reading is written by Wiktionary on one line -- "third-
-    person singular preterite indicative of correr" -- and needs nothing. A
-    form with several is written as a header naming the lemma and a list
-    nested under it, and the REST payload flattens that into siblings: the
-    header first, holding every reading glued together, then each reading on
-    its own without the lemma. Whichever the disambiguator then keeps, the
-    card loses the one thing an inflected form has to say -- what it is an
-    inflection *of*.
-
-    So the header is put back on each reading and dropped as a sense of its
-    own, since it is a container and not a meaning: as a card it would claim
-    the word is every one of its readings at once. With a single reading this
-    rebuilds exactly the line Wiktionary writes inline anyway.
-
-    The test is containment, not wording: the header sense is literally its
-    own first clause followed by every child concatenated, so each child
-    appears in it verbatim. Every later sense must be one, which is what keeps
-    this off an entry that merely has a colon in its first definition.
-    """
-    if len(senses) < 2:
-        return senses
-    match = _HEADER.match(senses[0].definition)
-    if not match:
-        return senses
-    header, rest = match.group(1), senses[0].definition[match.end():].strip()
-    children = senses[1:]
-    if not all(sense.definition and sense.definition in rest for sense in children):
-        return senses
-    return tuple(
-        replace(sense, definition=f"{header} {sense.definition}") for sense in children
-    )
-
-
-def _examples(sense: dict) -> list[Example]:
-    """Examples of one sense, each with its rendering where there is one."""
-    examples = []
-    for parsed in sense.get("parsedExamples", ()):
-        text = strip_html(parsed.get("example", ""))
-        translation = strip_html(parsed.get("translation", ""))
-        if text and translation:
-            examples.append(Example(text, translation))
-        elif text:
-            examples.append(Example(text))
-    if examples:
-        return examples
-    return [
-        Example(strip_html(example))
-        for example in sense.get("examples", ())
-        if example
-    ]
 
 
 def _from_html(
