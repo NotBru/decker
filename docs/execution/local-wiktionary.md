@@ -101,13 +101,11 @@ where its labels would be. Without it, `book` printed a Lua error in place of
 
 ## What is not done
 
-Decker can now be *pointed* here — `--wiktionary-host http://172.17.0.2:8080` — and the mirror
-answers `/w/api.php` and `/wiki/<title>` at the same paths as upstream, so only the origin changes.
-It still cannot be *used*: senses come from `/api/rest_v1/page/definition/`, a Wikimedia service
-that no MediaWiki serves, and a fetch against the mirror returns nothing.
+Decker reads from the mirror. `--wiktionary-host http://172.17.0.2:8080` is the whole of it: the
+mirror answers `/w/api.php` and `/wiki/<title>` at upstream's paths, and senses now come from the
+rendered page rather than from `/api/rest_v1/page/definition/`, which no MediaWiki serves. A full
+`define` run over one sentence produced 16 glosses with their dependencies, examples, etymologies
+and readings intact, with nothing leaving the machine.
 
-Reading senses from the rendered HTML is the missing piece and is written but not switched on —
-1,402 of 1,516 cached pages agree exactly with the REST payload, and the residue is smaller than
-first measured and mostly the REST payload's own junk. `definition-fetching.md` has the measurements. Until that closes, this
-mirror is a browsable dictionary and a proof that local rendering works, not yet a source decker
-can read.
+What still leaves it is audio, and only audio: no dump carries media. `--no-audio` closes that at
+the cost of the recordings.

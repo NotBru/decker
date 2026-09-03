@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 
+from decker.languages import name_of
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -174,15 +175,22 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     payloads = _payloads(title, edition=edition, refresh=refresh)
     if payloads is None:
         return None
-    entries = _entries(payloads.get("definition"), lang)
+    language = name_of(lang)
+    entries = _entries_from_html(payloads.get("parse"), language)
+    if not entries:
+        #: A page whose rendered HTML never arrived -- a `parse` request that
+        #: failed and was cached as nothing -- still has its senses in the
+        #: REST payload, where a mirror has none to offer.
+        entries = _entries(payloads.get("definition"), lang)
     if not entries and _is_split(payloads):
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
         return None
-    etymology, ipa, audios = _from_html(payloads.get("parse"), entries[0].language)
+    language = entries[0].language or language
+    etymology, ipa, audios = _from_html(payloads.get("parse"), language)
     return Page(
         title=title,
-        language=entries[0].language,
+        language=language,
         entries=tuple(entries),
         etymology=etymology,
         ipa=ipa,
@@ -228,7 +236,9 @@ def _from_split(
         found = _payloads(subpage, edition=edition, refresh=refresh)
         if found is None:
             continue
-        entries = _entries(found.get("definition"), lang)
+        entries = _entries_from_html(found.get("parse"), name_of(lang)) or _entries(
+            found.get("definition"), lang
+        )
         if entries:
             return found, entries
     return payloads, []
@@ -243,13 +253,19 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
 
     quoted = urllib.parse.quote(title, safe="")
     base = origin(edition)
-    definition = _get_json(base + DEFINITION_PATH.format(title=quoted))
-    if definition is None:
-        return None
+    #: The rendered page is what the senses are read from, so it decides
+    #: whether the title exists at all. The REST payload is asked for second
+    #: and tolerated missing: a mirror does not serve that endpoint, and
+    #: nothing needs it unless the render failed to arrive.
     parse = _get_json(base + PARSE_PATH.format(title=quoted))
+    if parse is None:
+        return None
+    #: Quietly: a mirror serves no such endpoint, and its absence is not a
+    #: failure now that the senses are read from the rendered page.
+    definition = _get_json(base + DEFINITION_PATH.format(title=quoted), quiet=True)
     payloads = {"definition": definition, "parse": parse}
 
-    if _transient_failure(definition):
+    if _transient_failure(parse):
         #: Wiktionary renders a Lua timeout *into the page*, with a 200 and a
         #: well-formed body, so nothing below this notices that the
         #: definitions are error text. Cached, it is permanent: every later
@@ -317,6 +333,7 @@ def _fetch(
     url: str,
     *,
     what: str = "request",
+    quiet: bool = False,
     decode: Callable[[bytes], object] | None = None,
 ) -> object:
     """One request, paced with every other, waiting out throttling.
@@ -340,23 +357,25 @@ def _fetch(
             if error.code == 403:
                 raise Refused(url) from error
             if error.code not in (429, 503) or attempt == MAX_ATTEMPTS - 1:
-                print(f"[decker] {url}: HTTP {error.code}", file=sys.stderr)
-                FAILURES[f"{what}: HTTP {error.code}"] += 1
+                if not quiet:
+                    print(f"[decker] {url}: HTTP {error.code}", file=sys.stderr)
+                    FAILURES[f"{what}: HTTP {error.code}"] += 1
                 return None
             time.sleep(_retry_after(error, attempt))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             if attempt == MAX_ATTEMPTS - 1:
-                print(f"[decker] {url}: {error}", file=sys.stderr)
-                FAILURES[f"{what}: unreachable"] += 1
+                if not quiet:
+                    print(f"[decker] {url}: {error}", file=sys.stderr)
+                    FAILURES[f"{what}: unreachable"] += 1
                 return None
             time.sleep(BACKOFF**attempt)
     return None
 
 
-def _get_json(url: str) -> dict | list | None:
+def _get_json(url: str, *, quiet: bool = False) -> dict | list | None:
     """Fetch and decode one API response, waiting out throttling."""
     answer = _fetch(
-        url, what="page", decode=lambda body: json.loads(body.decode("utf-8"))
+        url, what="page", quiet=quiet, decode=lambda body: json.loads(body.decode("utf-8"))
     )
     return answer if isinstance(answer, (dict, list)) else None
 
@@ -624,7 +643,11 @@ def _senses_of(items: list) -> list[Sense]:
     """
     senses = []
     for item in items:
-        own = _tidy(_text(item, skip=("dl", "ol", "ul")))
+        #: The colon is what marks a header, and `_tidy` strips it, so the
+        #: test is made on the raw text: `inflection of curar:` is not a
+        #: sense, it is what its sub-senses are inflections *of*.
+        raw = _text(item, skip=("dl", "ol", "ul"))
+        own = _tidy(raw)
         #: A sub-sense list is not always a direct child of the item that
         #: holds it -- it can sit inside the item's `dd` -- so it is looked
         #: for anywhere beneath, and its items are read one level flat.
@@ -634,7 +657,7 @@ def _senses_of(items: list) -> list[Sense]:
             for child in sublist["children"]
             if not isinstance(child, str) and child.get("tag") == "li"
         ]
-        header = own.endswith(":") or (nested and not own)
+        header = raw.strip().endswith(":") or (nested and not own)
         if own and not header:
             senses.append(Sense(definition=own, examples=tuple(_html_examples(item))))
         for child in nested:
@@ -643,7 +666,7 @@ def _senses_of(items: list) -> list[Sense]:
                 continue
             senses.append(
                 Sense(
-                    definition=f"{own} {inner}".strip() if header else inner,
+                    definition=f"{own}: {inner}".strip() if header and own else inner,
                     examples=tuple(_html_examples(child)),
                 )
             )

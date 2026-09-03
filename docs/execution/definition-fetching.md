@@ -184,33 +184,31 @@ design wins and the code is wrong.
   `/api/rest_v1/page/definition/`, which is a Wikimedia service and not part of MediaWiki, so a
   mirror answers `action=parse` and 301s the other. Pointed at one today, `fetch` returns nothing.
 
-- **Reading senses from the rendered HTML is written but not in use.** `_entries_from_html` walks
-  the page the way Wiktionary structures it — a heading names the part of speech, the list under it
-  holds one sense per item, and an example arrives as `e-example` plus `e-translation` rather than
-  one string to cut apart. Measured against every cached Spanish page: of 1,516, **1,402 agree
-  exactly** on sense count, 93 find more, 18 find fewer, 3 find nothing.
+- **Senses are read from the rendered page, not from the REST endpoint.** `_entries_from_html`
+  walks the page the way Wiktionary structures it: a heading names the part of speech, the list
+  under it holds one sense per item, a nested list holds its sub-senses, and an example arrives as
+  `e-example` plus `e-translation` rather than as one string to cut apart. The REST payload is kept
+  only as a fallback, for the handful of pages whose render failed once and was cached as nothing.
 
-  Two of those differences are the extractor being *right*. The "fewer" are largely the usage-notes
-  gap fixing itself: `ellas` gives six senses through the REST payload, two of which are usage
-  notes, and one through the HTML, which is the true count. Two of the three "nothing" cases are
-  pages whose `parse` payload was cached as null after a failed fetch, which is a hole in the cache
-  rather than in the reading.
+- This is what lets a run be pointed at a local mirror, since `/api/rest_v1/page/definition/` is a
+  Wikimedia service that no MediaWiki serves. The request for it is now optional and made quietly:
+  a mirror answers 301 to every one, and that is not a failure worth a line per page.
 
-  An earlier note here claimed 213 senses lost across 84 pages and called it a real regression.
-  That was **the measurement, not the reader**. Two mistakes: comparing truncated keys, when the
-  HTML sense carries a grammatical label the REST text omits (`(with ser) bad (of bad quality)`
-  against `bad (of bad quality)`), which pushes the shared words past the truncation window; and
-  before that, exact string matching against REST text with CSS leaked into it. Comparing whole
-  normalised strings by containment gives **132 across 42 pages**.
+- What the change is worth, beyond the mirror: **usage notes stop arriving as senses**, because they
+  live under their own heading — `la` gave six senses through REST, five of them notes, and gives
+  one through the page. Collocation boxes stop arriving too. Form-of senses keep their lemma
+  structurally rather than by the containment patch that reassembled them, and the sense text is
+  richer, carrying the grammatical labels REST drops.
 
-  Most of what remains is the REST payload's junk, correctly dropped: usage notes as before, and
-  the collocation boxes an entry embeds in its definition list — `Games and sports`,
-  `Domains of study…`, `With infinitives: …` all arrive as senses of `bueno` through REST and are
-  not senses. Of `la`'s six, five are usage notes.
-
-  One genuine loss is confirmed — `la`'s `accusative of ella, ello, and usted` — so the reader is
-  not yet perfect and the residue has not been counted exactly. `fetch` still reads the REST
-  payload; switching over wants that residue quantified first, not the 1,402 alone.
+- Getting there cost four measurements, three of which were wrong, and the record is worth keeping.
+  Truncated comparison keys hid that an HTML sense carries a label REST omits. Exact matching
+  tripped on CSS leaking into REST text. A "confirmed genuine loss" on `la` turned out to be the
+  HTML version being twice as long and strictly better. What finally worked was reading a random
+  sample instead of counting one, which found the real bug in a minute: `_tidy` strips trailing
+  colons, so the test for "this item is a header, not a sense" could never fire, and every
+  `inflection of correr:` was emitted as a sense of its own with its children unattached. One
+  character. Uncovered REST senses fell from 203 to 106, and a fresh sample of those is entirely
+  usage notes and collocation boxes.
 
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
