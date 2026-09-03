@@ -146,6 +146,8 @@ def _main(argv: list[str] | None = None) -> int:
     _add_language_arguments(index)
 
     arguments = parser.parse_args(argv)
+    if getattr(arguments, "wiktionary_host", None):
+        pages.HOST = arguments.wiktionary_host
     if arguments.command == "index":
         return _run_index(arguments)
     if arguments.command == "define":
@@ -224,6 +226,14 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--no-audio", action="store_true", help="do not download pronunciation files"
+    )
+    parser.add_argument(
+        "--wiktionary-host",
+        metavar="ORIGIN",
+        help=(
+            "where to fetch pages from, e.g. http://localhost:8080 for a local "
+            f"mirror (default: ${pages.HOST_VARIABLE}, else the edition's own host)"
+        ),
     )
     parser.add_argument(
         "--refresh-answers",

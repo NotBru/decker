@@ -101,8 +101,13 @@ where its labels would be. Without it, `book` printed a Lua error in place of
 
 ## What is not done
 
-Decker still fetches from the live API and knows nothing about this mirror. Pointing it here needs
-the sense extraction moved off the REST `definition` endpoint and onto the rendered HTML, since
-`/api/rest_v1/page/definition/` is a Wikimedia service and not part of MediaWiki — a local install
-serves `action=parse` and nothing else. That change is worth making on its own merits, and it is
-also the prerequisite for this mirror being usable at all.
+Decker can now be *pointed* here — `--wiktionary-host http://172.17.0.2:8080` — and the mirror
+answers `/w/api.php` and `/wiki/<title>` at the same paths as upstream, so only the origin changes.
+It still cannot be *used*: senses come from `/api/rest_v1/page/definition/`, a Wikimedia service
+that no MediaWiki serves, and a fetch against the mirror returns nothing.
+
+Reading senses from the rendered HTML is the missing piece and is written but not switched on —
+1,402 of 1,516 cached pages agree exactly with the REST payload, and 84 still lose senses for
+reasons not yet understood. `definition-fetching.md` has the measurements. Until that closes, this
+mirror is a browsable dictionary and a proof that local rendering works, not yet a source decker
+can read.

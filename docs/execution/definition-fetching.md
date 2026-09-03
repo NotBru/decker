@@ -177,6 +177,32 @@ design wins and the code is wrong.
   decision and not an artefact of the order `[project.urls]` happens to be written in. Any other
   URL stands in only when there is no homepage at all.
 
+- `--wiktionary-host` (or `$DECKER_WIKTIONARY_HOST`) names the origin pages are fetched from, so a
+  run can be pointed at a local mirror instead of Wikimedia — see `local-wiktionary.md` for why one
+  might want that. The edition still picks the host when no origin is given, since only Wikimedia
+  has one host per edition. The flag alone is **not enough to use a mirror**: senses come from
+  `/api/rest_v1/page/definition/`, which is a Wikimedia service and not part of MediaWiki, so a
+  mirror answers `action=parse` and 301s the other. Pointed at one today, `fetch` returns nothing.
+
+- **Reading senses from the rendered HTML is written but not in use.** `_entries_from_html` walks
+  the page the way Wiktionary structures it — a heading names the part of speech, the list under it
+  holds one sense per item, and an example arrives as `e-example` plus `e-translation` rather than
+  one string to cut apart. Measured against every cached Spanish page: of 1,516, **1,402 agree
+  exactly** on sense count, 93 find more, 18 find fewer, 3 find nothing.
+
+  Two of those differences are the extractor being *right*. The "fewer" are largely the usage-notes
+  gap fixing itself: `ellas` gives six senses through the REST payload, two of which are usage
+  notes, and one through the HTML, which is the true count. Two of the three "nothing" cases are
+  pages whose `parse` payload was cached as null after a failed fetch, which is a hole in the cache
+  rather than in the reading.
+
+  But a normalised comparison — ignoring the CSS that leaks into REST definition text — still shows
+  **213 senses lost across 84 pages**, `malo` and `bueno` worst. That is a real regression and its
+  cause is not yet found: sub-sense lists nested deeper than a list item's direct children, and a
+  walk that assumed the section's top level, were both tried and neither moved the number. Until
+  that is understood, `fetch` still reads senses from the REST payload and the HTML path is unused
+  code. It should not be switched over on the strength of the 1,402.
+
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
   the User-Agent policy or a blocked address, neither of which the next request will escape. So it

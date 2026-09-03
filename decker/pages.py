@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import re
 import sys
 import time
@@ -27,11 +28,23 @@ from pathlib import Path
 
 from decker.wiktionary import USER_AGENT, cache_dir
 
-DEFINITION_URL = "https://{edition}.wiktionary.org/api/rest_v1/page/definition/{title}"
-PARSE_URL = (
-    "https://{edition}.wiktionary.org/w/api.php"
-    "?action=parse&page={title}&prop=text&formatversion=2&format=json"
+#: Where the pages are asked for. A local mirror answers the same paths under
+#: a different origin, so a whole run can be pointed at one by naming it --
+#: see `docs/execution/local-wiktionary.md`. The edition still picks the host
+#: when no origin is given, since only Wikimedia has one host per edition.
+HOST_VARIABLE = "DECKER_WIKTIONARY_HOST"
+DEFAULT_ORIGIN = "https://{edition}.wiktionary.org"
+HOST: str | None = os.environ.get(HOST_VARIABLE)
+
+DEFINITION_PATH = "/api/rest_v1/page/definition/{title}"
+PARSE_PATH = (
+    "/w/api.php?action=parse&page={title}&prop=text&formatversion=2&format=json"
 )
+
+
+def origin(edition: str) -> str:
+    """The origin a page is fetched from."""
+    return (HOST or DEFAULT_ORIGIN.format(edition=edition)).rstrip("/")
 
 #: What joins an example sentence to its rendering when something shows the
 #: two together. It is only ever written, never read back: the halves travel
@@ -229,10 +242,11 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
             return json.load(cached)
 
     quoted = urllib.parse.quote(title, safe="")
-    definition = _get_json(DEFINITION_URL.format(edition=edition, title=quoted))
+    base = origin(edition)
+    definition = _get_json(base + DEFINITION_PATH.format(title=quoted))
     if definition is None:
         return None
-    parse = _get_json(PARSE_URL.format(edition=edition, title=quoted))
+    parse = _get_json(base + PARSE_PATH.format(title=quoted))
     payloads = {"definition": definition, "parse": parse}
 
     if _transient_failure(definition):
@@ -494,6 +508,202 @@ def _audios(section: str) -> tuple[str, ...]:
         if recording not in recordings or extension == "ogg":
             recordings[recording] = url
     return tuple(recordings.values())
+
+
+#: Wiktionary renders its structure and the REST definition endpoint flattens
+#: it, so the senses are read from the page itself. A heading names a part of
+#: speech, the list under it holds one sense per item, and an example arrives
+#: as its own elements -- `e-example` for the sentence, `e-translation` for the
+#: rendering -- rather than as one string to be cut apart. Sub-senses are
+#: nested where the payload made them siblings, which is what once cost the
+#: lemma of an inflected form.
+_VOID = frozenset(
+    ("br", "img", "hr", "meta", "link", "input", "source", "track", "wbr", "col")
+)
+
+#: Headings whose list is not a list of senses.
+_NOT_SENSES = frozenset(
+    (
+        "references", "further reading", "anagrams", "quotations", "descendants",
+        "translations", "derived terms", "related terms", "see also", "usage notes",
+        "alternative forms", "conjugation", "declension", "inflection", "pronunciation",
+        "etymology", "synonyms", "antonyms", "hypernyms", "hyponyms", "holonyms",
+        "meronyms", "coordinate terms", "statistics", "trivia", "gallery", "notes",
+        "external links", "sources", "citations",
+    )
+)
+
+
+class _Tree(HTMLParser):
+    """The smallest tree that lets a sense list be walked rather than matched."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.root: dict = {"tag": None, "attrs": {}, "children": []}
+        self._stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = {"tag": tag, "attrs": dict(attrs), "children": []}
+        self._stack[-1]["children"].append(node)
+        if tag not in _VOID:
+            self._stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self._stack[-1]["children"].append(
+            {"tag": tag, "attrs": dict(attrs), "children": []}
+        )
+
+    def handle_endtag(self, tag):
+        for depth in range(len(self._stack) - 1, 0, -1):
+            if self._stack[depth]["tag"] == tag:
+                del self._stack[depth:]
+                return
+
+    def handle_data(self, data):
+        self._stack[-1]["children"].append(data)
+
+
+def _parse_tree(html: str) -> dict:
+    tree = _Tree()
+    tree.feed(html)
+    return tree.root
+
+
+def _classes(node: dict) -> set[str]:
+    return set((node.get("attrs", {}).get("class") or "").split())
+
+
+def _text(node, *, skip=()) -> str:
+    """The text under a node, leaving out whole subtrees by tag."""
+    if isinstance(node, str):
+        return node
+    if node.get("tag") in skip:
+        return ""
+    return "".join(_text(child, skip=skip) for child in node["children"])
+
+
+def _tidy(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip(" \t\n:;,")
+
+
+def _find(node, predicate, found=None) -> list:
+    """Every node under this one that the predicate likes, in order."""
+    found = [] if found is None else found
+    for child in node["children"] if not isinstance(node, str) else ():
+        if isinstance(child, str):
+            continue
+        if predicate(child):
+            found.append(child)
+        _find(child, predicate, found)
+    return found
+
+
+def _html_examples(item: dict) -> list[Example]:
+    """The usage examples under one sense, each as its own two halves."""
+    examples = []
+    for block in _find(item, lambda n: "h-usage-example" in _classes(n)):
+        sentence = next(
+            (_tidy(_text(n)) for n in _find(block, lambda n: "e-example" in _classes(n))),
+            "",
+        )
+        rendering = next(
+            (_tidy(_text(n)) for n in _find(block, lambda n: "e-translation" in _classes(n))),
+            "",
+        )
+        if sentence:
+            examples.append(Example(sentence, rendering or None))
+    return examples
+
+
+def _senses_of(items: list) -> list[Sense]:
+    """One sense per list item, with a nested list read as what it nests under.
+
+    An item whose own text ends in a colon is a header and not a meaning --
+    `inflection of auswandern:` -- so it is not a sense of its own and its text
+    goes in front of each item nested under it.
+    """
+    senses = []
+    for item in items:
+        own = _tidy(_text(item, skip=("dl", "ol", "ul")))
+        #: A sub-sense list is not always a direct child of the item that
+        #: holds it -- it can sit inside the item's `dd` -- so it is looked
+        #: for anywhere beneath, and its items are read one level flat.
+        nested = [
+            child
+            for sublist in _find(item, lambda n: n.get("tag") == "ol")
+            for child in sublist["children"]
+            if not isinstance(child, str) and child.get("tag") == "li"
+        ]
+        header = own.endswith(":") or (nested and not own)
+        if own and not header:
+            senses.append(Sense(definition=own, examples=tuple(_html_examples(item))))
+        for child in nested:
+            inner = _tidy(_text(child, skip=("dl", "ol", "ul")))
+            if not inner:
+                continue
+            senses.append(
+                Sense(
+                    definition=f"{own} {inner}".strip() if header else inner,
+                    examples=tuple(_html_examples(child)),
+                )
+            )
+    return senses
+
+
+def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
+    """The language's entries, read from the rendered page.
+
+    The walk follows document order rather than looking only at the top of the
+    section: the section is sliced from its `<h2>`, which sits *inside* the
+    heading's wrapper div, so the fragment is unbalanced and nesting depth
+    means nothing. A list is a sense list when the nearest heading before it
+    names a part of speech; a list inside a list item is a sub-sense and is
+    left to the item that holds it.
+    """
+    if not isinstance(parse, dict):
+        return []
+    html = parse.get("parse", {}).get("text")
+    if not isinstance(html, str):
+        return []
+    section = _language_section(html, language)
+    if section is None:
+        return []
+
+    entries: list[Entry] = []
+    state = {"heading": None}
+
+    def walk(node, inside_item: bool) -> None:
+        for child in node["children"]:
+            if isinstance(child, str):
+                continue
+            tag = child.get("tag")
+            if tag in ("h2", "h3", "h4", "h5", "h6"):
+                state["heading"] = _tidy(_text(child, skip=("span",)))
+                continue
+            if tag == "ol" and not inside_item and state["heading"]:
+                if (
+                    state["heading"].casefold() not in _NOT_SENSES
+                    and "references" not in _classes(child)
+                ):
+                    items = [
+                        item
+                        for item in child["children"]
+                        if not isinstance(item, str) and item.get("tag") == "li"
+                    ]
+                    senses = _senses_of(items)
+                    if senses:
+                        entries.append(
+                            Entry(
+                                language=language,
+                                part_of_speech=state["heading"],
+                                senses=tuple(senses),
+                            )
+                        )
+                    continue
+            walk(child, inside_item or tag == "li")
+
+    walk(_parse_tree(section), False)
+    return entries
 
 
 def _language_section(html: str, language: str) -> str | None:
