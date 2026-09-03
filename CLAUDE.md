@@ -17,6 +17,8 @@ the code changes.
   glosses and their dependencies are made, and sense disambiguation.
 - [Deck building](docs/execution/deck-building.md) — cards, translation, shuffling and the Anki
   package.
+- [A local Wiktionary](docs/execution/local-wiktionary.md) — a full offline mirror: why, what it
+  took, and what it still cannot give.
 
 ## Running it
 
