@@ -1,8 +1,8 @@
 # A local Wiktionary
 
 `docs/instructions/` is the source of truth: where this contradicts the design, the design wins and
-this document is what needs correcting. Nothing here is wired into decker yet — it is a working
-mirror and a record of what it took, not a change to the pipeline.
+this document is what needs correcting. Decker now reads from the mirror when it is told to:
+`--wiktionary-host` is the whole of the interface, and the rest of this is what stands behind it.
 
 ## Why a mirror at all
 
@@ -29,6 +29,91 @@ is browsable at `/wiki/<title>`.
 
 It lives entirely outside this repository: `~/mw` (MediaWiki), `~/mwdata`, `~/dumps`, plus
 `~/resume-wiktionary.sh` and `~/wiktionary-status.sh`. Nothing here is part of decker's package.
+
+## How it was built
+
+It runs on the dev container itself: PHP 8.3 with its built-in server, MariaDB 10.11, Lua 5.1.
+Downloading took an hour, importing about six, nearly all of it unattended. In order:
+
+1. **Packages.** `mariadb-server`, `lua5.1`, `diff3`, and PHP with `bz2`, `mbstring`, `xml`,
+   `intl`, `mysqli` and `curl`. `php-bz2` is the one worth checking twice — see the gotchas.
+
+2. **MediaWiki and four extensions**, unpacked into `~/mw` from the tarballs kept in `~/mwsrc`:
+   `mediawiki-1.43.9.tar.gz` for core, then `Scribunto-REL1_43`, `ParserFunctions`,
+   `TemplateStyles` and `Cite` into `~/mw/extensions/`. The extension branch has to match the core
+   release; only Scribunto's tarball says so in its name.
+
+3. **The database, and the installer.** A first install went to SQLite and was abandoned before any
+   import — its settings file is still beside the real one as `LocalSettings.sqlite.bak`. The real
+   one went to MariaDB, through the CLI installer, which generated the first half of
+   `LocalSettings.php` (the flags below are what that file implies; the invocation itself was not
+   kept):
+
+   ```
+   php maintenance/install.php --dbtype=mysql --dbname=wiktionary \
+       --dbuser=wikiuser --dbpass=wikipass \
+       --server=http://localhost --scriptpath="" --pass=<admin password> \
+       "Wiktionary (local)" admin
+   ```
+
+   That sitename was the mistake recorded below; the config block overrides it, which is why
+   `$wgSitename` is assigned twice in the file.
+
+4. **The config block, appended before a single page was imported.** `~/mw-config-block.php` is the
+   part below "End of automatically generated settings", and every setting in it is explained in the
+   next section. Two of them — `$wgCapitalLinks` and `$wgCompressRevisions` — decide what the import
+   writes to disk and are worthless afterwards, so this step cannot be deferred.
+
+5. **The dump.** Nine `pages-articles` chunks of `enwiktionary-20260901`, named in
+   `~/dumps/chunks.txt`, fetched from `dumps.wikimedia.org` with `curl -C -` so a dropped connection
+   resumes rather than restarts, one at a time, under a User-Agent naming this work. About 1.6 GB
+   compressed. Each finished chunk appends a `done <chunk>` line to `~/dumps/download.log`, which is
+   what tells the importer a chunk is safe to read.
+
+6. **The import**, `~/dumps/import-driver.sh`: a loop over the chunk list running
+
+   ```
+   php maintenance/importDump.php --no-updates ~/dumps/<chunk>
+   ```
+
+   one chunk at a time, touching `ok-<chunk>` on success and going round again for any that were
+   still downloading. Sequential is not a simplification — see the gotchas — and it still reaches
+   roughly 1,500 pages/sec, since the database is the limit. `--no-updates` is what makes that speed
+   possible, at the price described under "What the mirror cannot give".
+
+7. **The one chunk that would not import.** `p10500001p12000000` died ~105k pages in on a
+   StructuredDiscussions page, and the driver's retry loop then spent five and a half hours failing
+   at the same place twenty times, re-importing those 105k pages on every pass.
+   `~/dumps/strip-flow.py` decompresses the chunk, drops the 2,133 pages whose content model this
+   wiki has no handler for, and writes `~/dumps/filtered.xml`, which imported clean; its `ok-`
+   marker was then touched by hand, since the driver only knows about the original file. That is
+   why the log ends on a FAILED line for a chunk that is fully imported — and why an unattended
+   retry loop wants a failure ceiling, which this one has not got.
+
+8. **Serving it.** PHP's own server, no Apache, with a router that gives the mirror upstream's URL
+   shape — `/wiki/<title>` for articles, `/w/api.php` and friends for entry points — so that a
+   caller can change the origin and nothing else:
+
+   ```
+   cd ~/mw && PHP_CLI_SERVER_WORKERS=8 php -S 0.0.0.0:8080 -t ~/mw ~/mw/router.php
+   ```
+
+   Workers matter: rendering an entry runs Lua for a second or more, and a single-process server
+   serializes the whole run behind it.
+
+9. **Pointing decker at it.** `--wiktionary-host http://localhost:8080`, or
+   `$DECKER_WIKTIONARY_HOST`. Nothing else changes.
+
+### Running it again
+
+None of the files this section names are in the repository, and a clone will not have them: they
+are one machine's, under `~`, and the repository holds no part of the mirror.
+
+The container stops and takes the database and the web server with it. `~/resume-wiktionary.sh`
+brings back whichever pieces are down and is a no-op for the ones that are not;
+`~/wiktionary-status.sh` prints chunks downloaded, chunks imported, pages, database size and free
+disk. As of 2026-09-03 a resume is all it takes: 10,893,797 pages, 9.44 GB, and a `define` run over
+one sentence answers from `http://localhost:8080` with 11 glosses.
 
 ## Settings that had to be right, and why
 
@@ -89,9 +174,9 @@ where its labels would be. Without it, `book` printed a Lua error in place of
 
 - **Audio URLs.** `File:` description pages are not in `pages-articles`, and the media itself is in
   no dump at all. A local render emits a red link where the API gives an `upload.wikimedia.org`
-  URL. Either construct Commons URLs from the filename or keep fetching audio live — which leaves
-  audio as the one residual privacy leak, far narrower than a full title stream but still
-  vocabulary-shaped.
+  URL. The two ways out — construct Commons URLs from the filename, or keep fetching audio live —
+  both put a vocabulary-shaped stream back on the network, and both were refused: see the decision
+  at the end of this document. A mirror's cards are silent, and a run says so.
 - **`Module:zh-glyph`** fails on `newBatch` for Chinese glyph-origin lines. Unrelated to Wikidata,
   unfixed, cosmetic.
 - **Link tables, search and site statistics** are empty by choice: `--no-updates` skips the
@@ -99,7 +184,7 @@ where its labels would be. Without it, `book` printed a Lua error in place of
   Rendering is unaffected because pages parse on view, and red/blue link colouring is decided at
   parse time rather than from `pagelinks`. `refreshLinks.php` recovers them as its own long job.
 
-## What is not done
+## What decker does with it
 
 Decker reads from the mirror. `--wiktionary-host http://172.17.0.2:8080` is the whole of it: the
 mirror answers `/w/api.php` and `/wiki/<title>` at upstream's paths, and senses now come from the
@@ -113,3 +198,11 @@ Bru's decision, 2026-09-03, is that this stays: **no audio with the mirror.** Co
 constructed from filenames without the page's help, and that is exactly the narrow leak the mirror
 exists to remove, so it is not done. A run against the mirror says once that it found no
 recordings, since silence and absence look the same on a card.
+
+The cache follows from that. A page is cached by title alone, whichever source rendered it, because
+the mirror and Wikimedia render the same entry from the same wikitext; the payload records which
+answered, and that is read only to say what the page's silence about audio means. Keying the cache
+by source instead — which is what this said until 2026-09-03 — meant a text read once against the
+mirror and then extended against Wikimedia handed its whole vocabulary to Wikimedia, one title at a
+time. That is the leak the mirror exists to close, so the cache is shared and the audio is what
+gives way.

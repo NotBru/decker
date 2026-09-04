@@ -93,6 +93,10 @@ class _Builder:
     #: How many recordings the pages offered, so a run that ends with none
     #: can say why instead of looking like every word simply has no audio.
     offered: int = 0
+    #: Pages whose source has no media at all, by title. Their silence is the
+    #: source's, not the word's, and a mixed run cannot tell the two apart
+    #: from the cards.
+    silent: set[str] = field(default_factory=set)
     #: Glosses a previously built deck already teaches, by key.
     known: frozenset[str] = frozenset()
     #: How many were dropped for being in it.
@@ -178,6 +182,9 @@ class _Builder:
         """Every recording of the page, downloaded, minus the ones that failed."""
         if not self.audio:
             return ()
+        if not pages.carries_media(page.source):
+            self.silent.add(page.title)
+            return ()
         self.offered += len(page.audio_urls)
         paths = (pages.audio_path(url) for url in page.audio_urls)
         return tuple(str(path) for path in paths if path)
@@ -221,6 +228,18 @@ def build(
         print(
             "[decker] no recordings offered by this source; cards will have no "
             "audio (a local Wiktionary carries none: media is in no dump)",
+            file=sys.stderr,
+        )
+    elif audio and builder.silent:
+        #: The mixed case, which the cache now makes ordinary: some pages were
+        #: read from a mirror's cache entry and some from Wikimedia's, so the
+        #: deck has audio on most cards and none on these, for a reason that
+        #: has nothing to do with the words.
+        count = len(builder.silent)
+        print(
+            f"[decker] {count} page{'' if count == 1 else 's'} came from a "
+            "source with no media; those cards have no audio (--refresh-pages "
+            "against Wikimedia gets it, at the cost of naming them to it)",
             file=sys.stderr,
         )
     if builder.skipped:

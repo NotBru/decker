@@ -7,27 +7,31 @@ design wins and the code is wrong.
 
 ## Where the data comes from
 
-- Two endpoints are read per title, because neither carries everything.
+- One endpoint is read per title: the rendered page, `action=parse`. Everything a gloss is made of
+  is in that HTML — the senses under each part-of-speech heading, their examples, the first
+  paragraph under an Etymology heading, `<span class="IPA ...">` readings, and
+  `upload.wikimedia.org` audio URLs. The raw wikitext would have been the obvious source and is not
+  usable: Spanish pronunciation sections carry `{{es-pr|...}}`, and the IPA only exists once that
+  template has run.
 
-  The REST definition endpoint (`/api/rest_v1/page/definition/<title>`) keys its entries by language
-  code, which is precisely the cut the pipeline needs — the title dump has no language dimension at
-  all, so this is where a Spanish text stops being offered Chinese surnames. It also renders form-of
-  definitions in full: `corrió` comes back as *third-person singular preterite indicative of
-  correr*, which is the relationship the design asks the inflected gloss to explain, already
-  written.
+  It was two for most of v1. The REST definition endpoint (`/api/rest_v1/page/definition/<title>`)
+  keyed its entries by language code, which is the cut the pipeline needs — the title dump has no
+  language dimension at all — and rendered form-of definitions in full. Reading senses from the
+  HTML instead made it redundant, and it is no longer asked for: "Senses are read from the rendered
+  page" below has what that was worth, and why a mirror cannot serve it.
 
-  Etymology, IPA and audio are not in that payload, so the rendered page (`action=parse`) is fetched
-  too and read with regexes: `<span class="IPA ...">` for readings, the first `upload.wikimedia.org`
-  media URL for audio, the first paragraph under an Etymology heading for etymology. The raw
-  wikitext would have been the obvious source and is not usable: Spanish pronunciation sections
-  carry `{{es-pr|...}}`, and the IPA only exists once that template has run.
+- The language *name* needed to find the section in the HTML (`Spanish`) comes from a code-to-name
+  table, `languages.name_of`. REST used to name the language in its own payload, which is why no
+  table was kept; the HTML offers no such handle, only the heading. The heading the entries were
+  actually read under then replaces it, so a page that spells the name differently still decides
+  what the gloss says.
 
-- The language *name* needed to find the section in the HTML (`Spanish`) is taken from the REST
-  payload's own `language` field, so no code-to-name table has to be kept anywhere.
-
-- Both payloads are cached verbatim, one gzipped JSON per title under `pages-<edition>/`, so a page
-  is fetched once however many terms land on it. Audio stays out of that file, as the design asks:
-  the page keeps the URL and the sound file is written under `audio/` only when it is wanted.
+- The payload is cached verbatim, one gzipped JSON per title under `pages-<edition>/`, so a page is
+  fetched once however many terms land on it. The origin that rendered it is written into the same
+  file — see "The page cache is keyed by title and edition" below — because a page from a mirror
+  and a page from Wikimedia differ in exactly one way, and it is not the definitions. Audio stays
+  out of that file, as the design asks: the page keeps the URL and the sound file is written under
+  `audio/` only when it is wanted.
 
 - Wikimedia answered a burst of back-to-back requests with HTTP 429. Requests are now spaced half a
   second apart and a 429 or 503 is waited out, honouring `Retry-After` when the server sends one.
@@ -40,7 +44,7 @@ design wins and the code is wrong.
 
 - A title too large for one page keeps its language sections on `<title>/languages A to L` and
   `<title>/languages M to Z`, and shows a footer of links in their place. `a` is the one such title
-  the Barbapedro text reaches: the definition API returns English alone, and so does the raw
+  the Barbapedro text reaches: the definition API returned English alone, and so does the raw
   wikitext, so this is a split to follow rather than truncation to work around — parsing the HTML
   instead would have missed it just the same. When a page has that footer and no section for the
   language, both subpages are tried and the payloads of whichever answers are used whole, so the
@@ -116,15 +120,17 @@ design wins and the code is wrong.
 
 - One ollama call per glossed occurrence, carrying the sentence with the occurrence bracketed, the
   form as it appears, and every sense of the page numbered and labelled with its part of speech; the
-  model answers with the numbers it keeps, under a JSON schema. On `El perro corrió hacia la puerta` this cut `la` from
-  eleven senses to the article alone and `correr` from thirteen to three.
+  model answers with the numbers it keeps, under a JSON schema. On `El perro corrió hacia la
+  puerta` this cut `la` from eleven senses to the article alone and `correr` from thirteen to
+  three.
 
 - The default model is `gemma4:latest`, chosen by measurement rather than by what pulls cleanly:
   on the eight etymologies a German run left in English it answers all eight, where `gemma3:4b`
   echoes its English input back on three of them — an answer no schema and no fallback can tell
   from a good one. It pulls from the registry like any other tag; the cost is size — 9.6 GB against
-  `gemma3:4b`'s 3.3 — so a host without the room degrades and says so, naming what it does hold. A model can also be
-  named for a whole shell as `$DECKER_MODEL`, the way the host is named by `$OLLAMA_HOST`, because
+  `gemma3:4b`'s 3.3 — so a host without the room degrades and says so, naming what it does hold. A
+  model can also be named for a whole shell as `$DECKER_MODEL`, the way the host is named by
+  `$OLLAMA_HOST`, because
   those two are exactly the pair that has to agree: a tunnelled GPU box and a laptop's own ollama
   hold different tags, so a host set in the environment and a model left to its default is the
   ordinary way a run asks for something that is not there. When it does, the warning names the tags
@@ -136,6 +142,8 @@ design wins and the code is wrong.
   machine's network is written into the code. Ollama has no authentication, so it is never bound
   anywhere but a loopback or a tunnel.
 
+## Fetching, and the page it reads
+
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
   the design says to fetch all that is available, and taking the first drops the rest silently.
@@ -144,24 +152,26 @@ design wins and the code is wrong.
   They are grouped on everything but the last extension and the `.ogg` kept, being what the source
   is served as. `el` goes from one file to two recordings; `casi`, which has one, stays at one.
 
-- A form-of header is put back onto the readings under it. Wiktionary writes a form with one
-  reading inline — `third-person singular preterite indicative of correr` — and a form with several
-  as a header naming the lemma with a nested list beneath it. The REST payload flattens the second
-  shape into siblings: first a header sense holding every reading glued together, then each reading
-  alone, without the lemma. Disambiguation then keeps one of the readings, correctly, and the card
-  loses the only thing an inflected form has to say — what it is an inflection *of*. `auswanderte`
-  reached a deck meaning no more than "first/third-person singular preterite".
+- A form-of header stays on the readings under it. Wiktionary writes a form with one reading inline
+  — `third-person singular preterite indicative of correr` — and a form with several as a header
+  naming the lemma, `inflection of auswandern:`, with the readings listed beneath. Either way the
+  card has to say what the word is an inflection *of*, which is the only thing an inflected form
+  has to say: `auswanderte` once reached a deck meaning no more than "first/third-person singular
+  preterite".
 
-  `_unflattened` prefixes each reading with the header and drops the header as a sense of its own,
-  it being a container rather than a meaning: as a card it would claim the word is all of its
-  readings at once. The test is containment, not wording — the header sense is literally its first
-  clause followed by every child concatenated, so each child appears in it verbatim, and *every*
-  later sense must be one, which keeps this off an entry that merely has a colon in its first
-  definition. Across the cached pages it fired on 162 entries of 9,572 and left none of the shape
-  behind. It is not a German problem: Spanish `cuenta`, Portuguese `tormenta`, Catalan `para` and
-  Italian `tormenta` all have it, since what decides is how many readings a form has, not which
-  language it is in. This is the same class as the usage-notes gap below — structure the REST
-  flattening loses — but unlike that one it is detectable without guessing.
+  The rendered page keeps that nesting, so `_senses_of` reads it off the structure. An item whose
+  own text ends in a colon is a header rather than a meaning — it is no sense of its own, since as
+  a card it would claim the word is all of its readings at once — and its text is prefixed to each
+  reading nested under it. The nested list is looked for anywhere beneath the item rather than as a
+  direct child, because Wiktionary sometimes puts it inside the item's `dd`.
+
+  It was harder to recover from REST, which flattened the shape into siblings: a header sense
+  holding every reading glued together, then each reading alone, without the lemma. `_unflattened`
+  put them back by containment — the header sense is literally its first clause followed by every
+  child concatenated — and fired on 162 entries of 9,572 before going out with the endpoint. Not a
+  German problem either way: Spanish `cuenta`, Portuguese `tormenta`, Catalan `para` and Italian
+  `tormenta` all have the shape, since what decides is how many readings a form has, not which
+  language it is in.
 
 - Every request to Wikimedia goes through one paced, retrying fetch — API payloads and sound files
   alike — because the rate limit counts them together. Audio used to have a download of its own with
@@ -180,9 +190,10 @@ design wins and the code is wrong.
 - `--wiktionary-host` (or `$DECKER_WIKTIONARY_HOST`) names the origin pages are fetched from, so a
   run can be pointed at a local mirror instead of Wikimedia — see `local-wiktionary.md` for why one
   might want that. The edition still picks the host when no origin is given, since only Wikimedia
-  has one host per edition. The flag alone is **not enough to use a mirror**: senses come from
-  `/api/rest_v1/page/definition/`, which is a Wikimedia service and not part of MediaWiki, so a
-  mirror answers `action=parse` and 301s the other. Pointed at one today, `fetch` returns nothing.
+  has one host per edition. The flag was **not enough to use a mirror** while senses came from
+  `/api/rest_v1/page/definition/`, a Wikimedia service that no MediaWiki serves: pointed at one, a
+  mirror answered `action=parse` and 301'd the other, and `fetch` returned nothing. Reading senses
+  from the rendered page is what closed that, and the flag is now the whole of the interface.
 
 - **Senses are read from the rendered page, not from the REST endpoint.** `_entries_from_html`
   walks the page the way Wiktionary structures it: a heading names the part of speech, the list
@@ -215,17 +226,25 @@ design wins and the code is wrong.
   character. Uncovered REST senses fell from 203 to 106, and a fresh sample of those is entirely
   usage notes and collocation boxes.
 
-- **The page cache is keyed by source, not just by title.** A page from a mirror and a page from
-  Wikimedia are not interchangeable — the mirror's carries no media, since no dump does — so they
-  cannot share a file. They did, and a single `--refresh-pages` against the mirror silently replaced
-  upstream pages with mirror ones; a deck built afterwards would have lost its audio with nothing
-  saying so. A named host now gets its own directory, `pages-<edition>@<host>`, and the default
-  source keeps the plain name so nothing already cached moves.
+- **The page cache is keyed by title and edition, and the payload records its source.** A mirror
+  and Wikimedia render the same entry from the same wikitext, so a cached page is a cached page
+  whichever answered; the one thing that differs is audio, which a mirror never has. That was
+  briefly a second cache directory per host, and the cost of it was the thing the mirror is for: a
+  run pointed at a different source fetched every title again, so a text read once offline and then
+  extended online named its whole vocabulary to Wikimedia. Keyed by title, that fetch never
+  happens. What the source decides now is only what the page's silence about audio *means*:
+  `carries_media` reads it off the payload, and an entry written before the field existed can only
+  have come from upstream.
 
-- **A source that offers no recordings at all says so once.** Losing every recording and every word
-  happening to have none look identical on a card. `[decker] no recordings offered by this source`
-  is printed when audio is on, glosses were made, and not one page offered a file — which is what a
-  local mirror always looks like.
+  Bru's call, 2026-09-03, over the earlier keying, which was mine.
+
+- **Silence about audio is reported, both kinds.** Losing every recording and every word happening
+  to have none look identical on a card. `[decker] no recordings offered by this source` is printed
+  when audio is on, glosses were made, and not one page offered a file — a run wholly against a
+  mirror. The mixed run is the one the shared cache makes ordinary, and it gets its own line:
+  `[decker] N pages came from a source with no media`, naming how many cards are silent for a
+  reason that has nothing to do with their words. `--refresh-pages` recovers the audio, and the doc
+  says what it costs — those titles go to Wikimedia.
 
 - A 403 stops the run, and nothing else does. It is the one status that says the *client* was
   refused rather than the resource — a missing page is 404, a rate limit is 429 — and it comes from
@@ -305,7 +324,15 @@ design wins and the code is wrong.
 - Wiktionary's text is CC BY-SA 4.0, and a gloss quotes it whole — definitions, examples,
   etymologies. The Markdown document therefore ends with a line naming Wiktionary and the licence,
   which together with the per-gloss entry links is the attribution the licence asks for. Deck
-  construction will need the same line somewhere a card carries it.
+  construction carries the same line in the deck's description and on the back of every card — see
+  [deck building](deck-building.md#anki-output), since a document is read whole and a deck one card
+  at a time.
+
+- Attribution names Wikimedia whichever origin answered. `WIKTIONARY_HOME` and the per-entry links
+  are built from the edition, never from `--wiktionary-host`, so a deck built entirely against a
+  local mirror still credits `en.wiktionary.org` and links a reader there. That is the right
+  target: the text is Wikimedia's wherever it was served from, and a link to `localhost:8080` would
+  credit nobody and resolve for no one.
 
 - Pronunciation files are licensed one by one on Commons, and decker keeps only the URL and the
   cached path — not the recording's author or licence. Nothing is redistributed while the file sits
@@ -330,9 +357,8 @@ design wins and the code is wrong.
   came from reading the code and the filename rather than the page, which is the mistake worth
   remembering here.
 
-- The REST payload lists usage notes among the definitions, so `la` arrives with sentences like
-  *Used primarily in Spain* as if they were senses. **Accepted for v1.** The payload gives them no
-  marker of any kind — they are plain `definition` strings with no examples, and so are plenty of
-  real senses — so telling them apart means matching the HTML's *Usage notes* headings back against
-  the REST text, which is fragile coupling for a case disambiguation already drops. It shows only
-  under `--no-disambiguate`.
+- Usage notes arrived among the definitions while senses came from the REST payload, so `la` came
+  back with sentences like *Used primarily in Spain* as if they were senses — six senses, five of
+  them notes. Accepted for v1 at the time, since that payload marked them in no way at all, and
+  **closed** by reading senses from the rendered page instead: a usage note lives under its own
+  heading there, and a heading that does not name a part of speech opens no sense list.

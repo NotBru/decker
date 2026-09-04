@@ -70,6 +70,44 @@ reached a card untranslated, and silence there means everything did:
 `--no-disambiguate`, `--no-translate` and `--no-audio` skip those stages outright: much
 faster, much worse.
 
+### An offline Wiktionary
+
+`--wiktionary-host`, or `$DECKER_WIKTIONARY_HOST`, points every page fetch at a mirror instead of
+`<lang>.wiktionary.org`. Anything serving upstream's paths will do; a MediaWiki holding the
+`pages-articles` dump answers `/w/api.php` and `/wiki/<title>` exactly as Wikimedia does.
+
+```
+uv run decker define --target-lang es --wiktionary-host http://localhost:8080 source.txt
+```
+
+For:
+
+- **The fetched titles never leave the machine.** Every new word implies a Wiktionary query, in
+  reading order, thus leaking information about the source text.
+- **No rate limits, no 403.** Wikimedia's pacing and its backoff stop applying.
+- **Nothing but the model's host is reached at run time**, once the title list is cached.
+
+Against:
+
+- **No audio.** Recordings live on Commons, `File:` pages are not in `pages-articles`, and the
+  media is in no dump; a mirror offers no sound file and cards built against one are silent. A run
+  says so once, since that is indistinguishable on a card from words that have no recording:
+
+  ```
+  [decker] no recordings offered by this source; cards will have no audio (a local Wiktionary carries none: media is in no dump)
+  ```
+
+- **The title list still comes from `dumps.wikimedia.org`.** One download per edition
+  (`--edition`, `en` by default), reused by every run and every target language after it, so only
+  the first run of all wants the network. It says nothing about what is being read.
+- **A page fetched from the mirror stays silent.** Pages are cached by title alone, so a title read
+  from the mirror is never fetched again — not by a later run against Wikimedia either, which is
+  the point: extending a deck must not name the words already read to a source that has not seen
+  them. The cost is that those cards keep no audio until `--refresh-pages` fetches them upstream,
+  which does name them. A run says how many are in that state.
+- **Roughly a day to stand up**, a few hours of it importing, and about 10 GB of database. What it
+  took is in [docs/execution/local-wiktionary.md](docs/execution/local-wiktionary.md).
+
 ### Caching
 
 Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio all cache under

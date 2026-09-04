@@ -283,7 +283,7 @@ def _taught(previous: str | None) -> frozenset[str]:
     if not keys:
         print(
             "[decker] that deck records no gloss keys -- decks built before "
-            "decker 1.1 carry none, and every gloss will be made again",
+            "decker recorded them carry none, and every gloss will be made again",
             file=sys.stderr,
         )
     return keys

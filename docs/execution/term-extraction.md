@@ -9,7 +9,7 @@ wins and the code is wrong.
 
 - Titles come from the English Wiktionary (`--edition` overrides). It carries entries for every
   language, including the ones the target's own edition lacks — `de color`, `en silencio`,
-  `dar gusto` — and it is where the glosses v1 will fetch come from anyway.
+  `dar gusto` — and it is where the glosses come from anyway.
 - The dump those titles come from is a flat list of page names, 9.0M of them for English, with no
   language attached to any of them, so a token is matched against every language at once:
   `Lo lamentó` matches `Lo`, a Chinese surname, and Stanza's mislemmatisation of `animé` to

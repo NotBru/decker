@@ -17,8 +17,9 @@ the code changes.
   glosses and their dependencies are made, and sense disambiguation.
 - [Deck building](docs/execution/deck-building.md) — cards, translation, shuffling and the Anki
   package.
-- [A local Wiktionary](docs/execution/local-wiktionary.md) — a full offline mirror: why, what it
-  took, and what it still cannot give.
+- [A local Wiktionary](docs/execution/local-wiktionary.md) — a full offline mirror: why, how it was
+  built and how to bring it back up, the settings that had to be right, and what it still cannot
+  give.
 
 ## Running it
 
@@ -33,8 +34,16 @@ uv run decker index --target-lang es                   # build the whole title i
 With no subcommand the whole pipeline runs, which is what `deck` does; `define`, `extract` and
 `index` stop it earlier. Sense disambiguation, and translation when `--mother-lang` is not `en`, need
 an ollama host (`--ollama-host`, or `OLLAMA_HOST`); without one the run degrades and says so.
-Stanza models, Wiktionary title dumps, parsed titles and fetched pages are cached under
+Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio are cached under
 `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
+
+`--wiktionary-host` (or `DECKER_WIKTIONARY_HOST`) fetches pages from a Wiktionary mirror instead of
+Wikimedia, if there is one to point at — building one is a day's work, written up in
+[A local Wiktionary](docs/execution/local-wiktionary.md), and nothing of it lives in this
+repository. Pages cache by title whichever source answered, so a title read from a mirror is never
+fetched from Wikimedia afterwards; the payload records which source it was, since a mirror carries
+no audio and a run has to be able to say that. Cards built against one are silent. The title dump
+still comes from `dumps.wikimedia.org`, once per edition.
 
 ## Tests
 

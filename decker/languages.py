@@ -2,16 +2,17 @@
 
 Every language decker is told about arrives as a code -- ``es``, ``pt``, ``en``
 -- because that is the shape its consumers already share: Stanza keys its
-models by code, and Wiktionary keys its editions and its REST entries by one
-too. A flag that took a word instead would make the caller remember which of
-them wants which, so the codes stop at the edge and everything below deals with
-them.
+models by code, and Wiktionary keys its editions by one too. A flag that took a
+word instead would make the caller remember which of them wants which, so the
+codes stop at the edge and everything below deals with them.
 
-The one consumer that wants a word is the translation prompt, which is written
-for a model and has to read ``a speaker of Portuguese``. Turning the code into
-that word is this module's whole job. The table is Stanza's own -- four hundred
-codes it already ships, and decker already depends on it -- so there is no map
-here to fall out of date and nothing to fetch.
+Two consumers want a word. The translation prompt is written for a model and
+has to read ``a speaker of Portuguese``; and a Wiktionary page names its
+language sections in English, so ``Spanish`` is what finds the section a gloss
+is read from. Turning the code into that word is this module's whole job. The
+table is Stanza's own -- four hundred codes it already ships, and decker
+already depends on it -- so there is no map here to fall out of date and
+nothing to fetch.
 """
 
 from __future__ import annotations

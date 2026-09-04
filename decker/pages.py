@@ -1,12 +1,13 @@
 """Wiktionary pages: fetching, caching, and the pieces a gloss is made of.
 
-Two endpoints are read per title. The REST definition endpoint keys its
-entries by language code and renders form-of definitions in full, which is
-what an inflected term needs; the parse endpoint's HTML is where etymology,
-IPA and audio live. Both payloads are cached verbatim, one gzipped file per
-title, so a page is fetched once however many terms land on it. Audio is not
-part of that cache: the page keeps the URL, and the sound file is downloaded
-next to it only when asked for.
+One endpoint is read per title, the parse endpoint, and everything a gloss is
+made of is read out of the HTML it returns: the senses under each part of
+speech, their examples, the etymology, the readings and the audio URLs. The
+payload is cached verbatim, one gzipped file per title, so a page is fetched
+once however many terms land on it, and which origin rendered it is cached
+alongside -- a mirror serves the same paths and the same entries, but no
+media. Audio is not part of that cache: the page keeps the URL, and the sound
+file is downloaded next to it only when asked for.
 """
 
 from __future__ import annotations
@@ -123,6 +124,9 @@ class Page:
     #: them. A page can carry several -- `el` has one for Spain and one for
     #: Colombia -- and which of them a learner wants is not decker's to guess.
     audio_urls: tuple[str, ...] = ()
+    #: The origin this page was rendered by, kept because a cached page
+    #: outlives the run that fetched it and only some sources have audio.
+    source: str = ""
 
     @property
     def senses(self) -> list[tuple[str, Sense]]:
@@ -154,29 +158,34 @@ def strip_html(fragment: str) -> str:
     return stripper.text()
 
 
-def pages_dir(edition: str) -> str:
-    """The cache directory for one edition, per source.
+def carries_media(source: str) -> bool:
+    """Whether pages from ``source`` can offer a recording at all.
 
-    A page from a mirror and a page from Wikimedia are not interchangeable --
-    the mirror's carries no media, since no dump does -- so they cannot share
-    a file. Keyed only by title, a refresh against one silently replaced the
-    other, and a deck built afterwards lost its audio without anything saying
-    so. The default source keeps the plain name, so nothing already cached
-    moves.
+    An audio URL is read off a rendered page, and only Wikimedia renders one:
+    `File:` pages are in no dump, so a mirror's page is silent whatever the
+    word. A cache entry written before the source was recorded can only have
+    come from upstream, which is why an empty source counts as one.
     """
-    if not HOST:
-        return f"pages-{edition}"
-    return f"pages-{edition}@{re.sub(r'[^\w.\-]', '_', HOST)}"
+    return not source or source.endswith(".wiktionary.org")
 
 
 def page_cache_path(title: str, edition: str) -> Path:
     """Where a title's raw payloads are kept.
 
+    Keyed by title and edition alone, deliberately. A mirror and Wikimedia
+    render the same entry from the same wikitext, so the definitions do not
+    differ, and the one thing that does -- audio, which the mirror never has
+    -- is a property of the payload rather than a reason to fetch the page
+    twice. Two caches meant that pointing a run at a different source fetched
+    every title again, which is exactly the stream of words a mirror exists to
+    keep off the network. What the source decides is what a cached page can be
+    trusted to say about audio; `carries_media` answers that.
+
     Titles are quoted, so a title carrying a slash or a colon cannot escape
     the directory or collide with another.
     """
     safe = urllib.parse.quote(title, safe="")
-    return cache_dir() / pages_dir(edition) / f"{safe}.json.gz"
+    return cache_dir() / f"pages-{edition}" / f"{safe}.json.gz"
 
 
 def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page | None:
@@ -204,6 +213,7 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         etymology=etymology,
         ipa=ipa,
         audio_urls=audios,
+        source=payloads.get("source", ""),
     )
 
 
@@ -260,14 +270,17 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
 
     quoted = urllib.parse.quote(title, safe="")
     base = origin(edition)
-    #: The rendered page is what the senses are read from, so it decides
-    #: whether the title exists at all. The REST payload is asked for second
-    #: and tolerated missing: a mirror does not serve that endpoint, and
-    #: nothing needs it unless the render failed to arrive.
+    #: The rendered page is the whole of it: senses, examples, etymology,
+    #: readings and audio are all read out of this one payload, so it decides
+    #: whether the title exists at all. A failed render is not written, so the
+    #: next run has a chance at the page rather than a cached nothing.
     parse = _get_json(base + PARSE_PATH.format(title=quoted))
     if parse is None:
         return None
-    payloads = {"parse": parse}
+    #: Kept with the payload: a page is cached by title alone, so this is the
+    #: only thing that later says whether its silence about audio is the word
+    #: having no recording or the source having no media.
+    payloads = {"parse": parse, "source": base}
 
     if _transient_failure(parse):
         #: Wiktionary renders a Lua timeout *into the page*, with a 200 and a
@@ -446,13 +459,13 @@ def _audios(section: str) -> tuple[str, ...]:
     return tuple(recordings.values())
 
 
-#: Wiktionary renders its structure and the REST definition endpoint flattens
-#: it, so the senses are read from the page itself. A heading names a part of
-#: speech, the list under it holds one sense per item, and an example arrives
-#: as its own elements -- `e-example` for the sentence, `e-translation` for the
-#: rendering -- rather than as one string to be cut apart. Sub-senses are
-#: nested where the payload made them siblings, which is what once cost the
-#: lemma of an inflected form.
+#: Wiktionary renders its structure, and the REST definition endpoint decker
+#: used to read flattened it, which is why the senses are read from the page
+#: itself. A heading names a part of speech, the list under it holds one sense
+#: per item, and an example arrives as its own elements -- `e-example` for the
+#: sentence, `e-translation` for the rendering -- rather than as one string to
+#: be cut apart. Sub-senses are nested where that payload made them siblings,
+#: which is what once cost the lemma of an inflected form.
 _VOID = frozenset(
     ("br", "img", "hr", "meta", "link", "input", "source", "track", "wbr", "col")
 )
