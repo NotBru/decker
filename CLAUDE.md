@@ -39,9 +39,12 @@ Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio ar
 
 `--wiktionary-host` (or `DECKER_WIKTIONARY_HOST`) fetches pages from a Wiktionary mirror instead of
 Wikimedia, if there is one to point at — building one is a day's work, written up in
-[A local Wiktionary](docs/execution/local-wiktionary.md), and nothing of it lives in this
-repository. Pages cache by title whichever source answered, so a title read from a mirror is never
-fetched from Wikimedia afterwards; the payload records which source it was, since a mirror carries
+[A local Wiktionary](docs/execution/local-wiktionary.md), with the config, router, drivers and
+filter it needs under `tools/wiktionary/`. The wiki itself, its `LocalSettings.php` and the dumps
+are not in this repository and never should be.
+
+Pages cache by title whichever source answered, so a title read from a mirror is never fetched
+from Wikimedia afterwards; the payload records which source it was, since a mirror carries
 no audio and a run has to be able to say that. Cards built against one are silent. The title dump
 still comes from `dumps.wikimedia.org`, once per edition.
 

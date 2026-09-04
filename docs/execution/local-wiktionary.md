@@ -33,7 +33,15 @@ It lives entirely outside this repository: `~/mw` (MediaWiki), `~/mwdata`, `~/du
 ## How it was built
 
 It runs on the dev container itself: PHP 8.3 with its built-in server, MariaDB 10.11, Lua 5.1.
-Downloading took an hour, importing about six, nearly all of it unattended. In order:
+Downloading took an hour, importing about six, nearly all of it unattended.
+
+The pieces worth keeping are in the repository, under `tools/wiktionary/`: the config block, the
+`WikibaseStub` extension, the router, the dump downloader, the import driver and the Flow filter.
+`LocalSettings.php` is *not* there and should not be — the installer writes a database password, a
+`$wgSecretKey` and a `$wgUpgradeKey` into it — and neither are the dumps, the database or this
+machine's own start-up and status scripts. The wiki here loads the repository's block directly
+(`require_once` at the foot of its `LocalSettings.php`), so what runs and what is documented cannot
+drift apart. In order:
 
 1. **Packages.** `mariadb-server`, `lua5.1`, `diff3`, and PHP with `bz2`, `mbstring`, `xml`,
    `intl`, `mysqli` and `curl`. `php-bz2` is the one worth checking twice — see the gotchas.
@@ -59,21 +67,30 @@ Downloading took an hour, importing about six, nearly all of it unattended. In o
    That sitename was the mistake recorded below; the config block overrides it, which is why
    `$wgSitename` is assigned twice in the file.
 
-4. **The config block, appended before a single page was imported.** `~/mw-config-block.php` is the
-   part below "End of automatically generated settings", and every setting in it is explained in the
-   next section. Two of them — `$wgCapitalLinks` and `$wgCompressRevisions` — decide what the import
-   writes to disk and are worthless afterwards, so this step cannot be deferred.
+4. **The config block, in place before a single page was imported.**
+   `tools/wiktionary/config-block.php` goes below "End of automatically generated settings", by
+   `require_once` or by pasting, with
+   `tools/wiktionary/extensions/WikibaseStub/` copied into the wiki's own `extensions/`. Every
+   setting in it is explained in the next section. Two of them — `$wgCapitalLinks` and
+   `$wgCompressRevisions` — decide what the import writes to disk and are worthless afterwards, so
+   this step cannot be deferred.
 
-5. **The dump.** Nine `pages-articles` chunks of `enwiktionary-20260901`, named in
-   `~/dumps/chunks.txt`, fetched from `dumps.wikimedia.org` with `curl -C -` so a dropped connection
-   resumes rather than restarts, one at a time, under a User-Agent naming this work. About 1.6 GB
-   compressed. Each finished chunk appends a `done <chunk>` line to `~/dumps/download.log`, which is
-   what tells the importer a chunk is safe to read.
-
-6. **The import**, `~/dumps/import-driver.sh`: a loop over the chunk list running
+5. **The dump**, `tools/wiktionary/download-dump.sh`:
 
    ```
-   php maintenance/importDump.php --no-updates ~/dumps/<chunk>
+   EDITION=en DUMP_DATE=20260901 DUMP_DIR=~/dumps tools/wiktionary/download-dump.sh
+   ```
+
+   Nine `pages-articles` chunks, about 1.6 GB compressed, fetched one at a time with `curl -C -` so
+   a dropped connection resumes rather than restarts, under a User-Agent naming this work. The
+   chunk list is read from the dump's own `dumpstatus.json` rather than copied out of a directory
+   listing by hand — that part was manual here and is not any more. Each finished chunk appends a
+   `done <chunk>` line to `download.log`, which is what tells the importer a chunk is whole.
+
+6. **The import**, `tools/wiktionary/import-driver.sh`: a loop over the chunk list running
+
+   ```
+   php maintenance/importDump.php --no-updates <chunk>
    ```
 
    one chunk at a time, touching `ok-<chunk>` on success and going round again for any that were
@@ -82,17 +99,18 @@ Downloading took an hour, importing about six, nearly all of it unattended. In o
    possible, at the price described under "What the mirror cannot give".
 
 7. **The one chunk that would not import.** `p10500001p12000000` died ~105k pages in on a
-   StructuredDiscussions page, and the driver's retry loop then spent five and a half hours failing
-   at the same place twenty times, re-importing those 105k pages on every pass.
-   `~/dumps/strip-flow.py` decompresses the chunk, drops the 2,133 pages whose content model this
-   wiki has no handler for, and writes `~/dumps/filtered.xml`, which imported clean; its `ok-`
+   StructuredDiscussions page, and the retry loop then spent five and a half hours failing at the
+   same place twenty times, re-importing those 105k pages on every pass.
+   `tools/wiktionary/strip-flow.py` decompresses the chunk, drops the 2,133 pages whose content
+   model this wiki has no handler for, and writes a filtered XML, which imported clean; its `ok-`
    marker was then touched by hand, since the driver only knows about the original file. That is
-   why the log ends on a FAILED line for a chunk that is fully imported — and why an unattended
-   retry loop wants a failure ceiling, which this one has not got.
+   why this machine's log ends on a FAILED line for a chunk that is fully imported. The vendored
+   driver gives up after `MAX_FAILURES` attempts instead, names the chunk, and prints those three
+   commands.
 
-8. **Serving it.** PHP's own server, no Apache, with a router that gives the mirror upstream's URL
-   shape — `/wiki/<title>` for articles, `/w/api.php` and friends for entry points — so that a
-   caller can change the origin and nothing else:
+8. **Serving it.** PHP's own server, no Apache, with `tools/wiktionary/router.php`, which gives the
+   mirror upstream's URL shape — `/wiki/<title>` for articles, `/w/api.php` and friends for entry
+   points — so that a caller can change the origin and nothing else:
 
    ```
    cd ~/mw && PHP_CLI_SERVER_WORKERS=8 php -S 0.0.0.0:8080 -t ~/mw ~/mw/router.php
@@ -106,8 +124,10 @@ Downloading took an hour, importing about six, nearly all of it unattended. In o
 
 ### Running it again
 
-None of the files this section names are in the repository, and a clone will not have them: they
-are one machine's, under `~`, and the repository holds no part of the mirror.
+The two scripts named here are this machine's, not the repository's: they assume a container with
+`sudo`, `service mariadb`, and the wiki at `~/mw`, and none of that is worth carrying to anyone
+else. The parts that are — the config, the router, the drivers, the filter — are under
+`tools/wiktionary/`.
 
 The container stops and takes the database and the web server with it. `~/resume-wiktionary.sh`
 brings back whichever pieces are down and is a no-op for the ones that are not;
