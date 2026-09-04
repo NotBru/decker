@@ -70,7 +70,7 @@ reached a card untranslated, and silence there means everything did:
 `--no-disambiguate`, `--no-translate` and `--no-audio` skip those stages outright: much
 faster, much worse.
 
-### An offline Wiktionary
+### Offline Wiktionary
 
 `--wiktionary-host`, or `$DECKER_WIKTIONARY_HOST`, points every page fetch at a mirror instead of
 `<lang>.wiktionary.org`. Anything serving upstream's paths will do; a MediaWiki holding the
