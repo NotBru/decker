@@ -41,7 +41,10 @@ Wiktionary *first*. Form-of entries are welcome. Fetch all that is available:
 - Examples
 - Actual audio
 
-The whole page should be cached (without audio).
+Optionally, allow the use of Wiktionary mirrors (such as a local one, which may incidentally lack
+audio). This serves a privacy concern.
+
+The whole page should be cached (without audio), keyed independently of the mirror.
 
 Sense disambiguation must be done via ollama to a parametrizable model. Default: "gemma4".
 
