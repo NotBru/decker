@@ -73,7 +73,8 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
     if gloss.lemma != gloss.surface:
         facts.append(f"**lemma** {gloss.lemma}")
     facts.append(
-        f"**entry** [{gloss.entry}]({entry_url(gloss.entry, edition, gloss.language)})"
+        "**entry** "
+        f"[{gloss.entry}]({entry_url(gloss.entry, edition, gloss.anchor or gloss.language)})"
     )
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
@@ -126,10 +127,15 @@ def _file_name(url: str) -> str:
     return urllib.parse.unquote(posixpath.basename(url))
 
 
-def entry_url(title: str, edition: str, language: str) -> str:
-    """The Wiktionary URL of one entry, at its own language's section."""
+def entry_url(title: str, edition: str, section: str) -> str:
+    """The Wiktionary URL of one entry, at the section it was read from.
+
+    For a word that is its language's section; for a concept it is the anchor
+    of its glossary entry, since `Appendix:Glossary` is one page holding six
+    hundred of them and its top is of no use to a reader.
+    """
     return WIKTIONARY.format(
         edition=edition,
-        title=urllib.parse.quote(title.replace(" ", "_"), safe=""),
-        language=language.replace(" ", "_"),
+        title=urllib.parse.quote(title.replace(" ", "_"), safe=":"),
+        language=section.replace(" ", "_"),
     )

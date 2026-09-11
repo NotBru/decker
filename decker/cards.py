@@ -2,7 +2,8 @@
 
 Every gloss becomes the design's pair -- a recognition card, which shows the
 term and asks what it means, and a production card, which shows the meaning
-and asks for the term. The pair is the reason a gloss carries one sense and
+and asks for the term. A concept read from the glossary is the exception and
+gets the recognition card alone. The pair is the reason a gloss carries one sense and
 not a page's worth: two cards per sense is a deck a learner can answer, two
 cards per page is a card with a list on the back.
 
@@ -60,6 +61,10 @@ class Card:
     #: The gloss's :func:`decker.glosses.gloss_key`, written into the deck so
     #: a later run can tell what this deck already teaches.
     key: str = ""
+    #: Where in `Appendix:Glossary` a concept card's entry lives, so its credit
+    #: links to the entry rather than to the top of a very long page. Empty for
+    #: a card teaching a word.
+    anchor: str = ""
 
 
 @dataclass
@@ -121,6 +126,7 @@ def _pair(
         key=gloss.key,
         entry=gloss.entry,
         language=gloss.language,
+        anchor=gloss.anchor,
         challenge=Side(term=gloss.surface, examples=examples),
         #: The sound file rides with the reading: both answer the same
         #: question, and the run has already downloaded it.
@@ -133,12 +139,20 @@ def _pair(
         depends_on=_after(builder, gloss),
     )
     builder.introduced_by[gloss.index] = recognition
+    if gloss.anchor:
+        #: A concept gets the recognition card alone. The production card asks
+        #: for the term given the meaning, and a concept's term is the name of
+        #: the card itself -- "produce `Concept: dative case` from its
+        #: description" is a question about decker's own titling, not about
+        #: the language being learned. Bru's call.
+        return
     builder.add(
         kind=PRODUCTION,
         gloss=gloss.index,
         key=gloss.key,
         entry=gloss.entry,
         language=gloss.language,
+        anchor=gloss.anchor,
         challenge=Side(definition=definition),
         answer=Side(term=gloss.surface, ipa=gloss.ipa, etymology=etymology),
         #: Its own recognition card, and nothing else: whatever the gloss

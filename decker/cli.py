@@ -228,6 +228,14 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         "--no-audio", action="store_true", help="do not download pronunciation files"
     )
     parser.add_argument(
+        "--no-concepts",
+        action="store_true",
+        help=(
+            "do not make cards for the grammatical terminology a definition uses "
+            "(dative, diminutive, first person...)"
+        ),
+    )
+    parser.add_argument(
         "--wiktionary-host",
         metavar="ORIGIN",
         help=(
@@ -265,6 +273,7 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         host=arguments.ollama_host,
         disambiguate=not arguments.no_disambiguate,
         audio=not arguments.no_audio,
+        concepts=not arguments.no_concepts,
         refresh_pages=arguments.refresh_pages,
         refresh_answers=arguments.refresh_answers,
         known=_taught(arguments.previous),

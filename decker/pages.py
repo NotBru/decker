@@ -100,6 +100,27 @@ class Sense:
 
     definition: str
     examples: tuple[Example, ...] = ()
+    #: Glossary anchors this definition links to -- `first_person`,
+    #: `singular_number`. Wiktionary links the linguistic terminology inside a
+    #: definition to `Appendix:Glossary`, which is how the terminology is told
+    #: from the words around it without a lexicon of decker's own.
+    concepts: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Concept:
+    """One entry of `Appendix:Glossary`: a piece of terminology explained.
+
+    Several anchors reach one entry -- `first_person`, `first-person` and
+    `1st_person` are one concept with three spellings -- so the anchor a page
+    happened to link is resolved to the entry, and the entry is what becomes a
+    card. `name` is the entry's own first spelling, which is what the card is
+    titled with, and `anchor` is where in the glossary it lives.
+    """
+
+    name: str
+    description: str
+    anchor: str
 
 
 @dataclass(frozen=True)
@@ -564,6 +585,39 @@ def _html_examples(item: dict) -> list[Example]:
     return examples
 
 
+#: How Wiktionary links a piece of terminology to the glossary that explains
+#: it. The fragment is the concept; the link text is whichever of the entry's
+#: spellings the definition happens to use.
+GLOSSARY_PAGE = "Appendix:Glossary"
+_GLOSSARY_LINK = f"/wiki/{GLOSSARY_PAGE}#"
+
+
+def _concepts_in(node, *, skip=()) -> tuple[str, ...]:
+    """The glossary anchors linked under a node, in order, without repeats.
+
+    Read over the same subtree the definition's own text is read over, so a
+    sense is only credited with the terminology it actually names: a nested
+    sub-sense has its own, and the example under a sense has none that belong
+    to it.
+    """
+    found: list[str] = []
+
+    def walk(child) -> None:
+        if isinstance(child, str) or child.get("tag") in skip:
+            return
+        href = child["attrs"].get("href") or "" if child.get("tag") == "a" else ""
+        if _GLOSSARY_LINK in href:
+            anchor = urllib.parse.unquote(href.split("#", 1)[1])
+            if anchor not in found:
+                found.append(anchor)
+        for grandchild in child["children"]:
+            walk(grandchild)
+
+    for child in node["children"]:
+        walk(child)
+    return tuple(found)
+
+
 def _senses_of(items: list) -> list[Sense]:
     """One sense per list item, with a nested list read as what it nests under.
 
@@ -588,19 +642,43 @@ def _senses_of(items: list) -> list[Sense]:
             if not isinstance(child, str) and child.get("tag") == "li"
         ]
         header = raw.strip().endswith(":") or (nested and not own)
+        #: Over the same subtree `raw` was read over, so the terminology a
+        #: sense is credited with is the terminology its own definition names.
+        own_concepts = _concepts_in(item, skip=("dl", "ol", "ul"))
         if own and not header:
-            senses.append(Sense(definition=own, examples=tuple(_html_examples(item))))
+            senses.append(
+                Sense(
+                    definition=own,
+                    examples=tuple(_html_examples(item)),
+                    concepts=own_concepts,
+                )
+            )
         for child in nested:
             inner = _tidy(_text(child, skip=("dl", "ol", "ul")))
             if not inner:
                 continue
+            inner_concepts = _concepts_in(child, skip=("dl", "ol", "ul"))
             senses.append(
                 Sense(
                     definition=f"{own}: {inner}".strip() if header and own else inner,
                     examples=tuple(_html_examples(child)),
+                    #: A header's text is prefixed to its children, so its
+                    #: terminology is theirs too -- `inflection of curar:`
+                    #: carries the word, the lines under it carry the tags.
+                    concepts=_merge(own_concepts if header else (), inner_concepts),
                 )
             )
     return senses
+
+
+def _merge(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    """Several anchor lists as one, in order, without repeats."""
+    found: list[str] = []
+    for group in groups:
+        for anchor in group:
+            if anchor not in found:
+                found.append(anchor)
+    return tuple(found)
 
 
 def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
@@ -697,3 +775,160 @@ def audio_path(url: str, *, download: bool = True) -> Path | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def glossary(edition: str, *, refresh: bool = False) -> dict[str, Concept]:
+    """Every concept `Appendix:Glossary` explains, by the anchors that reach it.
+
+    The glossary is one long definition list: a `dt` naming a piece of
+    terminology, carrying an invisible anchor for each spelling it answers to,
+    and a `dd` explaining it. Several anchors therefore land on one entry --
+    1,005 anchors over 622 entries in the English edition -- and returning the
+    same :class:`Concept` for all of them is what keeps `first_person` and
+    `1st_person` one card rather than two.
+
+    One page, and one that is read from Wikimedia whatever `--wiktionary-host`
+    says: see :func:`_glossary_page`.
+    """
+    payloads = _glossary_page(edition, refresh=refresh)
+    if payloads is None:
+        return {}
+    html = (payloads.get("parse") or {}).get("parse", {}).get("text")
+    if not isinstance(html, str):
+        return {}
+
+    concepts: dict[str, Concept] = {}
+    for definition_list in _find(_parse_tree(html), lambda n: n.get("tag") == "dl"):
+        anchors: list[tuple[str, str]] = []
+        for child in definition_list["children"]:
+            if isinstance(child, str):
+                continue
+            if child.get("tag") == "dt":
+                anchors = _anchors_of(child)
+                name = _heading_name(child) or (anchors[0][1] if anchors else "")
+            elif child.get("tag") == "dd" and anchors:
+                description = _tidy(_text(child))
+                if description:
+                    concept = Concept(
+                        name=name, description=description, anchor=anchors[0][0]
+                    )
+                    for anchor, _ in anchors:
+                        concepts.setdefault(anchor, concept)
+                anchors = []
+    return concepts
+
+
+#: What a page's current revision is, asked for on its own because it is a
+#: few hundred bytes where the glossary is half a megabyte.
+REVISION_PATH = (
+    "/w/api.php?action=query&prop=revisions&titles={title}"
+    "&rvprop=ids&formatversion=2&format=json"
+)
+
+
+def _glossary_page(edition: str, *, refresh: bool = False) -> dict | None:
+    """`Appendix:Glossary` from Wikimedia, re-read only when it has changed.
+
+    **From Wikimedia whatever `--wiktionary-host` says.** A mirror built from
+    `pages-articles` has no `Appendix:` namespace, so pointing this at one
+    would turn concept identification off for exactly the runs a mirror is
+    meant to serve. It costs nothing the mirror exists to protect: the title is
+    the same on every run and for every text, so asking for it says only that
+    someone is using decker -- unlike the vocabulary stream, which is what the
+    mirror is for.
+
+    Read once and then only when it changes. The glossary is a live wiki page
+    that gains an entry now and then, and a cache with no way to notice would
+    hold a stale copy for good; re-fetching half a megabyte every run to find
+    out would be worse. So the revision id is asked for -- a few hundred bytes
+    -- and the page itself only when that id has moved.
+
+    A run that cannot reach Wikimedia keeps the copy it has: a glossary one
+    revision old explains `dative case` exactly as well.
+    """
+    upstream = DEFAULT_ORIGIN.format(edition=edition).rstrip("/")
+    path = page_cache_path(GLOSSARY_PAGE, edition)
+    cached = None
+    if path.exists() and not refresh:
+        with gzip.open(path, "rt", encoding="utf-8") as stored:
+            cached = json.load(stored)
+        if cached.get("source") != upstream:
+            #: Written by an older decker, or against a mirror that answered
+            #: with something else. Either way it is not what this reads.
+            cached = None
+
+    revision = _revision(upstream, GLOSSARY_PAGE)
+    if cached is not None and (revision is None or revision == cached.get("revision")):
+        return cached
+
+    quoted = urllib.parse.quote(GLOSSARY_PAGE, safe="")
+    parse = _get_json(upstream + PARSE_PATH.format(title=quoted))
+    if parse is None:
+        #: Offline, or refused. What is already here beats nothing.
+        return cached
+    payloads = {"parse": parse, "source": upstream, "revision": revision}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8") as out:
+        json.dump(payloads, out, ensure_ascii=False)
+    return payloads
+
+
+def _revision(origin: str, title: str) -> int | None:
+    """The page's current revision id, or nothing if it cannot be asked for."""
+    answer = _get_json(
+        origin + REVISION_PATH.format(title=urllib.parse.quote(title, safe="")),
+        quiet=True,
+    )
+    if not isinstance(answer, dict):
+        return None
+    for page in answer.get("query", {}).get("pages", []) or []:
+        for revision in page.get("revisions", []) or []:
+            if isinstance(revision.get("revid"), int):
+                return revision["revid"]
+    return None
+
+
+#: Page furniture inside a glossary heading: the "English Wikipedia has an
+#: article on" box sits inside the `dt` of a handful of entries, so the
+#: heading's text has to be read past it.
+_FURNITURE = "noprint"
+
+
+def _heading_name(heading: dict) -> str:
+    """What a glossary entry is called, out of the spellings it lists.
+
+    A heading names its entry's spellings in one line, fullest first and
+    abbreviations last -- "accusative case, acc.", "singular, singular number,
+    sg., s" -- so the first of them is the one worth putting on a card. The
+    anchors are ordered differently, and taking the first of *those* titled the
+    accusative card `acc.`.
+    """
+    parts: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, str):
+            parts.append(node)
+            return
+        if _FURNITURE in _classes(node):
+            return
+        for child in node["children"]:
+            walk(child)
+
+    walk(heading)
+    return _tidy(re.sub(r"\s+", " ", "".join(parts)).split(",")[0])
+
+
+def _anchors_of(heading: dict) -> list[tuple[str, str]]:
+    """Every anchor a glossary heading answers to, each with its spelling.
+
+    Wiktionary writes them as empty spans carrying the anchor as `id` and the
+    readable form as `data-id` -- `id="first_person"`, `data-id="first person"`
+    -- so an entry with no usable heading text still has a name to fall back
+    on.
+    """
+    found = []
+    for node in _find(heading, lambda n: "template-anchor" in _classes(n)):
+        anchor = node["attrs"].get("id")
+        if anchor:
+            found.append((anchor, node["attrs"].get("data-id") or anchor.replace("_", " ")))
+    return found

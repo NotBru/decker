@@ -1,7 +1,7 @@
 # Term extraction: implementation choices
 
 Written by an AI agent, not by hand. It records the choices taken while implementing v1's term
-extraction, which refine [the v1 design](../instructions/v1-design.md) without changing its shape.
+extraction, which refine [the v1 design](../instructions/v1/design.md) without changing its shape.
 The design documents remain the source of truth: where one of these contradicts them, the design
 wins and the code is wrong.
 

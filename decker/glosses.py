@@ -20,12 +20,19 @@ from typing import TYPE_CHECKING
 
 from decker import pages
 from decker.disambiguation import Disambiguator
+from decker.languages import name_of
 from decker.ollama import default_model
-from decker.pages import Example, Page, Sense
+from decker.pages import Concept, Example, Page, Sense
 from decker.terms import Term
 
 if TYPE_CHECKING:
     from decker.pipeline import SentenceTerms
+
+
+#: What a concept card is called. The design names the form -- the concept is
+#: not a word of the language being learned, and a card titled `dative` among
+#: cards titled with Spanish words would read as one.
+CONCEPT_PREFIX = "Concept: "
 
 
 def gloss_key(surface: str, definition: str) -> str:
@@ -72,6 +79,10 @@ class Gloss:
     depends_on: tuple[int, ...] = ()
     #: :func:`gloss_key` of this gloss, carried so a deck can record it.
     key: str = ""
+    #: For a concept read from `Appendix:Glossary`, where on that page it
+    #: lives. Empty for an ordinary gloss, whose entry is a word and whose
+    #: link goes to its language section instead.
+    anchor: str = ""
 
 
 @dataclass
@@ -101,6 +112,20 @@ class _Builder:
     known: frozenset[str] = frozenset()
     #: How many were dropped for being in it.
     skipped: int = 0
+    #: Whether the terminology inside a definition becomes cards of its own.
+    concepts: bool = True
+    #: `Appendix:Glossary`, by every anchor that reaches an entry of it. One
+    #: page, read on first use, so a run that glosses nothing never asks for it.
+    _glossary: dict[str, Concept] | None = None
+    #: Anchors linked by a definition that the glossary has no entry for.
+    unresolved: Counter[str] = field(default_factory=Counter)
+    #: How many of the glosses below are concepts rather than words.
+    concept_count: int = 0
+
+    def glossary(self) -> dict[str, Concept]:
+        if self._glossary is None:
+            self._glossary = pages.glossary(self.edition, refresh=self.refresh)
+        return self._glossary
 
     def references_of(self, page: Page) -> dict[str, tuple[str, ...]]:
         if page.title not in self.refs:
@@ -157,6 +182,11 @@ class _Builder:
         if gloss_key(surface, sense.definition) in self.known:
             self.skipped += 1
             return None
+        #: Before the gloss itself, so a concept it names is already standing
+        #: and carries the lower index: the terminology inside a definition is
+        #: something to be met before the definition that uses it, which is
+        #: exactly what a dependency says.
+        depends_on = _merge(depends_on, self.concepts_of(sense))
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -178,6 +208,80 @@ class _Builder:
         self.seen[key] = index
         return index
 
+    def concepts_of(self, sense: Sense) -> tuple[int, ...]:
+        """Gloss the terminology ``sense`` explains its word with.
+
+        A form-of definition is written in terms the learner may not have --
+        "first-person singular present indicative of gritar" is four pieces of
+        grammar and one word -- and Wiktionary links each of them to the
+        glossary entry that explains it, which is what tells terminology from
+        the words around it without a vocabulary of decker's own.
+        """
+        if not self.concepts:
+            return ()
+        if not self.glossary():
+            #: The page itself is missing, which is not three hundred broken
+            #: links. It is read from Wikimedia whatever source the pages came
+            #: from, so the reason is that Wikimedia could not be reached and
+            #: nothing was cached from an earlier run. There is nothing to
+            #: resolve against, so the stage stands down rather than counting
+            #: every anchor as an entry that does not exist.
+            print(
+                f"[decker] could not read {pages.GLOSSARY_PAGE} and none is "
+                "cached; no concept cards this run",
+                file=sys.stderr,
+            )
+            self.concepts = False
+            return ()
+        found = []
+        for anchor in sense.concepts:
+            concept = self.glossary().get(anchor)
+            if concept is None:
+                self.unresolved[anchor] += 1
+                continue
+            found.append(self.concept(concept))
+        return tuple(index for index in found if index is not None)
+
+    def concept(self, concept: Concept) -> int | None:
+        """Append a gloss for one glossary entry, or find the one standing.
+
+        Identity is the same pair every other gloss has -- what the card is
+        titled and what it teaches -- so the several anchors that reach one
+        entry collapse into one card, and a previously built deck's copy of it
+        is left out the way any other known gloss is.
+        """
+        surface = f"{CONCEPT_PREFIX}{concept.name}"
+        key = (surface, concept.description)
+        if key in self.seen:
+            return self.seen[key]
+        if gloss_key(*key) in self.known:
+            self.skipped += 1
+            return None
+        index = len(self.glosses)
+        self.glosses.append(
+            Gloss(
+                index=index,
+                surface=surface,
+                #: Its own title: a concept has no inflected and lemmatized
+                #: form to tell apart, and printing one under the other would
+                #: only say the same thing twice.
+                lemma=surface,
+                entry=pages.GLOSSARY_PAGE,
+                definition=concept.description,
+                #: What the text is *about* is grammar, not a language, but
+                #: this field is read by the translator as the language a card
+                #: teaches, and that is the run's target whatever the card
+                #: carries. Where the entry is linked from, the anchor below
+                #: answers instead.
+                language=name_of(self.lang),
+                anchor=concept.anchor,
+                key=gloss_key(*key),
+            )
+        )
+        self.seen[key] = index
+        self.concept_count += 1
+        return index
+
     def _audios(self, page: Page) -> tuple[str, ...]:
         """Every recording of the page, downloaded, minus the ones that failed."""
         if not self.audio:
@@ -190,6 +294,16 @@ class _Builder:
         return tuple(str(path) for path in paths if path)
 
 
+def _merge(*groups: tuple[int, ...]) -> tuple[int, ...]:
+    """Several dependency lists as one, in order, without repeats."""
+    found: list[int] = []
+    for group in groups:
+        for index in group:
+            if index not in found:
+                found.append(index)
+    return tuple(found)
+
+
 def build(
     sentences: list["SentenceTerms"],
     *,
@@ -199,6 +313,7 @@ def build(
     host: str | None = None,
     disambiguate: bool = True,
     audio: bool = True,
+    concepts: bool = True,
     refresh: bool = False,
     refresh_answers: bool = False,
     known: frozenset[str] = frozenset(),
@@ -215,6 +330,7 @@ def build(
         lang=target_lang,
         disambiguator=disambiguator,
         audio=audio,
+        concepts=concepts,
         refresh=refresh,
         known=known,
     )
@@ -245,6 +361,22 @@ def build(
     if builder.skipped:
         print(
             f"[decker] {builder.skipped} glosses already taught, left out",
+            file=sys.stderr,
+        )
+    if builder.unresolved:
+        #: An anchor the glossary has no entry for is terminology decker can
+        #: see and cannot explain, so it is counted rather than guessed at.
+        total = sum(builder.unresolved.values())
+        names = ", ".join(anchor for anchor, _ in builder.unresolved.most_common(5))
+        print(
+            f"[decker] {total} links to glossary entries that do not exist "
+            f"({len(builder.unresolved)} distinct: {names}); no cards for those",
+            file=sys.stderr,
+        )
+    if builder.concept_count:
+        print(
+            f"[decker] {builder.concept_count} of them are concepts "
+            f"({pages.GLOSSARY_PAGE})",
             file=sys.stderr,
         )
     print(f"[decker] {len(builder.glosses)} glosses", file=sys.stderr)

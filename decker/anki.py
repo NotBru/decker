@@ -169,7 +169,7 @@ def taught(path: str | Path) -> frozenset[str]:
 
 def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
     credit = CREDIT.format(
-        entry=entry_url(card.entry, edition, card.language),
+        entry=entry_url(card.entry, edition, card.anchor or card.language),
         title=card.entry,
         license=LICENSE_URL,
     )
