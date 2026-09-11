@@ -48,6 +48,15 @@ The whole page should be cached (without audio), keyed independently of the mirr
 
 Sense disambiguation must be done via ollama to a parametrizable model. Default: "gemma4".
 
+### Concept identification
+
+We identify concepts as any of the entries in Wiktionary's `Appendix:Glossary`. Detection is done
+through any link to them **inside the definition**, and should produce a `Concept: {concept}` card
+*without a production pair*.
+
+This includes many concepts that the reader may already know, such as “colloquial” but saturates
+quickly: there are only a few hundred of these.
+
 ## Deck construction
 
 No further notes on the overall design.

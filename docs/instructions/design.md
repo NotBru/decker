@@ -173,9 +173,9 @@ rather the features of that particular instance. Each of these terms (or them al
 dependency of the original card.
 
 Thus, the terminology should acquire their own cards, and the original card should be made dependent
-on that. However, only when the mother language doesn't feature the same concept already.
+on that.
 
-### Inflection rules
+### Morphological rules
 
 #### Input
 
@@ -185,8 +185,8 @@ Concept identification's output
 
 A less redundant list of cards.
 
-Whenever there's a closed rule for a given inflection, the rule should be explained in a card a few
-cards after the first three examples.
+Whenever there's a closed rule for a given morphological change, the rule should be explained in a
+card a few cards after the first three examples.
 
 ### Etymology resolution
 
@@ -197,7 +197,7 @@ language.
 
 ### V1
 
-See [v1 design doc](./v1-design.md).
+See [v1 design doc](./v1/design.md).
 
 ## Test cases
 
