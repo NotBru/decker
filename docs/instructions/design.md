@@ -198,7 +198,3 @@ language.
 ### V1
 
 See [v1 design doc](./v1/design.md).
-
-## Test cases
-
-See [test cases](./test-cases.md) document.

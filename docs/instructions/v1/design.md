@@ -66,7 +66,3 @@ Translate via ollama as above. Default "gemma4" as well.
 ## Shuffling and Anki output
 
 No further notes on the overall design.
-
-### Test cases
-
-Do not test.
