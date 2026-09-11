@@ -1,27 +1,13 @@
 # Decker
 
-This tool should take source material (text, audio, video, whatever), a target language that the
-user wants to learn, their mother language, and construct an Anki deck that teaches, in the mother
-language, the concepts required for the user to understand the parts of the source material that are
-in the target language.
+Decker is a tool to AItomatically construct Anki decks for language learning. Specifically, it
+constructs a deck with the minimum required words and concepts that you need to understand text,
+audios, or generally media of your choosing.
 
-## Structure
+You give it text in the language you want to learn, tell it your mother language and the target
+language, and decker will construct the deck.
 
-### `docs/instructions/`
-
-Everything inside this directory is intended to be written only by humans, so as to have a clear
-ownership division. It also keeps human reasoning and decisions separate from AI.
-
-### `docs/execution/`
-
-This directory is intended to persist design choices/notes from AI agents. I don't read much of it
-tbh.
-
-### `docs/instructions/design.md`
-
-This document should be the single source of truth for the design. Purposefully terse, so that a
-human reader can get the gist of it quickly. Details may be offloaded to other documents, thus
-making them part of the source of truth, but only as long as it's referenced by this document.
+It uses Wiktionary for both definitions (along with IPA, examples, audio, etc) and concepts.
 
 ## Usage
 
@@ -114,3 +100,21 @@ Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio al
 `~/.cache/decker` (`DECKER_CACHE_DIR` overrides). The first run for a language downloads and
 parses the entire title dump and is slow; the ones after it are not. `--refresh-titles` and
 `--refresh-pages` go around the caches.
+
+## Structure
+
+### `docs/instructions/`
+
+Everything inside this directory is intended to be written only by humans, so as to have a clear
+ownership division. It also keeps human reasoning and decisions separate from AI.
+
+### `docs/execution/`
+
+This directory is intended to persist design choices/notes from AI agents. I don't read much of it
+tbh.
+
+### `docs/instructions/design.md`
+
+This document should be the single source of truth for the design. Purposefully terse, so that a
+human reader can get the gist of it quickly. Details may be offloaded to other documents, thus
+making them part of the source of truth, but only as long as it's referenced by this document.
