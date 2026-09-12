@@ -48,6 +48,9 @@ The whole page should be cached (without audio), keyed independently of the mirr
 
 Sense disambiguation must be done via ollama to a parametrizable model. Default: "gemma4".
 
+Only word definitions create a production pair. Concept and morphological rules cards (explained
+below) don't.
+
 ### Concept identification
 
 We identify concepts as any of the entries in Wiktionary's `Appendix:Glossary`. Detection is done
