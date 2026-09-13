@@ -236,6 +236,14 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--no-rules",
+        action="store_true",
+        help=(
+            "do not work out the morphological rules behind the inflected forms; "
+            "every form keeps a card of its own"
+        ),
+    )
+    parser.add_argument(
         "--wiktionary-host",
         metavar="ORIGIN",
         help=(
@@ -274,6 +282,7 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         disambiguate=not arguments.no_disambiguate,
         audio=not arguments.no_audio,
         concepts=not arguments.no_concepts,
+        rules=not arguments.no_rules,
         refresh_pages=arguments.refresh_pages,
         refresh_answers=arguments.refresh_answers,
         known=_taught(arguments.previous),

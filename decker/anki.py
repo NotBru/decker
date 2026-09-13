@@ -173,6 +173,12 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
         title=card.entry,
         license=LICENSE_URL,
     )
+    if card.attribution:
+        #: A rule's prose is decker's own. The entry it was written from is
+        #: still named and still credited -- the inflection line is where the
+        #: rule came from -- but the sentence in front of it says the rule is
+        #: not something Wiktionary wrote.
+        credit = f"{card.attribution} {credit}"
     if card.kind == RECOGNITION:
         fields = [
             card.challenge.term or "",

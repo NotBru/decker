@@ -100,6 +100,12 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
 
     if gloss.etymology:
         lines += [f"*{gloss.etymology}*", ""]
+
+    if gloss.attribution:
+        #: Said on the gloss rather than only in the document's footer: the
+        #: footer credits Wiktionary for everything above it, and this is the
+        #: one kind of gloss that is not Wiktionary's to credit.
+        lines += [f"*{gloss.attribution}*", ""]
     return lines
 
 

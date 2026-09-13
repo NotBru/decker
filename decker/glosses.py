@@ -7,6 +7,12 @@ already writes -- "third-person singular preterite indicative of correr" --
 which is exactly the relationship the design asks the inflected gloss to
 explain. Glosses appear in the order their terms occur in the source, a
 dependency always before what depends on it.
+
+Two kinds of gloss are not a word of the text: a concept, read from
+`Appendix:Glossary` for the terminology a definition is written in, and a
+morphological rule, worked out in :mod:`decker.morphology` from the form-of
+line itself. Both explain the machinery a definition uses rather than a word
+the reader met, and neither carries a production pair.
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from typing import TYPE_CHECKING
 from decker import pages
 from decker.disambiguation import Disambiguator
 from decker.languages import name_of
+from decker.morphology import Morphology, Outcome, Rule, label_of
 from decker.ollama import default_model
 from decker.pages import Concept, Example, Page, Sense
 from decker.terms import Term
@@ -33,6 +40,15 @@ if TYPE_CHECKING:
 #: not a word of the language being learned, and a card titled `dative` among
 #: cards titled with Spanish words would read as one.
 CONCEPT_PREFIX = "Concept: "
+
+#: What a rule card says about where its text came from. Every other card's
+#: prose is Wiktionary's, quoted under CC BY-SA, and the card credits it; a
+#: rule is written by the model out of Wiktionary's inflection line, which is
+#: a different claim and has to read as one.
+RULE_ATTRIBUTION = (
+    "Rule written by {model} from Wiktionary's inflection line, not quoted "
+    "from it."
+)
 
 
 def gloss_key(surface: str, definition: str) -> str:
@@ -83,6 +99,16 @@ class Gloss:
     #: lives. Empty for an ordinary gloss, whose entry is a word and whose
     #: link goes to its language section instead.
     anchor: str = ""
+    #: Whether deck construction makes the production card as well. The design
+    #: gives the pair to word definitions only: asking for `Concept: dative
+    #: case` or for a rule's title, given its explanation, is a question about
+    #: decker's own titling and not about the language.
+    production: bool = True
+    #: Where this gloss's prose comes from, when it is not Wiktionary's. Only
+    #: a rule has one: its text is the model's, written from an entry rather
+    #: than quoted from it, and a card crediting Wiktionary for it would be
+    #: saying something false about a licence.
+    attribution: str = ""
 
 
 @dataclass
@@ -92,6 +118,7 @@ class _Builder:
     edition: str
     lang: str
     disambiguator: Disambiguator
+    morphology: Morphology
     audio: bool = True
     refresh: bool = False
     glosses: list[Gloss] = field(default_factory=list)
@@ -121,6 +148,8 @@ class _Builder:
     unresolved: Counter[str] = field(default_factory=Counter)
     #: How many of the glosses below are concepts rather than words.
     concept_count: int = 0
+    #: How many are morphological rules.
+    rule_count: int = 0
 
     def glossary(self) -> dict[str, Concept]:
         if self._glossary is None:
@@ -276,10 +305,75 @@ class _Builder:
                 language=name_of(self.lang),
                 anchor=concept.anchor,
                 key=gloss_key(*key),
+                production=False,
             )
         )
         self.seen[key] = index
         self.concept_count += 1
+        return index
+
+    def bundle_of(self, sense: Sense) -> tuple[str, ...]:
+        """The feature bundle a form-of sense expresses.
+
+        The design asks for Wiktionary's form-of prose "normalized to their
+        concept", and the prose already carries the normalization: every piece
+        of terminology in it is linked to the glossary entry that explains it,
+        and several spellings reach one entry. The entry's own name is
+        therefore the canonical form of the feature, `first_person` and
+        `1st_person` alike. Sorted, because the order a definition names its
+        features in is the definition's and not the bundle's.
+
+        Without the glossary -- `--no-concepts`, which also means the page is
+        never fetched -- the anchors are used as they come. They are already
+        Wiktionary's own spelling of the feature, so the bundles are coarser
+        than they could be and never wrong.
+        """
+        if not sense.concepts:
+            return ()
+        glossary = self.glossary() if self.concepts else {}
+        names = []
+        for anchor in sense.concepts:
+            concept = glossary.get(anchor)
+            names.append(concept.name if concept else anchor.replace("_", " "))
+        return tuple(sorted(set(names)))
+
+    def rule(self, rule: Rule, depends_on: tuple[int, ...]) -> int | None:
+        """Append the explanation card of one morphological rule.
+
+        Appended when its second example is already in the list, never before,
+        so the dependency points backwards: deck construction resolves a
+        dependency to the card that introduced it, and a card that does not
+        exist yet cannot be pointed at.
+        """
+        surface = rule.title()
+        key = (surface, rule.description)
+        if key in self.seen:
+            return self.seen[key]
+        if gloss_key(*key) in self.known:
+            self.skipped += 1
+            return None
+        index = len(self.glosses)
+        self.glosses.append(
+            Gloss(
+                index=index,
+                surface=surface,
+                #: Its own title, as a concept's is: a rule has no inflected
+                #: form and no lemma of its own.
+                lemma=surface,
+                #: The page its representative was glossed from, which is what
+                #: a reader following the card would want to see -- the rule
+                #: itself is not on any page.
+                entry=rule.entry,
+                definition=rule.description,
+                language=name_of(self.lang),
+                depends_on=depends_on,
+                key=gloss_key(*key),
+                production=False,
+                attribution=RULE_ATTRIBUTION.format(model=rule.model or "a model"),
+            )
+        )
+        self.seen[key] = index
+        self.rule_count += 1
         return index
 
     def _audios(self, page: Page) -> tuple[str, ...]:
@@ -314,6 +408,7 @@ def build(
     disambiguate: bool = True,
     audio: bool = True,
     concepts: bool = True,
+    rules: bool = True,
     refresh: bool = False,
     refresh_answers: bool = False,
     known: frozenset[str] = frozenset(),
@@ -325,10 +420,18 @@ def build(
         enabled=disambiguate,
         refresh=refresh_answers,
     )
+    morphology = Morphology(
+        lang=target_lang,
+        model=model or default_model(),
+        host=host,
+        enabled=rules,
+        refresh=refresh_answers,
+    )
     builder = _Builder(
         edition=edition,
         lang=target_lang,
         disambiguator=disambiguator,
+        morphology=morphology,
         audio=audio,
         concepts=concepts,
         refresh=refresh,
@@ -379,6 +482,7 @@ def build(
             f"({pages.GLOSSARY_PAGE})",
             file=sys.stderr,
         )
+    morphology.report()
     print(f"[decker] {len(builder.glosses)} glosses", file=sys.stderr)
     return builder.glosses
 
@@ -399,13 +503,60 @@ def _gloss_term(builder: _Builder, term: Term, sentence: str) -> None:
     page, senses = _pooled_senses(builder, candidates, term, marked)
     surface = _spelling(term, page)
     for sense in senses:
-        builder.add(
+        #: Before anything decides whether this occurrence keeps a card of its
+        #: own: what a form-of definition points at is glossed either way. The
+        #: design's culling drops the instance and keeps the base word, which
+        #: is only a sentence away from being the opposite by accident.
+        depends_on = _referenced(
+            builder, page, sense, marked, frozenset({page.title})
+        )
+        if (surface, sense.definition) in builder.seen:
+            #: The same form in the same sense, met again. It is one card
+            #: however many times the text says it, so it is not another
+            #: instance of its rule either.
+            builder.add(
+                page, surface=surface, lemma=term.lemma, sense=sense,
+                depends_on=depends_on,
+            )
+            continue
+        outcome = _morphology(builder, page, surface, sense)
+        if not outcome.keep:
+            continue
+        index = builder.add(
             page,
             surface=surface,
             lemma=term.lemma,
             sense=sense,
-            depends_on=_referenced(builder, page, sense, marked, frozenset({page.title})),
+            depends_on=depends_on,
         )
+        if outcome.rule is None or index is None:
+            continue
+        if (examples := builder.morphology.example(outcome.rule, index)) is not None:
+            builder.rule(outcome.rule, examples)
+
+
+def _morphology(
+    builder: _Builder, page: Page, surface: str, sense: Sense
+) -> Outcome:
+    """What the rules stage makes of one occurrence of an inflected form.
+
+    Only occurrences in the text are put to it. A word reached through a
+    definition -- the `conocer` that `conocí` is explained in terms of -- is a
+    dependency rather than an instance, and culling one would take away the
+    card the instance was told to keep.
+    """
+    targets = builder.references_of(page).get(sense.definition, ())
+    if not targets:
+        return Outcome()
+    base = targets[0]
+    return builder.morphology.consider(
+        surface=surface,
+        base=base,
+        bundle=builder.bundle_of(sense),
+        label=label_of(sense.definition, base),
+        prose=sense.definition,
+        entry=page.title,
+    )
 
 
 def _referenced(
