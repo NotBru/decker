@@ -17,9 +17,18 @@ the code changes.
   glosses and their dependencies are made, and sense disambiguation.
 - [Deck building](docs/execution/deck-building.md) — cards, translation, shuffling and the Anki
   package.
+- [Concept identification](docs/execution/concept-identification.md) — cards for the grammatical
+  terminology a definition uses: what counts as a concept, how the glossary is read, and what it
+  costs.
 - [A local Wiktionary](docs/execution/local-wiktionary.md) — a full offline mirror: why, how it was
   built and how to bring it back up, the settings that had to be right, and what it still cannot
   give.
+- [Model backends](docs/execution/model-backends.md) — ollama, an OpenAI-compatible endpoint and
+  Anthropic behind one interface: why the model is not a vendor commitment, what it costs in
+  privacy, and which models have been measured.
+- [Morphological rules](docs/execution/morphological-rules.md) — the regularity behind an inflected
+  form, learned once: what a feature bundle is, when a rule is written and when its card appears,
+  and what the stage costs.
 
 ## Running it
 
@@ -34,8 +43,20 @@ uv run decker index --target-lang es                   # build the whole title i
 With no subcommand the whole pipeline runs, which is what `deck` does; `define`, `extract` and
 `index` stop it earlier. Sense disambiguation, and translation when `--mother-lang` is not `en`, need
 an ollama host (`--ollama-host`, or `OLLAMA_HOST`); without one the run degrades and says so.
-Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio are cached under
-`~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
+Stanza models, Wiktionary title dumps, parsed titles, fetched pages, model answers and audio are
+cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
+
+The terminology a definition is written in — dative, diminutive, colloquial — becomes cards of its
+own, one per `Appendix:Glossary` entry it links to, titled `Concept:` and carrying no production
+pair. `--no-concepts` turns the stage off.
+
+The regularity behind an inflected form becomes a card too, titled `Rule:` and likewise without a
+production pair: the model is asked whether a form obeys a rule already written for its feature
+bundle and, failing that, whether it is regular at all. Instances are then culled — the first four,
+then half as often every four shown — so a rule met all through a text costs a handful of cards
+rather than one a paragraph, and the base word's card always stays. The rules themselves outlive the
+run in `~/.cache/decker/rules/<lang>.json`, so the next text in that language starts with what the
+last one worked out. `--no-rules` turns the stage off.
 
 `--wiktionary-host` (or `DECKER_WIKTIONARY_HOST`) fetches pages from a Wiktionary mirror instead of
 Wikimedia, if there is one to point at — building one is a day's work, written up in
@@ -48,8 +69,14 @@ from Wikimedia afterwards; the payload records which source it was, since a mirr
 no audio and a run has to be able to say that. Cards built against one are silent. The title dump
 still comes from `dumps.wikimedia.org`, once per edition.
 
+`Appendix:Glossary` is the exception: it is read from Wikimedia whatever `--wiktionary-host` says,
+because a `pages-articles` mirror has no `Appendix:` namespace and pointing this at one would turn
+concept identification off for exactly the runs a mirror serves. It leaks nothing the mirror exists
+to hide — the title is the same on every run and for every text. It is a live page, so its revision
+id is asked for each run and the page itself re-read only when that id has moved.
+
 ## Tests
 
-v1 ships none, by decision recorded in `docs/instructions/v1-design.md`. Check work against
-`docs/instructions/test-cases.md` by running the pipeline ad hoc from a scratchpad, not by adding
-test files.
+v1 ships none, by decision recorded in `docs/instructions/v1/design.md` — "Do not test." Check work
+by running the pipeline ad hoc from a scratchpad, on the smallest input that shows the thing, not by
+adding test files. The `docs/instructions/test-cases.md` this used to point at has been removed.
