@@ -124,11 +124,18 @@ design wins and the code is wrong.
   puerta` this cut `la` from eleven senses to the article alone and `correr` from thirteen to
   three.
 
-- The default model is `gemma4:latest`, chosen by measurement rather than by what pulls cleanly:
-  on the eight etymologies a German run left in English it answers all eight, where `gemma3:4b`
-  echoes its English input back on three of them — an answer no schema and no fallback can tell
-  from a good one. It pulls from the registry like any other tag; the cost is size — 9.6 GB against
-  `gemma3:4b`'s 3.3 — so a host without the room degrades and says so, naming what it does hold. A
+- The default model is `qwen3.5:4b` since 2026-09-13, moved there from `gemma4:latest` on the
+  disambiguation measurement in `model-backends.md`: it keeps one sense per occurrence where
+  `gemma3:4b` keeps two, and it is the first model measured here that reads the same form twice in
+  one sentence two different ways — `Vivía solo` as *alone*, `solo es un decir` as *only*. What the
+  move buys is the laptop: 3.3 GB against 9.6, so it fits on the machine with no GPU and needs
+  neither a tunnel nor room for a 9.6 GB pull. What it gives up is the evidence `gemma4:latest` was
+  chosen on — the eight etymologies a German run left in English, which it answers all eight, where
+  `gemma3:4b` echoes its English input back on three of them, an answer no schema and no fallback
+  can tell from a good one. `qwen3.5:4b` has not been measured on those eight; a one-sentence German
+  run of thirteen glosses kept one field, an *empty* etymology, which is the shape the fallback
+  catches, and echoed none. On a host with the room and the tag, `gemma4:latest` is still the better
+  translator, and `--model` or `$DECKER_MODEL` says so for a run. A
   model can also be named for a whole shell as `$DECKER_MODEL`, the way the host is named by
   `$OLLAMA_HOST`, because
   those two are exactly the pair that has to agree: a tunnelled GPU box and a laptop's own ollama

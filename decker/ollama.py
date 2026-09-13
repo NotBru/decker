@@ -18,14 +18,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 #: The model is parametrizable; this is the design's default, for every stage
-#: that asks a model anything. It is measured rather than guessed: on the
-#: eight etymologies that came back untranslated from a German run, this one
-#: answers all eight once the translation schema requires the field, where
-#: gemma3:4b echoes its English input back on three of them -- a well-formed
-#: answer nothing downstream can catch. It pulls from the registry like any
-#: other tag; what it costs is size -- 9.6 GB against gemma3:4b's 3.3 -- so a
-#: host without the room degrades and says so, naming what it does hold.
-DEFAULT_MODEL = "gemma4:latest"
+#: that asks a model anything. It is measured rather than guessed, and the
+#: measurement that moved it here is sense disambiguation: qwen3.5:4b keeps one
+#: sense per occurrence where gemma3:4b keeps two, and it is the first model
+#: measured here to read the same form twice in one sentence two different ways
+#: -- `Vivia solo` as alone, `solo es un decir` as only. What it buys over
+#: gemma4:latest is the laptop: 3.3 GB against 9.6, so it fits on the machine
+#: that has no GPU, and a run needs neither the tunnel nor the room for a 9.6 GB
+#: pull. What it gives up is the translation evidence gemma4:latest was chosen
+#: on -- eight German etymologies answered where gemma3:4b echoed its English
+#: back on three; qwen3.5:4b is measured on disambiguation, not on that. A host
+#: that holds gemma4:latest and has the room is still the better translator,
+#: and `--model` or $DECKER_MODEL says so for a run.
+DEFAULT_MODEL = "qwen3.5:4b"
 
 #: Ollama has no authentication, so it is never exposed beyond a loopback or a
 #: tunnel. The fallback is ollama's own default; a host reached through a
