@@ -276,8 +276,19 @@ design wins and the code is wrong.
   → Cantonese, `wuu` → Wu), `_lect_block` slices the section from that variety's name to whichever
   is named next, and the readings and recordings are read from the slice. 狗 goes from 63 readings
   to 4, 人類 to one; Spanish, Japanese and Greek entries are untouched, having no lects to slice.
-  A lect name can appear in a definition too — `Wu` is a surname — so a slice holding no reading at
-  all is not one, and the section is used whole, which is what every language without lects does.
+  A lect name can appear in a definition too — `Wu` is a surname — so slices holding neither a
+  reading nor a recording are not the pronunciation, and the section is used whole, which is what
+  every language without lects does.
+
+  **Every slice of a lect, not the first**, and it took the real site to find out why. Wikimedia
+  names each variety *twice* — once in the collapsed block that carries the recording, again in the
+  expanded one that carries the reading — where the mirror names it once. Taking the first match
+  gave 狗 its Mandarin recording and none of its four Mandarin readings, and the mirror could never
+  have shown it, having no recordings at all. Against Wikimedia now: 狗 taught as `zh-hans` gets 4
+  readings and the recording whose filename says `(cmn)`, and taught as `yue` gets 3 readings and
+  the one that says `(yue)`; the section carries three recordings in total, the third being Min Nan.
+  The same slice does both, because a recording and a reading are the same question asked of the
+  same block.
 
   Reconstructions are dropped everywhere, lects or no lects: `/*Cə.kˤroʔ/` is what 狗 is thought to
   have sounded like three thousand years ago, not how the word in front of the learner is said, and

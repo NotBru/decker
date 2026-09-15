@@ -616,25 +616,35 @@ _LECT_NAMES = (
 
 
 def _lect_block(section: str, lect: str) -> str:
-    """The slice of ``section`` holding one variety's pronunciation.
+    """The slices of ``section`` holding one variety's pronunciation.
 
-    From the variety's own name to whichever other variety is named next. A
-    lect name can appear in a definition too -- `Wu` is a surname -- so a slice
-    that turns out to hold no reading at all is not one, and the section is
-    used whole instead, which is what every language without lects does.
+    Every slice, not the first: Wikimedia names each lect *twice* -- once in
+    the collapsed block that carries the recording and again in the expanded
+    one that carries the reading -- so taking the first match gave 狗 its
+    Mandarin recording and none of its four Mandarin readings. The mirror's
+    render names each lect once, which is why that only showed up against the
+    real site. Each slice runs to whichever variety is named next, and they are
+    joined.
+
+    A lect name can also appear in a definition -- `Wu` is a surname -- so
+    slices that turn out to hold neither a reading nor a recording are not the
+    pronunciation, and the section is used whole instead, which is what every
+    language without lects does.
     """
     named = [
         (match.start(), match.group(1))
         for match in re.finditer(r">(" + "|".join(_LECT_NAMES) + r")<", section)
     ]
     starts = [start for start, _ in named]
+    blocks = []
     for position, (start, name) in enumerate(named):
         if name != lect:
             continue
         end = starts[position + 1] if position + 1 < len(starts) else len(section)
-        block = section[start:end]
-        if _IPA.search(block) or _AUDIO.search(block):
-            return block
+        blocks.append(section[start:end])
+    joined = "".join(blocks)
+    if joined and (_IPA.search(joined) or _AUDIO.search(joined)):
+        return joined
     return section
 
 
