@@ -32,10 +32,11 @@ SCHEMA = {
 PROMPT = """\
 You are helping build language-learning cards from a text in {language}.
 
-You will be shown a sentence, one term occurring in it marked ⟨like this⟩, and
-the numbered senses of the Wiktionary page(s) that term belongs to. Judge the
-marked occurrence only: the same word elsewhere in the sentence may well be a
-different one.
+You will be shown a short passage, one term occurring in it marked ⟨like
+this⟩, and the numbered senses of the Wiktionary page(s) that term belongs to.
+Judge the marked occurrence only: the same word elsewhere in the passage may
+well be a different one, and the sentences around the marked one are there for
+context.
 
 Reply with the numbers of the senses this occurrence actually uses. Each sense
 you keep becomes a flashcard of its own, so keep as few as truly apply --
@@ -43,7 +44,7 @@ usually exactly one. Keep more only where the occurrence genuinely carries more
 than one meaning at once, not merely because a sense is nearby or related. If
 none fit, keep the single closest one.
 
-Sentence: {sentence}
+Passage: {sentence}
 Term as it appears: {surface}{reading}
 Numbered senses of the Wiktionary page(s) {title}:
 {senses}
@@ -104,15 +105,15 @@ def reading_of(upos: str) -> str:
 PROMPT_ONE = """\
 You are helping build language-learning cards from a text in {language}.
 
-You will be shown a sentence, a word that some definition in that sentence
-describes another word in terms of, and the numbered senses of that word's
-Wiktionary page(s).
+You will be shown a short passage, a word that some definition in it describes
+another word in terms of, and the numbered senses of that word's Wiktionary
+page(s).
 
 Reply with the number of the ONE sense that the description relies on -- the
 meaning a reader has to know for that description to make sense. Exactly one
 number.
 
-Sentence: {sentence}
+Passage: {sentence}
 The word being described in terms of: "{surface}"
 Numbered senses of the Wiktionary page(s) {title}:
 {senses}

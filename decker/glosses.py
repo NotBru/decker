@@ -447,9 +447,10 @@ def build(
         refresh=refresh,
         known=known,
     )
-    for sentence in sentences:
+    for position, sentence in enumerate(sentences):
+        around = _around(sentences, position)
         for term in sentence.terms:
-            _gloss_term(builder, term, sentence.text)
+            _gloss_term(builder, term, sentence.text, around)
     if audio and builder.glosses and not builder.offered:
         #: A source that carries no media at all is not the same as a word
         #: that happens to have no recording, and the two look identical on
@@ -497,6 +498,57 @@ def build(
     return builder.glosses
 
 
+#: How much text the disambiguation prompt is given around an occurrence, in
+#: words, counting the occurrence's own sentence. A sentence is the design's
+#: unit and it is the right one for prose; dialogue is where it runs out --
+#: Bru's Russian series folds into 6,158 sentences with a *median of six
+#: tokens*, and six tokens is not enough to tell one sense of a word from
+#: another. Below this floor the neighbouring sentences are added, alternately
+#: behind and ahead, until it is reached or the text runs out.
+#:
+#: Measured rather than guessed, and the measurement is in
+#: `definition-fetching.md`: twenty is the least that recovers the benchmark
+#: check a five-word sentence loses, and more than twenty buys nothing.
+CONTEXT_WORDS = 20
+
+#: And only for these. Context is given to a word that *has* a meaning to
+#: choose; a preposition or a determiner has a page of fine distinctions
+#: instead, and on those the extra sentences make a model hedge rather than
+#: choose. Measured on Hebrew, whose clitic prefixes are all closed class and
+#: whose pages carry twenty-three senses apiece: with context they went from 8
+#: cards to 27 for the same seven words, while the Spanish benchmark's gain
+#: came from a verb. UD's open classes, plus the interjection, which is where
+#: `vaya` lives when it is not a verb.
+CONTEXT_FOR = frozenset({"NOUN", "PROPN", "VERB", "ADJ", "ADV", "INTJ"})
+
+
+def _around(sentences: list["SentenceTerms"], position: int) -> tuple[str, str]:
+    """The neighbouring sentences this one needs to reach :data:`CONTEXT_WORDS`.
+
+    Symmetrically, and behind first: in dialogue what was just said is what a
+    line answers. A sentence already at the floor gets nothing, which is every
+    sentence of ordinary prose, so a book's prompts are exactly what they were.
+    Computed once per sentence rather than once per term -- every term of a
+    sentence shares its neighbours.
+    """
+    words = len(sentences[position].text.split())
+    before: list[str] = []
+    after: list[str] = []
+    back, ahead = position - 1, position + 1
+    while words < CONTEXT_WORDS and (back >= 0 or ahead < len(sentences)):
+        take_back = back >= 0 and (len(before) <= len(after) or ahead >= len(sentences))
+        if take_back:
+            text = sentences[back].text
+            before.insert(0, text)
+            back -= 1
+        else:
+            text = sentences[ahead].text
+            after.append(text)
+            ahead += 1
+        words += len(text.split())
+    return " ".join(before), " ".join(after)
+
+
 def _categories(sentences: list["SentenceTerms"]) -> tuple[str, ...]:
     """Every morphological category the parse marks anywhere in the text.
 
@@ -516,7 +568,9 @@ def _categories(sentences: list["SentenceTerms"]) -> tuple[str, ...]:
     )
 
 
-def _gloss_term(builder: _Builder, term: Term, sentence: str) -> None:
+def _gloss_term(
+    builder: _Builder, term: Term, sentence: str, around: tuple[str, str] = ("", "")
+) -> None:
     candidates = builder.own_pages(term) or [
         page for page in (builder.first_page(term.entries),) if page is not None
     ]
@@ -528,7 +582,14 @@ def _gloss_term(builder: _Builder, term: Term, sentence: str) -> None:
         )
         return
 
+    #: The occurrence is bracketed inside its own sentence and the neighbours
+    #: go around the outside, so the model is shown a passage with exactly one
+    #: mark in it however much context the passage carries -- and no neighbours
+    #: at all for a closed-class word, which is the other half of the choice
+    #: recorded at :data:`CONTEXT_FOR`.
     marked = mark_occurrence(sentence, term.spans)
+    if term.upos in CONTEXT_FOR:
+        marked = " ".join(part for part in (around[0], marked, around[1]) if part)
     page, senses = _pooled_senses(builder, candidates, term, marked)
     surface = _spelling(term, page)
     for sense in senses:

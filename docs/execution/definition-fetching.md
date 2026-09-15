@@ -118,6 +118,38 @@ design wins and the code is wrong.
 
 ## Sense disambiguation
 
+- **A prompt gets a passage, not a sentence, when the sentence is too short to say anything.** The
+  design's unit is the sentence and it is the right one for prose. Dialogue is where it runs out:
+  Bru's Russian series folds into 6,158 sentences with a **median of six tokens**, and six tokens do
+  not distinguish one sense of a word from another. So below a floor the neighbouring sentences are
+  added, alternately behind and ahead — behind first, since in dialogue a line answers what was just
+  said — until the floor is reached or the text runs out. The occurrence is still bracketed inside
+  its own sentence, so the passage has exactly one mark in it however long it is.
+
+  Two numbers, both measured on `gemma4:latest`, and the second is the one worth reading:
+
+  | | nine checks | glosses | Hebrew glosses | Hebrew: cards from the prefix entries |
+  |---|---|---|---|---|
+  | sentence only | 7/9 | 38 | 259 | **8** |
+  | 12-word floor | 7/9 | 40 | 259 | **8** |
+  | 20-word floor | **8/9** | 41 | 279 | 27 |
+  | 40-word floor | **8/9** | 41 | 282 | 28 |
+  | 80-word floor | **8/9** | 41 | — | — |
+  | **20 words, open class only** | **8/9** | 41 | **258** | **8** |
+
+  Twenty words is the least that recovers the check a five-word sentence loses — `—Vaya, vaya a
+  dormir.` needs its neighbour to be read as the subjunctive of `ir` — and more than twenty buys
+  nothing. But the same context that saves `vaya` inflates Hebrew: its clitic prefixes carry
+  twenty-three senses apiece, and with neighbours the model stops choosing and starts hedging, 8
+  cards becoming 27 for the same seven words.
+
+  The two cases differ in kind, and `CONTEXT_FOR` is the difference: **context is given to a word
+  that has a meaning to choose, and withheld from one that has a page of fine distinctions instead**
+  — UD's open classes plus `INTJ`, which is where `vaya` lives when it is not a verb. Every Hebrew
+  prefix is `ADP`, `DET`, `CCONJ` or `SCONJ`, so none of them is given any, and the last row is what
+  ships: the benchmark's gain and none of Hebrew's cost. Spanish prose does not notice either way —
+  276 glosses with the window and 276 without — because its sentences are already past the floor.
+
 - **The parse's part of speech is in the prompt, as a hint.** The survey's Hebrew run taught five of
   the commonest words in the language as names of letters: Stanza splits the clitic prefixes off, as
   it should, and a one-letter token's page offers the letter of the alphabet beside everything else,
