@@ -35,7 +35,7 @@ from decker import pages, pipeline
 HERE = Path(__file__).parent
 
 
-def main(model: str, out: str | None) -> int:
+def main(model: str, out: str | None, refresh: bool = False) -> int:
     if "DECKER_WIKTIONARY_HOST" in os.environ:
         pages.HOST = os.environ["DECKER_WIKTIONARY_HOST"]
     bench = json.loads((HERE / "checks.json").read_text(encoding="utf-8"))["languages"]
@@ -50,7 +50,7 @@ def main(model: str, out: str | None) -> int:
             built = G.build(
                 sentences, target_lang=block["lang"], edition="en", model=model,
                 host=os.environ.get("OLLAMA_HOST"), disambiguate=True, audio=False,
-                concepts=False, rules=False,
+                concepts=False, rules=False, refresh_answers=refresh,
             )
         #: Folded, because a card is fronted with Wiktionary's spelling: a
         #: sentence-initial `Хозяин` is glossed `хозяин`, and a check written
@@ -76,6 +76,7 @@ def main(model: str, out: str | None) -> int:
     counted = [state for row in results.values() for state, *_ in row["outcomes"]]
     summary = {
         "model": model,
+        "refreshed": refresh,
         "passed": counted.count("pass"),
         "failed": counted.count("fail"),
         "absent": counted.count("absent"),
@@ -85,7 +86,7 @@ def main(model: str, out: str | None) -> int:
     }
     print(f"{model}: {summary['passed']} passed, {summary['failed']} failed, "
           f"{summary['absent']} absent; {summary['glosses']} glosses, "
-          f"{summary['seconds']:.0f}s")
+          f"{summary['seconds']:.0f}s{' (cold)' if refresh else ''}")
     for key, row in results.items():
         marks = " ".join(f"{state[0].upper()}:{surface}"
                          for state, surface, _, _ in row["outcomes"])
@@ -103,6 +104,12 @@ def main(model: str, out: str | None) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    #: `--refresh` asks the model again for every answer it has on disk. The
+    #: checks do not need it -- an answer is a pure function of the prompt at
+    #: temperature zero -- but a *timing* does: a model that has run this
+    #: before finishes in a tenth of the time and the number means nothing.
+    arguments = [a for a in sys.argv[1:] if a != "--refresh"]
+    if not arguments:
         sys.exit(__doc__)
-    sys.exit(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
+    sys.exit(main(arguments[0], arguments[1] if len(arguments) > 1 else None,
+                  refresh="--refresh" in sys.argv))
