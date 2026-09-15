@@ -1,0 +1,356 @@
+{
+ "what": "Known-answer checks for sense disambiguation: 24 sentences, four languages, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
+ "languages": {
+  "es": {
+   "lang": "es",
+   "source": "es.wikipedia.org, leads of «Cenicienta» and «Perro» (CC BY-SA 4.0)",
+   "sentences": [
+    "La Cenicienta es un cuento de hadas que cuenta con varias versiones, orales y escritas, antiguas y modernas, procedentes de varios lugares del mundo; especialmente del continente eurasiático.",
+    "La primera versión escrita y publicada es la del italiano Giambattista Basile \"La Gatta Cenerentola\" , que bebe de la tradición juliana; en esa zona, se habla el napolitano en el que está escrito el cuento de Basile, el cual forma parte de la obra Pentamerón, que fue publicado póstumamente en 1634.",
+    "El perro , llamado perro doméstico o can, y en algunos lugares coloquialmente llamado chucho, tuso, choco, entre otros; es un mamífero carnívoro de la familia de los cánidos, que constituye una especie del género Canis.",
+    "Junto con el gato, es el animal de compañía más popular del mundo, recibiendo el título de «el mejor amigo del hombre».",
+    "Su tamaño , su forma y su pelaje es muy diverso y varía según la raza.",
+    "Su longevidad media es de diez a trece años, dependiendo de la raza."
+   ],
+   "checks": [
+    {
+     "surface": "cuenta",
+     "must": [
+      "contar"
+     ],
+     "must_not": [
+      "bill",
+      "bead",
+      "tab (",
+      "boxing"
+     ],
+     "why": "cuenta con varias versiones: the verb, not the bill"
+    },
+    {
+     "surface": "italiano",
+     "must": [
+      "an Italian"
+     ],
+     "must_not": [
+      "language",
+      "hot dog",
+      "avocado"
+     ],
+     "why": "del italiano Basile: the man, not the tongue"
+    },
+    {
+     "surface": "gato",
+     "must": [
+      "cat"
+     ],
+     "must_not": [
+      "jack (mechanical",
+      "tic-tac-toe",
+      "Madrilenian",
+      "C-clamp"
+     ],
+     "why": "junto con el gato: the animal"
+    },
+    {
+     "surface": "forma",
+     "must": [
+      "shape",
+      "form"
+     ],
+     "must_not": [
+      "inflection of formar",
+      "sheet to fill out"
+     ],
+     "why": "su forma y su pelaje: the noun"
+    },
+    {
+     "surface": "media",
+     "must": [
+      "mean",
+      "average",
+      "medio"
+     ],
+     "must_not": [
+      "stocking",
+      "sock",
+      "pantyhose",
+      "midline"
+     ],
+     "why": "longevidad media: average, not a stocking"
+    },
+    {
+     "surface": "raza",
+     "must": [
+      "breed"
+     ],
+     "must_not": [
+      "cleft",
+      "beam of light",
+      "group of friends"
+     ],
+     "why": "según la raza: breed"
+    }
+   ]
+  },
+  "de": {
+   "lang": "de",
+   "source": "de.wikipedia.org, leads of „Aschenputtel“, „Haushund“ and „Regen“ (CC BY-SA 4.0)",
+   "sentences": [
+    "Seine wilde Stammform ist der Wolf, dem er als Unterart zugeordnet wird.",
+    "Hund und Wolf sind nicht durch eine Artenschranke getrennt und können daher miteinander fortpflanzungsfähige Nachkommen zeugen.",
+    "Im engeren Sinn bezeichnet man als Haushund die Hunde, die überwiegend im Wohnbereich des Menschen gehalten werden, und kennzeichnet damit also eine Haltungsform.",
+    "Regen bezeichnet ein Wetterereignis und die am häufigsten auftretende Form von Niederschlag.",
+    "Regen besteht aus Wasser, das als Dampf in Wolken gespeichert war und nach dem Kondensieren in Tropfen zur Erdoberfläche herunter fällt.",
+    "Fester Niederschlag, z. B. Hagel, Graupel oder Schnee, besteht aus gefrorenem Wasser und Kondensationskeimen und tritt auch gemischt mit Regen auf."
+   ],
+   "checks": [
+    {
+     "surface": "Wolf",
+     "must": [
+      "wolf"
+     ],
+     "must_not": [
+      "constellation",
+      "shredder",
+      "mincer",
+      "given name",
+      "surname",
+      "abrasion"
+     ],
+     "why": "der Wolf als Stammform: the animal"
+    },
+    {
+     "surface": "bezeichnet",
+     "must": [
+      "third-person singular present"
+     ],
+     "must_not": [
+      "past participle",
+      "plural imperative",
+      "subjunctive"
+     ],
+     "why": "bezeichnet man als: 3sg present"
+    },
+    {
+     "surface": "Regen",
+     "must": [
+      "rain"
+     ],
+     "must_not": [
+      "river",
+      "town",
+      "surname"
+     ],
+     "why": "Regen bezeichnet ein Wetterereignis: the weather"
+    },
+    {
+     "surface": "Form",
+     "must": [],
+     "must_not": [
+      "order of doing things"
+     ],
+     "why": "Form von Niederschlag: not a procedure"
+    },
+    {
+     "surface": "Schnee",
+     "must": [
+      "snow"
+     ],
+     "must_not": [
+      "cocaine",
+      "static on TV"
+     ],
+     "why": "Hagel, Graupel oder Schnee: the weather"
+    }
+   ]
+  },
+  "ru": {
+   "lang": "ru",
+   "source": "ru.wikipedia.org, leads of «Собака», «Дождь», «Хлеб» and «Золушка» (CC BY-SA 4.0)",
+   "sentences": [
+    "С зоологической точки зрения, собака — плацентарное млекопитающее отряда хищных семейства псовых.",
+    "Домашняя собака была описана как самостоятельный биологический вид Canis familiaris Линнеем в 1758 году; в настоящее время данное научное название признаётся организациями, такими как Американское общество маммологов.",
+    "Дождь — атмосферные осадки, выпадающие из облаков в виде капель жидкости со средним диаметром от 0,5 до 6—7 мм.",
+    "Рецептура хлеба часто содержит соль, сахар и жиры.",
+    "Хлеб можно есть отдельно; его также употребляют со сливочным, арахисовым или подсолнечным маслом, вареньем, марга",
+    "Хозяин купил ей изящные кожаные позолоченные сандалии."
+   ],
+   "checks": [
+    {
+     "surface": "собака",
+     "must": [
+      "dog"
+     ],
+     "must_not": [
+      "at sign",
+      "watchdog",
+      "mongrel",
+      "fox"
+     ],
+     "why": "плацентарное млекопитающее: the animal"
+    },
+    {
+     "surface": "вид",
+     "must": [
+      "kind",
+      "sort",
+      "species"
+     ],
+     "must_not": [
+      "grammar) aspect",
+      "look, looks",
+      "sight, view"
+     ],
+     "why": "биологический вид: species"
+    },
+    {
+     "surface": "осадки",
+     "must": [
+      "precipitation"
+     ],
+     "must_not": [
+      "fallout"
+     ],
+     "why": "атмосферные осадки: precipitation"
+    },
+    {
+     "surface": "соль",
+     "must": [
+      "salt"
+     ],
+     "must_not": [
+      "musical note",
+      "punch line",
+      "bath salts",
+      "Peruvian"
+     ],
+     "why": "содержит соль, сахар: the salt"
+    },
+    {
+     "surface": "есть",
+     "must": [
+      "to eat"
+     ],
+     "must_not": [
+      "there is",
+      "yessir",
+      "hooray",
+      "aye-aye"
+     ],
+     "why": "хлеб можно есть: to eat, not the copula"
+    },
+    {
+     "surface": "Хозяин",
+     "must": [
+      "owner",
+      "master",
+      "landlord",
+      "boss"
+     ],
+     "must_not": [
+      "biology) host",
+      "computing) host"
+     ],
+     "why": "Хозяин купил: the master"
+    }
+   ]
+  },
+  "zh": {
+   "lang": "zh-hans",
+   "source": "zh.wikipedia.org, leads of 《灰姑娘》 and 《犬》 (CC BY-SA 4.0)",
+   "sentences": [
+    "《灰姑娘》（義大利語：Cenerentola；法語：Cendrillon）是一則民間故事，描寫一名貧苦的少女突然迎來機運，最後透過聯姻登上王位。",
+    "该故事於全世界各處流傳著上百種版本，其中以1697年《鹅妈妈的故事》和1812年《格林童話》中的版本流傳最廣。",
+    "犬（學名：Canis lupus familiaris），通稱狗，又称家犬，一种常见的犬科哺乳动物，是狼（學名：Canis lupus）的一个亚種。",
+    "狗是人類最早驯化的一个物种。",
+    "狗的壽命最多可超過二十年，平均則為十數年，與貓的平均壽命相近。",
+    "DNA分析显示狗不单单是狼的近亲，更是各地不同狼亚种的混血后代。"
+   ],
+   "checks": [
+    {
+     "surface": "則",
+     "must": [
+      "Classifier"
+     ],
+     "must_not": [
+      "rule; law",
+      "standard; example",
+      "to follow an example"
+     ],
+     "why": "一則民間故事: the classifier"
+    },
+    {
+     "surface": "名",
+     "must": [
+      "Classifier"
+     ],
+     "must_not": [
+      "reputation",
+      "given name",
+      "grammar)"
+     ],
+     "why": "一名貧苦的少女: the classifier"
+    },
+    {
+     "surface": "少女",
+     "must": [
+      "young woman",
+      "girl"
+     ],
+     "must_not": [
+      "youngest daughter"
+     ],
+     "why": "貧苦的少女: a young woman"
+    },
+    {
+     "surface": "姑娘",
+     "must": [
+      "girl",
+      "maiden"
+     ],
+     "must_not": [
+      "concubine",
+      "sister-in-law",
+      "nun",
+      "wife"
+     ],
+     "why": "灰姑娘: the girl"
+    },
+    {
+     "surface": "版本",
+     "must": [
+      "version"
+     ],
+     "must_not": [
+      "computing)",
+      "edition"
+     ],
+     "why": "上百種版本: versions of a story"
+    },
+    {
+     "surface": "故事",
+     "must": [
+      "story"
+     ],
+     "must_not": [
+      "old matter",
+      "old practice",
+      "accident"
+     ],
+     "why": "民間故事: a story"
+    },
+    {
+     "surface": "平均",
+     "must": [
+      "average",
+      "mean"
+     ],
+     "must_not": [
+      "to average"
+     ],
+     "why": "平均則為十數年: the average"
+    }
+   ]
+  }
+ }
+}

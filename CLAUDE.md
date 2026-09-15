@@ -34,6 +34,8 @@ the code changes.
   properly.
 - [Deck growth](docs/execution/deck-growth.md) — what a deck costs as the corpus grows, measured over
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
+- [The benchmark](docs/execution/benchmark.md) — 24 sentences, four languages, known answers: what
+  sense disambiguation is checked against, and why the five-sentence one stopped discriminating.
 - [Subtitles as a source](docs/execution/subtitles.md) — `.srt` and `.vtt` folded back into prose:
   the rolling repeats, the markup, and where sentence boundaries come from when a machine wrote the
   captions and left no punctuation.
@@ -90,8 +92,20 @@ mirror exists to hide, the title being the same on every run and for every text;
 there, so its revision id is asked for each run and the page re-read only when that id has moved.
 A mirror's copy is a dump's copy and is cached without a revision.
 
-## Tests
+## Tests, and the one measurement that is not a test
 
-v1 ships none, by decision recorded in `docs/instructions/v1/design.md` — "Do not test." Check work
-by running the pipeline ad hoc from a scratchpad, on the smallest input that shows the thing, not by
-adding test files. The `docs/instructions/test-cases.md` this used to point at has been removed.
+v1 ships no unit tests, by decision recorded in `docs/instructions/v1/design.md` — "Do not test."
+Nothing asserts on decker's own functions, and checking work still means running the pipeline ad hoc
+from a scratchpad, on the smallest input that shows the thing.
+
+What does live in the repository, at Bru's instruction on 2026-09-15, is
+`tools/benchmark/` — 24 sentences in Spanish, German, Russian and Chinese with known answers for the
+one stage whose output is a judgement rather than a computation:
+
+```
+OLLAMA_HOST=... DECKER_WIKTIONARY_HOST=... uv run python tools/benchmark/run.py gemma4:latest
+```
+
+It scores a *model*, not the code, which is why it is not the thing the design ruled out; see
+[The benchmark](docs/execution/benchmark.md) for what it measures and what it found. If the design's
+line should be rewritten to say so, that is the human's to write.
