@@ -513,12 +513,26 @@ CONTEXT_WORDS = 20
 
 #: And only for these. Context is given to a word that *has* a meaning to
 #: choose; a preposition or a determiner has a page of fine distinctions
-#: instead, and on those the extra sentences make a model hedge rather than
-#: choose. Measured on Hebrew, whose clitic prefixes are all closed class and
-#: whose pages carry twenty-three senses apiece: with context they went from 8
-#: cards to 27 for the same seven words, while the Spanish benchmark's gain
-#: came from a verb. UD's open classes, plus the interjection, which is where
-#: `vaya` lives when it is not a verb.
+#: instead, and on those the extra sentences can make a model hedge rather than
+#: choose. UD's open classes, plus the interjection, which is where `vaya`
+#: lives when it is not a verb.
+#:
+#: **This is one model's guard, and the measurement says so.** It was chosen on
+#: `gemma4:latest`, whose Hebrew clitic cards go from 8 to 27 without it -- the
+#: prefixes carry twenty-three senses apiece and it keeps most of them once it
+#: has a passage to reason over. Asked of every model on the box, Hebrew, cards
+#: from the prefix entries, rule on against rule off:
+#:
+#:     gemma4:latest      8 -> 27      the reason this exists
+#:     qwen3.5:4b        12 -> 15      the default, barely moved
+#:     gemma3:4b         19 -> 19      unmoved; it keeps everything either way
+#:     qwen3:14b          9 ->  8      one card *better* without it
+#:
+#: And on the 24-check benchmark it changes nothing for anyone: 22, 21, 16 and
+#: 23 of 24 with the rule and without it, gloss counts within two. So it is
+#: kept as cheap insurance for a model a `--model` flag away, not because the
+#: default needs it -- and if it is ever in the way, this is the note that says
+#: dropping it costs three cards in Hebrew and nothing anywhere measured.
 CONTEXT_FOR = frozenset({"NOUN", "PROPN", "VERB", "ADJ", "ADV", "INTJ"})
 
 

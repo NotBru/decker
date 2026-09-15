@@ -150,6 +150,22 @@ design wins and the code is wrong.
   ships: the benchmark's gain and none of Hebrew's cost. Spanish prose does not notice either way —
   276 glosses with the window and 276 without — because its sentences are already past the floor.
 
+  **Asked of every model, the rule turns out to be one model's guard.** Hebrew, cards built from the
+  prefix entries, with the rule and without:
+
+  | model | rule on | rule off |
+  |---|---|---|
+  | `gemma4:latest` | **8** | **27** |
+  | `qwen3.5:4b` (the default) | 12 | 15 |
+  | `gemma3:4b` | 19 | 19 |
+  | `qwen3:14b` | 9 | 8 |
+
+  On the 24-check benchmark it changes nothing for any of them — 22, 21, 16 and 23 of 24 either way,
+  gloss counts within two. `gemma3:4b` does not move because it keeps everything regardless, and
+  `qwen3:14b` is one card *better* without it. So the rule is kept as insurance for a model that is
+  one `--model` flag away rather than because the default needs it, and this paragraph is what says
+  what dropping it would cost: three cards in Hebrew, and nothing anywhere else that was measured.
+
 - **The parse's part of speech is in the prompt, as a hint.** The survey's Hebrew run taught five of
   the commonest words in the language as names of letters: Stanza splits the clitic prefixes off, as
   it should, and a one-letter token's page offers the letter of the alphabet beside everything else,
