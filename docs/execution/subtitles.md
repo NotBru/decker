@@ -23,15 +23,38 @@ Three things a cue file has that a book does not.
   the deck teaches every word twice. A line equal to the one kept before it is dropped, which unrolls
   exactly this and nothing else.
 - **Markup that is not words.** Inline karaoke timestamps `<00:00:04.320>` and the `<c>` spans around
-  them, `<i>`/`<b>`, ASS overrides `{\an8}`, the dash in front of a second speaker's line, and the
-  bracketed cues — `[Music]`, `[APPLAUSE]` — that describe the soundtrack rather than say anything in
-  the language being learned.
-- **No sentences at all, when a machine wrote them.** This is the one that needed more than folding.
+  them, `<i>`/`<b>`, ASS overrides `{\an8}`, the bracketed cues — `[Music]`, `[APPLAUSE]` — that
+  describe the soundtrack rather than say anything in the language, and whatever marks a change of
+  speaker: a dash in hand-written subtitles, **`>>` in anything derived from YouTube's captions**.
+  One series' file carried 2,753 of those, and they are not a small thing to leave in: they would be
+  2,753 tokens of prose nobody said, in the sentences that go into the prompts.
+- **Sometimes no sentences at all**, when a machine wrote them and did not punctuate. Less often
+  than this document first claimed — see below.
 
-## Machine captions have no punctuation, and Stanza needs some
+## Some machine captions have no punctuation, and Stanza needs some
 
-Measured on a synthetic but faithful YouTube caption file — three minutes of speech, no punctuation,
-no capitals, rolling repeats:
+**What a real file looks like.** A YouTube-derived `.srt` of a Russian series, 7,229 cues, 183,267
+characters and 30,449 words folded: **55 % of its cues end in terminal punctuation**. YouTube's
+recognizer punctuates, and so does Whisper, so the ordinary case is a file the splitter can work with
+and the fold-whole path is all it needs. Folded whole, Stanza makes **6,158 sentences** of it —
+longest 44 tokens, median 6, mean 6.6 — and parses the lot in about two minutes. That is dialogue:
+short turns, and the median sentence is six tokens, which is the opposite problem from the one
+below. A six-token sentence is thin context for choosing a sense, and it is the context the
+disambiguation prompt gets; nothing can be done about that from here, because it is what was said.
+
+The measurement below is on a *synthetic* file written to model an unpunctuated recognizer — it is
+what the fallback exists for, not a description of what comes off YouTube today.
+
+Two other things that file settled, both of which a synthetic sample had got wrong:
+
+- **Its cues overlap.** 83 % of them start before the previous one ends — the rolling two-line
+  display, converted to SubRip. So the pause rule below can never fire on a file of this shape, and
+  the word cap is what would carry an unpunctuated one.
+- **It needs no unrolling.** The conversion had already dropped the repeated lines and left `>>` in
+  their place, which is the marker above.
+
+Measured on the synthetic file — three minutes of speech, no punctuation, no capitals, rolling
+repeats:
 
 | | characters | sentences | longest | parse |
 |---|---|---|---|---|
@@ -49,11 +72,12 @@ So the file decides:
   every other source. A tenth of the cues ending in something terminal is enough to count as
   punctuated (`PUNCTUATED = 0.1`) — subtitles written by a person are near 1.0 and machine captions
   are 0.0, so the threshold only has to tell those apart.
-- **Machine captions get their boundaries from the timing**, which is the one piece of sentence
+- **Unpunctuated captions get their boundaries from the timing**, which is the one piece of sentence
   structure that survives transcription: speech pauses at a full stop. A gap of `PAUSE = 0.8`
   seconds between cues is a break. And because cues in continuous speech often butt up against each
-  other exactly — no gap to find — a run is broken at `MAX_WORDS = 40` whatever the timing says, so
-  nothing unbounded can reach the parser or a prompt.
+  other exactly — or overlap outright, as 83 % of the real file's do — a run is broken at
+  `MAX_WORDS = 40` whatever the timing says, so nothing unbounded can reach the parser or a prompt.
+  On a YouTube-shaped file the cap is doing all of the work and the pause none of it.
 
 A break is written as a blank line, because that is what Stanza splits on: measured, a bare newline
 inside a clause changes nothing (1 sentence) and a blank line makes two.

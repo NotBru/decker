@@ -57,8 +57,11 @@ _MARKUP = re.compile(
     r"|\((?:music|applause|laughter|laughs|sighs)[^)]*\)",
     re.IGNORECASE,
 )
-#: The dash a subtitle puts in front of a second speaker's line.
-_SPEAKER_DASH = re.compile(r"^\s*[-–—]\s+")
+#: What a subtitle puts in front of a line to say the speaker changed: a dash
+#: in hand-written subtitles, and `>>` in everything derived from YouTube's
+#: captions -- 2,753 of them in one series' file, which would otherwise be
+#: 2,753 tokens of prose that nobody said.
+_SPEAKER_MARK = re.compile(r"^\s*(?:>>+|[-–—])\s*")
 #: What a sentence ends with, in the scripts decker has been run over.
 _TERMINAL = ".!?。！？…"
 
@@ -155,7 +158,7 @@ def _cues(raw: str) -> list[Cue]:
             timing = (_seconds(clock, 0), _seconds(clock, 4))
             continue
         line = _MARKUP.sub(" ", line)
-        line = _SPEAKER_DASH.sub("", line).strip()
+        line = _SPEAKER_MARK.sub("", line).strip()
         line = re.sub(r"\s+", " ", line)
         if not line or _INDEX.match(line) or _HEADER.match(line):
             continue
