@@ -7,6 +7,12 @@ gama*
 # Built decks and their text dumps, whatever the source was called: a deck
 # quotes Wiktionary and names the words of the text it was built from.
 decks/
+
+# Subtitles: a cue file is a transcript of somebody's film, and decker reads
+# them now. The source text has never been in this repository and this is the
+# extension that would have walked one in.
+*.srt
+*.vtt
 __pycache__/
 *.py[cod]
 
