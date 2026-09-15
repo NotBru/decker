@@ -48,6 +48,17 @@ def _main(argv: list[str] | None = None) -> int:
             "whole pipeline runs, which is what `deck` does; `extract`, `define` and "
             "`index` stop it early."
         ),
+        #: Every flag belongs to a subcommand, so this help has none to show --
+        #: which reads as decker having none at all, `--target-lang` included,
+        #: and that is the first thing a reader needs. It cannot be fixed by
+        #: showing `deck`'s flags here, since the subcommand list is what this
+        #: help is for; so it says where they are.
+        epilog=(
+            "The flags belong to the subcommands: `decker deck -h` lists the ones a "
+            "full run takes, and they are the ones that apply when no subcommand is "
+            "given. Every run needs --target-lang. `decker extract -h`, `decker "
+            "define -h` and `decker index -h` list the rest."
+        ),
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -160,14 +171,17 @@ def _main(argv: list[str] | None = None) -> int:
 def _language_code(value: str) -> str:
     """A language code, checked while the flags are still being read.
 
-    A code decker cannot name would reach the model as itself -- cards written
-    for "a speaker of pt-", which is worse than a run that never starts.
+    Both language flags take one. A code decker cannot name would reach the
+    model as itself -- cards written for "a speaker of pt-" -- and, for the
+    target language, would reach Stanza, which answers an unknown code with a
+    `ValueError` and a traceback where decker should have said one line. The
+    README promises the run is refused before it starts; this is what does it.
     """
     code = value.strip().casefold()
     if not languages.known(code):
         raise argparse.ArgumentTypeError(
-            f"unknown language code {value!r}: --mother-lang takes a code, the way "
-            "--target-lang does (en, es, pt...)"
+            f"unknown language code {value!r}: a code is what both language flags "
+            "take (en, es, pt, zh-hans...), not a name"
         )
     return code
 
@@ -176,6 +190,7 @@ def _add_language_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--target-lang",
         required=True,
+        type=_language_code,
         help="language of the source text, as a language code (en, de, es...)",
     )
     parser.add_argument(
