@@ -206,23 +206,19 @@ design wins and the code is wrong.
   puerta` this cut `la` from eleven senses to the article alone and `correr` from thirteen to
   three.
 
-- The default model is `gemma4:latest` since 2026-09-15, moved back from `qwen3.5:4b` on the
-  criterion in `model-backends.md`: inside a ten-second-a-card ceiling the scarce resource is the
-  learner, not the clock, so the default is the model that teaches a text in the fewest cards while
-  answering the same questions right. All four models measured score 8/9 on the nine known-answer
-  checks; `gemma4:latest` does it in 41 glosses where `qwen3.5:4b` takes 47, `qwen3:14b` 60 and
-  `gemma3:4b` 110. It costs the laptop — 9.6 GB against 3.3 — and `--model` or `$DECKER_MODEL` is
-  the flag for a run that has no tunnel. A model can be named once for a whole shell as
-  `$DECKER_MODEL`, the way the host is named by `$OLLAMA_HOST`, because those two are exactly the
-  pair that has to agree: a tunnelled GPU box and a laptop's own ollama hold different tags, so a
-  host set in the environment and a model left to its default is the ordinary way a run asks for
-  something that is not there. When it does, the warning names the tags the host *does* hold — a
-  missing model otherwise comes back as its own name thrown back, which reads the same whether the
-  tag is misspelled, the host is the wrong one, or it was never pulled. The host defaults to
-  `$OLLAMA_HOST`, falling back to `http://localhost:11434`, ollama's own default. A server that
-  lives elsewhere — a GPU box reached through a forwarded port, say — is named by the environment or
-  by `--ollama-host`, so no one machine's network is written into the code. Ollama has no
-  authentication, so it is never bound anywhere but a loopback or a tunnel.
+- The default model is `qwen3.5:4b`, on the criterion in `model-backends.md`: inside a
+  ten-second-a-card ceiling the scarce resource is the learner, not the clock, so the default is the
+  model that answers the most questions right for the fewest cards. Measured cold on the
+  four-language benchmark, it passes 22 of 24 checks in 288 s where `gemma4:latest` passes 21 in
+  373 s and `gemma3:4b` passes 16 while producing a hundred more glosses; `qwen3:14b` passes 23 and
+  takes four times as long, which is what `--model` is for. It also fits the laptop at 3.3 GB. A
+  model can be named once for a whole shell as `$DECKER_MODEL`, the way the host is named by
+  `$OLLAMA_HOST`, because those two are exactly the pair that has to agree: a tunnelled GPU box and a
+  laptop's own ollama hold different tags, so a host set in the environment and a model left to its
+  default is the ordinary way a run asks for something that is not there. When it does, the warning
+  names the tags the host *does* hold. The host defaults to `$OLLAMA_HOST`, falling back to
+  `http://localhost:11434`, ollama's own default; ollama has no authentication, so it is never bound
+  anywhere but a loopback or a tunnel.
 
 ## Fetching, and the page it reads
 

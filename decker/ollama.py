@@ -20,32 +20,32 @@ from pathlib import Path
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything, and it is measured rather than guessed.
 #:
-#: The criterion, settled 2026-09-15 with Bru's ceiling: a deck may be slow but
-#: not much slower than ten seconds a card, and *within* that ceiling the scarce
-#: resource is not the wall clock, it is the learner. A run makes about one call
-#: per card, so anything up to a couple of seconds a call is free; what is not
-#: free is a card the learner did not need. So the default is the model that
-#: teaches the same text in the fewest cards while answering the same questions
-#: correctly. Four models, all of them inside the ceiling, all of them scoring
-#: 8/9 on the nine known-answer checks over the same five Spanish sentences:
+#: The criterion is Bru's ceiling: a deck may be slow but not much slower than
+#: ten seconds a card, and *inside* that ceiling the scarce resource is not the
+#: clock, it is the learner. So the default is the model that answers the most
+#: questions right and hands the learner the fewest cards for doing it.
 #:
-#:     model            glosses  Hebrew prefix cards  gendered rules  s/call
-#:     gemma4:latest         41         11 (8 right)               0     1.4
-#:     qwen3.5:4b            47         19 (15 right)              0     0.4
-#:     qwen3:14b             60         17 (9 right)               3     2.6
-#:     gemma3:4b            110         48 (43 right)              2     0.6
+#: Measured cold -- every answer re-asked -- on the 24-sentence, four-language
+#: benchmark in `tools/benchmark/`, which is the one that discriminates; the
+#: five-sentence Spanish one gave all four models 8/9 and could not:
 #:
-#: `gemma4:latest` wins every column that is about the deck and loses only the
-#: one that stopped mattering. It is also the only model measured on the
-#: translation side -- eight German etymologies answered where `gemma3:4b`
-#: echoed its English back on three.
+#:     model            passed  glosses   cold wall   s/gloss
+#:     qwen3:14b          23/24      412      1,142s     2.77
+#:     qwen3.5:4b         22/24      404        288s     0.71
+#:     gemma4:latest      21/24      398        373s     0.94
+#:     gemma3:4b          16/24      500        293s     0.59
 #:
-#: What it gives up is the laptop: 9.6 GB against 3.3, so a run with no tunnel
-#: cannot have it. `model-backends.md` has already recorded that the laptop is
-#: not where a deck gets built -- it is for verifying a handful of sentences --
-#: and `--model qwen3.5:4b` or $DECKER_MODEL is one flag for the runs where
-#: that is wrong.
-DEFAULT_MODEL = "gemma4:latest"
+#: `qwen3.5:4b` is faster than `gemma4:latest` and answers one more question
+#: right, for six more glosses in four hundred; and it fits the laptop, 3.3 GB
+#: against 9.6, which is the one thing choosing gemma4 had cost. `qwen3:14b`
+#: buys one further answer for four times the wall clock and 9.3 GB, which is
+#: still inside the ceiling and is what `--model` is for.
+#:
+#: This is the second change in two days: gemma4:latest was made the default on
+#: the older benchmark, where all four models scored alike and the tie was
+#: broken on gloss count alone. A benchmark that could tell them apart undid
+#: that reasoning, which is the point of having built it.
+DEFAULT_MODEL = "qwen3.5:4b"
 
 #: Ollama has no authentication, so it is never exposed beyond a loopback or a
 #: tunnel. The fallback is ollama's own default; a host reached through a
