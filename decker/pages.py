@@ -27,7 +27,7 @@ from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 
-from decker.languages import section_of
+from decker.languages import lect_of, section_of
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -280,7 +280,7 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if not entries:
         return None
     language = entries[0].language or language
-    etymology, ipa, audios = _from_html(payloads.get("parse"), language)
+    etymology, ipa, audios = _from_html(payloads.get("parse"), language, lect_of(lang))
     return Page(
         title=title,
         language=language,
@@ -575,9 +575,13 @@ def _retry_after(error: urllib.error.HTTPError, attempt: int) -> float:
 
 
 def _from_html(
-    parse: dict | None, language: str
+    parse: dict | None, language: str, lect: str = ""
 ) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
-    """Pull etymology, IPA and every recording out of the rendered page."""
+    """Pull etymology, IPA and every recording out of the rendered page.
+
+    The etymology is the section's; the readings and the recordings are the
+    *lect's* where the entry has lects and the caller named one.
+    """
     if not isinstance(parse, dict):
         return None, (), ()
     html = parse.get("parse", {}).get("text")
@@ -587,12 +591,51 @@ def _from_html(
     if section is None:
         return None, (), ()
 
+    spoken = _lect_block(section, lect) if lect else section
     ipa = tuple(
         reading
-        for raw in _IPA.findall(section)
+        for raw in _IPA.findall(spoken)
+        #: A reconstruction is not a pronunciation of the word in front of the
+        #: learner: `/*Cə.kˤroʔ/` is what 狗 is thought to have sounded like
+        #: three thousand years ago, and it is written with the asterisk that
+        #: says so in every language that has one.
         if (reading := strip_html(raw)).startswith(_IPA_DELIMITERS)
+        and "*" not in reading
     )
-    return _etymology(section), ipa, _audios(section)
+    return _etymology(section), ipa, _audios(spoken)
+
+
+#: The varieties the English Wiktionary gives a Chinese entry a pronunciation
+#: block for, in the order it writes them. Matched as link text, which is how
+#: `Module:zh-pron` names them.
+_LECT_NAMES = (
+    "Mandarin", "Cantonese", "Gan", "Hakka", "Jin", "Northern Min",
+    "Eastern Min", "Puxian Min", "Southern Min", "Hokkien", "Teochew", "Wu",
+    "Xiang", "Middle Chinese", "Old Chinese",
+)
+
+
+def _lect_block(section: str, lect: str) -> str:
+    """The slice of ``section`` holding one variety's pronunciation.
+
+    From the variety's own name to whichever other variety is named next. A
+    lect name can appear in a definition too -- `Wu` is a surname -- so a slice
+    that turns out to hold no reading at all is not one, and the section is
+    used whole instead, which is what every language without lects does.
+    """
+    named = [
+        (match.start(), match.group(1))
+        for match in re.finditer(r">(" + "|".join(_LECT_NAMES) + r")<", section)
+    ]
+    starts = [start for start, _ in named]
+    for position, (start, name) in enumerate(named):
+        if name != lect:
+            continue
+        end = starts[position + 1] if position + 1 < len(starts) else len(section)
+        block = section[start:end]
+        if _IPA.search(block) or _AUDIO.search(block):
+            return block
+    return section
 
 
 def _audios(section: str) -> tuple[str, ...]:

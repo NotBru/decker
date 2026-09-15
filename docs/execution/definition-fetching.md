@@ -174,30 +174,23 @@ design wins and the code is wrong.
   puerta` this cut `la` from eleven senses to the article alone and `correr` from thirteen to
   three.
 
-- The default model is `qwen3.5:4b` since 2026-09-13, moved there from `gemma4:latest` on the
-  disambiguation measurement in `model-backends.md`: it keeps one sense per occurrence where
-  `gemma3:4b` keeps two, and it is the first model measured here that reads the same form twice in
-  one sentence two different ways — `Vivía solo` as *alone*, `solo es un decir` as *only*. What the
-  move buys is the laptop: 3.3 GB against 9.6, so it fits on the machine with no GPU and needs
-  neither a tunnel nor room for a 9.6 GB pull. What it gives up is the evidence `gemma4:latest` was
-  chosen on — the eight etymologies a German run left in English, which it answers all eight, where
-  `gemma3:4b` echoes its English input back on three of them, an answer no schema and no fallback
-  can tell from a good one. `qwen3.5:4b` has not been measured on those eight; a one-sentence German
-  run of thirteen glosses kept one field, an *empty* etymology, which is the shape the fallback
-  catches, and echoed none. On a host with the room and the tag, `gemma4:latest` is still the better
-  translator, and `--model` or `$DECKER_MODEL` says so for a run. A
-  model can also be named for a whole shell as `$DECKER_MODEL`, the way the host is named by
-  `$OLLAMA_HOST`, because
-  those two are exactly the pair that has to agree: a tunnelled GPU box and a laptop's own ollama
-  hold different tags, so a host set in the environment and a model left to its default is the
-  ordinary way a run asks for something that is not there. When it does, the warning names the tags
-  the host *does* hold — a missing model otherwise comes back as its own name thrown back, which
-  reads the same whether the tag is misspelled, the host is the wrong one, or it was never pulled.
-  The host defaults to `$OLLAMA_HOST`, falling back to
-  `http://localhost:11434`, ollama's own default. A server that lives elsewhere — a GPU box reached
-  through a forwarded port, say — is named by the environment or by `--ollama-host`, so no one
-  machine's network is written into the code. Ollama has no authentication, so it is never bound
-  anywhere but a loopback or a tunnel.
+- The default model is `gemma4:latest` since 2026-09-15, moved back from `qwen3.5:4b` on the
+  criterion in `model-backends.md`: inside a ten-second-a-card ceiling the scarce resource is the
+  learner, not the clock, so the default is the model that teaches a text in the fewest cards while
+  answering the same questions right. All four models measured score 8/9 on the nine known-answer
+  checks; `gemma4:latest` does it in 41 glosses where `qwen3.5:4b` takes 47, `qwen3:14b` 60 and
+  `gemma3:4b` 110. It costs the laptop — 9.6 GB against 3.3 — and `--model` or `$DECKER_MODEL` is
+  the flag for a run that has no tunnel. A model can be named once for a whole shell as
+  `$DECKER_MODEL`, the way the host is named by `$OLLAMA_HOST`, because those two are exactly the
+  pair that has to agree: a tunnelled GPU box and a laptop's own ollama hold different tags, so a
+  host set in the environment and a model left to its default is the ordinary way a run asks for
+  something that is not there. When it does, the warning names the tags the host *does* hold — a
+  missing model otherwise comes back as its own name thrown back, which reads the same whether the
+  tag is misspelled, the host is the wrong one, or it was never pulled. The host defaults to
+  `$OLLAMA_HOST`, falling back to `http://localhost:11434`, ollama's own default. A server that
+  lives elsewhere — a GPU box reached through a forwarded port, say — is named by the environment or
+  by `--ollama-host`, so no one machine's network is written into the code. Ollama has no
+  authentication, so it is never bound anywhere but a loopback or a tunnel.
 
 ## Fetching, and the page it reads
 
@@ -245,6 +238,22 @@ design wins and the code is wrong.
   missing extension will say the same thing tomorrow, so those pages are kept; the expiry message is
   the only one that means the render gave up, and it is still not written. A page whose *definitions*
   really are error text yields no entries, and a page with no entries was never cached as a gloss.
+
+- **Every recording and every reading of the *lect*, where an entry has lects.** "All, not the
+  first" is the rule (below), and a Chinese entry is where it needed qualifying: the English
+  Wiktionary writes Chinese as one section with a pronunciation block per variety, so 狗 carries 59
+  IPA transcriptions over nine of them — four Mandarin, three Cantonese, twenty-seven Wu — and a
+  card built from the section whole showed all of them, plus four Old Chinese reconstructions, on
+  one line. `languages.lect_of` says which block a code is taught from (`zh-hans` → Mandarin, `yue`
+  → Cantonese, `wuu` → Wu), `_lect_block` slices the section from that variety's name to whichever
+  is named next, and the readings and recordings are read from the slice. 狗 goes from 63 readings
+  to 4, 人類 to one; Spanish, Japanese and Greek entries are untouched, having no lects to slice.
+  A lect name can appear in a definition too — `Wu` is a surname — so a slice holding no reading at
+  all is not one, and the section is used whole, which is what every language without lects does.
+
+  Reconstructions are dropped everywhere, lects or no lects: `/*Cə.kˤroʔ/` is what 狗 is thought to
+  have sounded like three thousand years ago, not how the word in front of the learner is said, and
+  the asterisk that says so is the same in every language that reconstructs.
 
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;

@@ -115,3 +115,25 @@ _JOINERS = {"he": "\u05be"}
 def joiner_of(code: str) -> str:
     """The character this language's Wiktionary hangs a bound form on."""
     return _JOINERS.get(_key(code), "")
+
+
+#: Which lect's pronunciation a code is being taught, where the entry gives one
+#: per lect. The English Wiktionary writes a Chinese entry as a single section
+#: with a pronunciation block per variety -- 狗 carries 59 readings over nine of
+#: them, four Mandarin and twenty-seven Wu -- so a card built from the section
+#: whole is a wall of transcriptions for varieties the learner is not studying.
+#: The third table of the same kind as :data:`_SECTIONS` and :data:`_JOINERS`,
+#: and the same rule: an entry goes in when a run has been seen to need it.
+_LECTS = {
+    "zh": "Mandarin",
+    "zh-hans": "Mandarin",
+    "zh-hant": "Mandarin",
+    "yue": "Cantonese",
+    "wuu": "Wu",
+    "lzh": "Middle Chinese",
+}
+
+
+def lect_of(code: str) -> str:
+    """The pronunciation block this code is taught from, if the entry has one."""
+    return _LECTS.get(_key(code), "")

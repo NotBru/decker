@@ -195,6 +195,37 @@ Four things this says.
   deck goes from 304 glosses to 428. The fix gives every model the right senses to choose from; it
   does not give a model the judgement to choose among them.
 
+### The default, and the criterion it was picked on, 2026-09-15
+
+`gemma4:latest`, moved back from `qwen3.5:4b`, on a criterion the ceiling above makes possible.
+**Inside the ceiling, wall clock stops being the scarce resource and the learner becomes it.** A run
+makes about one call per card, so at 1.4 s a call a 300-card deck is seven minutes and at 0.4 s it is
+two — a difference nobody studying the deck will ever notice. A card the learner did not need is a
+difference they pay for every review. So the default is the model that teaches a text in the fewest
+cards while answering the same questions correctly.
+
+All four models are inside the ceiling and all four score **8/9** on the nine known-answer checks
+over the same five Spanish sentences, so the checks do not separate them. Everything else does:
+
+| model | glosses on the benchmark | Hebrew: prefix cards (from the prefix's entry) | gendered rules, shipped prompt | s/call |
+|---|---|---|---|---|
+| `gemma4:latest` | **41** | **11** (8) | **0** | 1.4 |
+| `qwen3.5:4b` | 47 | 19 (15) | **0** | 0.4 – 0.7 |
+| `qwen3:14b` | 60 | 17 (9) | 3 | 2.6 – 3.8 |
+| `gemma3:4b` | 110 | 48 (43) | 2 | 0.6 |
+
+Same text, same nine answers right, and `gemma3:4b` hands the learner 110 cards where
+`gemma4:latest` hands them 41. That is the whole argument. `gemma4:latest` also carries the only
+translation evidence anyone has measured here — eight German etymologies answered where `gemma3:4b`
+echoed its English input back on three — and it is the model the survey and every arm above was run
+with, so the numbers in this document are its numbers.
+
+What the move gives up is the laptop: 9.6 GB against 3.3 GB, so a run without the tunnel cannot have
+it. That was the reason `qwen3.5:4b` was made the default on 2026-09-13, and it is the reason that
+stopped counting: this document already says the laptop is not where a deck gets built. For the runs
+where it is, `--model qwen3.5:4b` or `$DECKER_MODEL` is one flag, and the table above says what it
+costs — six extra cards in five sentences, eight extra for seven Hebrew prefixes, nothing else.
+
 ### What decker can afford, 2026-09-15
 
 Bru's ceiling: a deck may be slow, but not much slower than **ten seconds a card**. A run makes
