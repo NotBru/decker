@@ -25,22 +25,40 @@ Chinese).
 
 ## The table
 
-| language | sentences | terms | coverage | glosses | word / concept / rule | cards | culled | calls | wall |
-|---|---|---|---|---|---|---|---|---|---|
-| Spanish | 15 | 323 | 94 % | 281 | 241 / 28 / 12 | 522 | 10 | 363 | 512 s |
-| German | 22 | 312 | 95 % | 295 | 250 / 31 / 14 | 545 | 5 | 420 | 545 s |
-| Dutch | 24 | 316 | **99 %** | 288 | 256 / 26 / 6 | 544 | 16 | 370 | 570 s |
-| Greek | 17 | 291 | 98 % | 290 | 245 / 23 / **22** | 535 | 2 | 360 | 464 s |
-| Hungarian | 19 | 234 | 91 % | 220 | 193 / 20 / 7 | 413 | 2 | 177 | 371 s |
-| Turkish | 22 | 309 | 94 % | 288 | 255 / 24 / 9 | 543 | 0 | 261 | 669 s |
-| Irish | 35 | 337 | 98 % | 298 | 262 / 27 / 9 | 560 | 1 | 366 | 666 s |
-| Hebrew | 25 | 333 | 99 % | 244 | 217 / 26 / 1 | 461 | 3 | 274 | 296 s |
-| Japanese | 18 | 308 | 90 % | 200 | 193 / 7 / **0** | 393 | 0 | 241 | 608 s |
-| Chinese | 19 | 383 | **82 %** | 240 | 231 / 9 / **0** | 471 | 0 | 263 | 895 s |
+Measured twice: on 2026-09-14, which is what the findings below were found in, and again on
+2026-09-15 with all of them acted on. The re-run is the first number in each cell and the original
+is in brackets. Same samples, same model (`gemma4:latest`), same mirror.
+
+| language | terms | coverage | glosses | word / concept / rule | cards |
+|---|---|---|---|---|---|
+| Spanish | 323 | 94% (94%) | 279 (281) | 239 / 27 / 13 (241 / 28 / 12) | 518 (522) |
+| German | 312 | 95% (95%) | 294 (295) | 246 / 33 / 15 (250 / 31 / 14) | 540 (545) |
+| Dutch | 316 | 99% (99%) | 294 (288) | 260 / 27 / 7 (256 / 26 / 6) | 554 (544) |
+| Greek | 291 | 98% (98%) | 291 (290) | 249 / 23 / 19 (245 / 23 / 22) | 540 (535) |
+| Hungarian | 234 | 91% (91%) | 215 (220) | 188 / 20 / 7 (193 / 20 / 7) | 403 (413) |
+| Turkish | 309 | 94% (94%) | 294 (288) | 256 / 25 / 13 (255 / 24 / 9) | 550 (543) |
+| Irish | 337 | 98% (98%) | 299 (298) | 266 / 26 / 7 (262 / 27 / 9) | 565 (560) |
+| Hebrew | 333 | 98% (99%) | **260** (244) | 234 / 24 / 2 (217 / 26 / 1) | 494 (461) |
+| Japanese | 308 | 90% (90%) | 205 (200) | 197 / 8 / 0 (193 / 7 / 0) | 402 (393) |
+| Chinese | 383 | **99%** (82%) | **299** (240) | 285 / 14 / 0 (231 / 9 / 0) | 584 (471) |
+
+**Two rows moved and eight did not**, which is exactly the shape a set of targeted fixes should
+leave. Chinese goes from the worst column in the table to the second best: 82 % coverage to 99 %,
+240 glosses to 299, 471 cards to 584 — the simplified spellings that used to read as empty pages now
+resolve to the traditional entries they point at. Hebrew gains 16 glosses, which is the clitic
+prefixes reaching their real entries and being taught as prepositions instead of as letters of the
+alphabet. Everything else moves by less than a handful of glosses, and the movement that is there is
+the model answering a differently-worded prompt: the disambiguation prompt now shows a passage
+rather than a sentence, so every answer in this run was asked afresh.
+
+Wall-clock times are left out of the table on purpose. The first run paid for every model call; this
+one had most of the page cache and none of the answer cache, so neither column would mean what a
+reader would take it to mean. `model-backends.md` has per-call rates measured where they are
+comparable.
 
 "coverage" is the share of term occurrences for which the English Wiktionary had an entry in that
-language. `languages-coverage.png` and `languages-cards.png` draw the first and the last two
-columns; `languages.csv` has the rest.
+language. `languages-coverage.png` and `languages-cards.png` draw the first run's figures;
+`languages.csv` has both.
 
 ## The pipeline runs everywhere. That is the headline and it is not the interesting part.
 
@@ -149,8 +167,9 @@ and Greek is the language in this set where a rules-aware deck would differ most
 
 ## What was done about it
 
-Bru's call, 2026-09-14: do the first two, try the third and the fourth, explain the fifth. The table
-above is the measurement *before* any of it and stays that way; this is what each one turned into.
+Bru's call, 2026-09-14: do the first two, try the third and the fourth, explain the fifth. This is
+what each one turned into; the table above now carries both measurements, so what the five findings
+were worth can be read off it directly.
 
 1. **Chinese is named `Chinese`.** `languages.section_of` is a table of five entries — the three
    Chinese codes, and `nb`/`no`, where Stanza says *Norwegian* and Wiktionary heads *Norwegian
@@ -283,6 +302,5 @@ above is the measurement *before* any of it and stays that way; this is what eac
   all, `gemma3:4b` keeps four times as many senses for a pooled page. The table is in
   [Model backends](model-backends.md); read the ten-language table above as one model's run.
 - The Irish sample covers different topics from the other nine.
-- Chinese ran with a harness patch that the package did not have at the time. Finding 1 is now in
-  the package, so the row is what decker does; the coverage figure is not, and finding 2 says what
-  it became.
+- Chinese ran with a harness patch that the package did not have at the time. Both are in the
+  package now, and the re-run needed no patch at all.
