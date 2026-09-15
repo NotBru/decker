@@ -27,8 +27,14 @@ uv run decker deck    --target-lang es source.txt   # all of it, and the package
 uv run decker index   --target-lang es              # build the title index up front
 ```
 
-`source` may be `-` for standard input. `--format` chooses the output — `text` and `json`
-everywhere, `markdown` for `define`, `apkg` for `deck` — and `--out` names the file.
+`source` may be a `.srt` or `.vtt` subtitle file as well as plain text: the cues are folded back
+into prose, the rolling repeats of machine captions unrolled, and the `>>` a caption puts in front
+of a new speaker dropped. Where such a file has no punctuation at all — some recognizers still
+write none — the sentence boundaries come from the cue timings instead. It may also be `-` for
+standard input, which is sniffed for cue files, since standard input has no extension to go by.
+
+`--format` chooses the output — `text` and `json` everywhere, `markdown` for `define`, `apkg` for
+`deck` — and `--out` names the file.
 
 ### Languages
 
@@ -39,9 +45,9 @@ never opens a connection.
 
 ### The model
 
-Disambiguation and translation both ask a local model, named by `--model` or `$DECKER_MODEL`
-(default `gemma4:latest`), on the host at `--ollama-host` or `$OLLAMA_HOST` (default
-`http://localhost:11434`).
+Disambiguation, the morphological rules and translation all ask a local model, named by `--model`
+or `$DECKER_MODEL` (default `qwen3.5:4b`), on the host at `--ollama-host` or `$OLLAMA_HOST`
+(default `http://localhost:11434`).
 
 Without a reachable host a run does not fail. It keeps every sense, leaves the cards in
 English, and says so — so read stderr before trusting a deck. It also reports any prose that
@@ -54,7 +60,9 @@ reached a card untranslated, and silence there means everything did:
 ```
 
 `--no-disambiguate`, `--no-translate` and `--no-audio` skip those stages outright: much
-faster, much worse.
+faster, much worse. `--no-concepts` and `--no-rules` switch off the two stages that make cards of
+their own — the grammatical terminology a definition is written in, and the regularity behind an
+inflected form.
 
 ### Offline Wiktionary
 
@@ -71,7 +79,12 @@ For:
 - **The fetched titles never leave the machine.** Every new word implies a Wiktionary query, in
   reading order, thus leaking information about the source text.
 - **No rate limits, no 403.** Wikimedia's pacing and its backoff stop applying.
-- **Nothing but the model's host is reached at run time**, once the title list is cached.
+- **Nothing but the model's host is reached at run time**, once the title list is cached —
+  `Appendix:Glossary`, which the concept cards are made from, included, as long as the mirror
+  carries the `Appendix:` namespace. A dump holds those pages but an import files them under the
+  main namespace unless the namespaces were declared first; see
+  [docs/execution/local-wiktionary.md](docs/execution/local-wiktionary.md). Where it does not,
+  that one page is read from Wikimedia and nothing else is.
 
 Against:
 
@@ -96,10 +109,11 @@ Against:
 
 ### Caching
 
-Stanza models, Wiktionary title dumps, parsed titles, fetched pages and audio all cache under
-`~/.cache/decker` (`DECKER_CACHE_DIR` overrides). The first run for a language downloads and
-parses the entire title dump and is slow; the ones after it are not. `--refresh-titles` and
-`--refresh-pages` go around the caches.
+Stanza models, Wiktionary title dumps, parsed titles, fetched pages, model answers and audio all
+cache under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides). The first run for a language
+downloads and parses the entire title dump and is slow; the ones after it are not. A second run
+over the same text asks the model nothing, the answers being kept. `--refresh-titles`,
+`--refresh-pages` and `--refresh-answers` go around the caches.
 
 ## Structure
 

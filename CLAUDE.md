@@ -2,10 +2,14 @@
 
 ## Who writes which documents
 
-`docs/instructions/` and `README.md` are written by humans only. Never create, edit or extend
-anything there. They are the design's source of truth and are kept at a deliberate, conscious
-rhythm — an agent writing them defeats that. If the design itself needs to change, say so in your
-reply and let the human write it.
+`docs/instructions/` is written by humans only. Never create, edit or extend anything there. It is
+the design's source of truth and is kept at a deliberate, conscious rhythm — an agent writing it
+defeats that. If the design itself needs to change, say so in your reply and let the human write it.
+
+`README.md` was the same until 2026-09-15, when Bru asked for it to be updated directly. Treat it as
+the human's prose still: change it when told to, keep to its own register, and edit the lines that
+are wrong rather than rewriting around them. Flags, defaults and what a source file may be are the
+things that go stale there — the model default alone changed twice in two days.
 
 `docs/execution/` is yours. Design and implementation choices taken while building go there, one
 document per topic, each one saying up front that the human docs outrank it. Keep them current as
