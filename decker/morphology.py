@@ -105,13 +105,63 @@ base words it applies to, and what is done to them. Name the endings involved.
 Write it for a learner who has met neither of these two words, so state the
 rule in general -- do not answer with these words as the reason. Write it in
 {source}. If it is irregular, say so and leave the rule empty.
-
+{inventory}
 Base word: {base}
 Word: {surface}
 What the derivation expresses: {bundle}
 Wiktionary's own line: {prose}
 
 Answer whether it is regular, and if so, the rule.
+"""
+
+#: What a rule may be stated over, and what it may not. The survey found the
+#: model writing "for feminine nouns, add the ending -in to form the genitive
+#: singular" in Turkish and "for masculine nouns ending in a consonant" in
+#: Hungarian -- two languages with no grammatical gender at all. The endings
+#: were often right and the class was invented, which is the worst shape a
+#: wrong card can take: it teaches a distinction the language does not make.
+#:
+#: The parse already knows. Stanza marks the categories a language inflects
+#: for on every word it reads, so a category that is marked nowhere in a whole
+#: text is one the language does not have -- for these six, at least, which
+#: are marked on nearly every word that could carry them. The rarer ones
+#: (aspect, voice, animacy, degree) are left out in both directions: absent
+#: from a 2,500-character sample they may be absent from the sample only, and
+#: a prompt that says so with confidence would be worse than one that says
+#: nothing.
+#:
+#: Mood was in this list and was taken out, which is what the list being short
+#: is for. Run over the survey's ten samples it came back absent for Dutch and
+#: Hebrew, both of which have an imperative: UD treebanks mark Mood sparsely,
+#: so that absence is the treebank's habit and not the language's. The other
+#: six came back absent only where the language really has nothing -- gender
+#: in Hungarian, Turkish, Japanese and Chinese, definiteness in Turkish, tense
+#: in Chinese -- and Japanese, whose parse marks none of the six, is told
+#: nothing at all rather than told that it has no grammar.
+PERVASIVE = {
+    "Gender": "grammatical gender",
+    "Number": "number",
+    "Case": "case",
+    "Person": "person",
+    "Tense": "tense",
+    "Definite": "definiteness",
+}
+
+#: The wording is measured, not written once. The first version ended "an
+#: ending that applies to feminine nouns cannot be the rule in a language
+#: without gender", and handing a small model the example was handing it the
+#: words: `gemma3:4b` wrote four gendered Turkish rules with that paragraph
+#: and none without it, and `qwen3:14b` wrote one with and none without. The
+#: version below says the same thing without naming a class. Over eight
+#: model-language pairs (four models, Turkish and Hungarian) the gendered
+#: rules went 8 with no paragraph, 7 with the first wording, 5 with this one
+#: -- and to zero for `gemma4:latest`, whose invention started all this.
+INVENTORY = """
+Of the categories a rule like this is usually stated over, the parse of this
+text marks {present} in {language}, and marks {absent} nowhere at all. State
+the rule only over categories the language has: a class of base word that this
+language does not distinguish cannot be the condition of a rule, however right
+the ending is.
 """
 
 
@@ -250,6 +300,13 @@ class RuleBook:
             pass
 
 
+def _listed(words: list[str]) -> str:
+    """``a, b and c``: a list as a sentence says one."""
+    if len(words) == 1:
+        return words[0]
+    return f"{', '.join(words[:-1])} and {words[-1]}"
+
+
 def _book_path(lang: str) -> Path:
     from decker.wiktionary import cache_dir
 
@@ -298,6 +355,10 @@ class Morphology:
     dropped: int = 0
     #: How many rules this run wrote that the book did not already hold.
     written: int = 0
+    #: The morphological categories the parse marks anywhere in the text, by
+    #: UD's names for them. Term extraction reads them off every word it
+    #: covers; what they are for is :data:`INVENTORY`.
+    categories: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         self.session = Session(
@@ -435,6 +496,7 @@ class Morphology:
             PROMPT_REGULAR.format(
                 language=name_of(self.lang),
                 source=SOURCE_LANGUAGE,
+                inventory=self._inventory(),
                 base=base,
                 surface=surface,
                 bundle=", ".join(bundle),
@@ -462,6 +524,28 @@ class Morphology:
         self.book.add(rule)
         self.written += 1
         return rule
+
+    def _inventory(self) -> str:
+        """What to tell the model about the language's categories, if anything.
+
+        Nothing at all when every pervasive category is marked somewhere: a
+        language that has all seven cannot have a rule stated over one it does
+        not have, and a paragraph spent saying so is a paragraph the model has
+        to read on every call. Nothing, too, when the parse marked none of
+        them -- Chinese and Japanese mark nothing here, and the honest reading
+        of that is that the parse has nothing to say, not that the language
+        has no grammar.
+        """
+        marked = set(self.categories)
+        present = [word for name, word in PERVASIVE.items() if name in marked]
+        absent = [word for name, word in PERVASIVE.items() if name not in marked]
+        if not present or not absent:
+            return ""
+        return INVENTORY.format(
+            language=name_of(self.lang),
+            present=_listed(present),
+            absent=_listed(absent),
+        )
 
     def _cull(self, rule: Rule) -> bool:
         """Whether this instance of ``rule`` still reaches the deck.

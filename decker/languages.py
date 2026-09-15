@@ -54,3 +54,64 @@ def _names() -> dict[str, str]:
             code: name.replace("_", " ") for code, name in lcode2lang.items() if name
         }
     return _NAMES
+
+
+#: Where Wiktionary's section heading and Stanza's name for a code part ways.
+#: Stanza names the written variety where Wiktionary heads the language:
+#: ``zh-hans`` is Stanza's *Simplified Chinese*, and the page 狗 heads one
+#: *Chinese* section covering both scripts, so an unpatched run asks for a
+#: heading no page carries and every Chinese lookup comes back empty --
+#: measured, and the first finding of `docs/execution/language-survey.md`.
+#: ``nb`` is the same mistake in a language nobody had run yet: Stanza says
+#: *Norwegian*, and `hund` and `bok` both head *Norwegian Bokmål*.
+#:
+#: A table decker maintains, which the module docstring above says there is
+#: none of -- and it stays this short for that reason. An entry is added when
+#: a run has been seen to find nothing because of it, never on suspicion.
+_SECTIONS = {
+    "zh": "Chinese",
+    "zh-hans": "Chinese",
+    "zh-hant": "Chinese",
+    #: The lects Stanza names separately and the English Wiktionary keeps
+    #: under the one Chinese heading, with the variety marked inside the
+    #: entry. Found by the audit in `local-wiktionary.md`: 狗 and 水 head
+    #: `Chinese` and nothing else, so a run told `yue` reads an empty page
+    #: exactly as `zh-hans` used to.
+    "yue": "Chinese",
+    "wuu": "Chinese",
+    "lzh": "Chinese",
+    "nb": "Norwegian Bokmål",
+    "no": "Norwegian Bokmål",
+}
+
+
+def section_of(code: str) -> str:
+    """The Wiktionary section heading a gloss for ``code`` is read from.
+
+    Only the heading. What a prompt should call the language is a different
+    question with a different answer -- a text in ``zh-hans`` really is in
+    Simplified Chinese, and a model told so knows something true about it --
+    so :func:`name_of` is what the prompts keep asking.
+    """
+    return _SECTIONS.get(_key(code)) or name_of(code)
+
+
+#: How a language's Wiktionary spells a bound morpheme, where the parser hands
+#: decker one. The second table of the same kind as :data:`_SECTIONS`, and kept
+#: for the same reason: it is a fact about how the dictionary is written, not
+#: about the language. Hebrew's tokenizer splits the clitic prefixes off, as it
+#: should -- `לכל` is `ל` + `כל` -- and the plain letter is a page *about the
+#: letter*: `ל` offers Lamed, the twelfth letter of the alphabet, and the
+#: preposition is at `ל־`, with a maqaf. The survey taught five of the
+#: commonest words in the language as names of letters because of it.
+#:
+#: One entry, because one language has been measured. A hyphen is the
+#: Latin-script spelling of the same idea and would be wrong here: Spanish
+#: `del` splits into two *free* words, and pooling the prefix `de-` into the
+#: preposition `de` would offer the model a morpheme the sentence never used.
+_JOINERS = {"he": "\u05be"}
+
+
+def joiner_of(code: str) -> str:
+    """The character this language's Wiktionary hangs a bound form on."""
+    return _JOINERS.get(_key(code), "")

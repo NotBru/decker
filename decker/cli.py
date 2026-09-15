@@ -437,6 +437,8 @@ def _side(side) -> list[str]:
         pieces.append(side.term)
     if side.definition:
         pieces.append(side.definition)
+    if side.headword:
+        pieces.append(side.headword)
     pieces += [str(example) for example in side.examples]
     if side.ipa:
         pieces.append(" ".join(side.ipa))

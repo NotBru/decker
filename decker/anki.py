@@ -61,14 +61,21 @@ CSS = """\
 .term { font-size: 34px; font-weight: 600; }
 .definition { font-size: 24px; }
 .ipa { font-size: 18px; opacity: 0.75; }
+.headword { font-size: 17px; opacity: 0.8; margin-top: 0.3em; }
 .examples, .etymology { font-size: 17px; opacity: 0.8; margin-top: 0.7em; }
 .examples { font-style: italic; }
 .credit { font-size: 12px; opacity: 0.5; margin-top: 1.4em; }
 .credit a { color: inherit; }
 """
 
-RECOGNITION_FIELDS = ("Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit")
-PRODUCTION_FIELDS = ("Definition", "Term", "IPA", "Etymology", "Credit")
+#: Appended rather than inserted: the model ids are stable, so a collection
+#: that already holds a decker note type gains a column instead of having its
+#: existing ones renumbered under the notes already in it.
+RECOGNITION_FIELDS = (
+    "Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit",
+    "Headword",
+)
+PRODUCTION_FIELDS = ("Definition", "Term", "IPA", "Etymology", "Credit", "Headword")
 
 RECOGNITION_FRONT = """\
 <div class="term">{{Term}}</div>
@@ -79,6 +86,7 @@ RECOGNITION_BACK = """\
 {{FrontSide}}
 <hr id="answer">
 <div class="definition">{{Definition}}</div>
+{{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
 {{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
@@ -93,6 +101,7 @@ PRODUCTION_BACK = """\
 {{FrontSide}}
 <hr id="answer">
 <div class="term">{{Term}}</div>
+{{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
 <div class="credit">{{Credit}}</div>\
@@ -188,6 +197,7 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             card.answer.etymology or "",
             _sounds(card.answer.audios),
             credit,
+            card.answer.headword,
         ]
     else:
         fields = [
@@ -196,6 +206,7 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             _readings(card.answer.ipa),
             card.answer.etymology or "",
             credit,
+            card.answer.headword,
         ]
     return genanki.Note(
         model=model,

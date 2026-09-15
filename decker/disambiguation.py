@@ -44,12 +44,59 @@ than one meaning at once, not merely because a sense is nearby or related. If
 none fit, keep the single closest one.
 
 Sentence: {sentence}
-Term as it appears: {surface}
+Term as it appears: {surface}{reading}
 Numbered senses of the Wiktionary page(s) {title}:
 {senses}
 
 Reply with the numbers of the senses the marked occurrence actually uses.
 """
+
+#: What the parse's reading of the occurrence is worth saying as, and how much
+#: it is worth. Added because of Hebrew: Stanza splits the clitic prefixes off,
+#: as it should, and the page for a one-letter token offers both the
+#: preposition and the name of the letter of the alphabet. A sentence-context
+#: prompt gives a small model nothing to choose between them with, and it chose
+#: the letter five times over -- the five most frequent prefixes in the
+#: language, at the front of the deck, each teaching the wrong thing. The parse
+#: knew all along: the token is an adposition. It is a hint and not an
+#: instruction, because a parse is wrong sometimes and Wiktionary's part of
+#: speech is not always UD's.
+READING = """
+The parse reads the marked occurrence as {reading}. Prefer a sense listed under
+that part of speech; choose one listed under another only where the sentence
+plainly demands it."""
+
+#: UD's tags, as a prompt says them. Wiktionary's own part-of-speech headings
+#: are the words on the other side of this -- `Preposition`, `Letter`, `Verb`
+#: -- so the wording leans towards them where the two agree.
+READINGS = {
+    "ADJ": "an adjective",
+    "ADP": "an adposition (a preposition or a postposition)",
+    "ADV": "an adverb",
+    "AUX": "an auxiliary verb",
+    "CCONJ": "a coordinating conjunction",
+    "DET": "a determiner or article",
+    "INTJ": "an interjection",
+    "NOUN": "a noun",
+    "NUM": "a numeral",
+    "PART": "a particle",
+    "PRON": "a pronoun",
+    "PROPN": "a proper noun",
+    "SCONJ": "a subordinating conjunction",
+    "VERB": "a verb",
+}
+
+
+def reading_of(upos: str) -> str:
+    """The sentence to hand the model about ``upos``, or nothing.
+
+    Nothing for the tags that say only what a thing is not -- `X`, `SYM`,
+    `PUNCT` -- since a hint the model cannot act on is prompt spent for
+    nothing.
+    """
+    named = READINGS.get(upos.upper())
+    return READING.format(reading=named) if named else ""
+
 
 #: Asked when the word is not in the text at all, but is referenced by a
 #: definition that describes another word in terms of it. One sense is wanted:
@@ -104,12 +151,16 @@ class Disambiguator:
         language: str,
         parts_of_speech: tuple[str, ...] = (),
         sources: tuple[str, ...] = (),
+        upos: str = "",
         single: bool = False,
     ) -> tuple[Sense, ...]:
         """Return the senses worth glossing, in their original order.
 
         ``sources`` names the page each sense came from, so a term pooled
         from more than one spelling shows the model which entry is which.
+        ``upos`` is the parse's reading of the occurrence, passed on as a
+        hint where there is one; a word reached through a definition rather
+        than through the text has no occurrence to read, and none.
         """
         if not self.enabled or len(senses) <= 1:
             return senses[:1] if single else senses
@@ -117,12 +168,23 @@ class Disambiguator:
             f"{number}. {_labelled(sense, parts_of_speech, sources, number - 1)}"
             for number, sense in enumerate(senses, start=1)
         )
-        prompt = (PROMPT_ONE if single else PROMPT).format(
-            language=language,
-            sentence=sentence,
-            surface=surface,
-            title=title,
-            senses=listing,
+        prompt = (
+            PROMPT_ONE.format(
+                language=language,
+                sentence=sentence,
+                surface=surface,
+                title=title,
+                senses=listing,
+            )
+            if single
+            else PROMPT.format(
+                language=language,
+                sentence=sentence,
+                surface=surface,
+                reading=reading_of(upos),
+                title=title,
+                senses=listing,
+            )
         )
         chosen = self._ask(prompt)
         if chosen is None:

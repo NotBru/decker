@@ -50,6 +50,21 @@ def default_model() -> str:
     return os.environ.get(MODEL_VARIABLE) or DEFAULT_MODEL
 
 
+def _said_something(response) -> bool:
+    """Whether a reply carries an answer at all, whatever shape it arrives in.
+
+    ollama's client has returned both objects and plain dicts, and the content
+    is the only field `ask` reads.
+    """
+    message = getattr(response, "message", None)
+    if message is None and isinstance(response, dict):
+        message = response.get("message")
+    content = getattr(message, "content", None)
+    if content is None and isinstance(message, dict):
+        content = message.get("content")
+    return bool(content and content.strip())
+
+
 @dataclass
 class Session:
     """A model on an ollama host, and what to say when it is not there."""
@@ -183,8 +198,15 @@ class Session:
         The answer is a few values under a schema, so a chain of thought buys
         nothing and costs the entire call: qwen3:1.7b spent 4222 thinking
         tokens and 80 seconds on a question it answers in 2.3 seconds without.
-        A client that does not take the argument is asked again without it,
-        and not asked with it again for the rest of the run.
+
+        Two ways a model can refuse that, and both end the same way -- once per
+        run, and thinking stays on for the rest of it. A client that does not
+        take the argument raises `TypeError`. A model can also take it and then
+        answer *nothing*: `gpt-oss:20b` comes back with an empty content and an
+        empty thinking, every time, and answers perfectly with the argument
+        left off. Without this that reads as a broken schema and the stage
+        degrades -- a run of a reasoning model kept every sense and wrote no
+        rules, for no reason a warning could explain.
         """
         arguments = dict(
             model=self.model,
@@ -194,7 +216,16 @@ class Session:
         )
         if self._thinkable:
             try:
-                return self.client().chat(**arguments, think=False)
+                response = self.client().chat(**arguments, think=False)
             except TypeError:
                 self._thinkable = False
+            else:
+                if _said_something(response):
+                    return response
+                self._thinkable = False
+                print(
+                    f"[decker] {self.model} answers nothing with its reasoning "
+                    "turned off; leaving it on for this run, which is slower",
+                    file=sys.stderr,
+                )
         return self.client().chat(**arguments)

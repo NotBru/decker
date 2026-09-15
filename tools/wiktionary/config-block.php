@@ -32,10 +32,43 @@ $wgScribuntoEngineConf['luastandalone']['luaPath'] = '/usr/bin/lua5.1';
 $wgScribuntoEngineConf['luastandalone']['memoryLimit'] = 2 * 1024 * 1024 * 1024;
 $wgScribuntoEngineConf['luastandalone']['cpuLimit'] = 120;
 
+# Hebrew's prefix entries (and every page whose templates draw a category
+# tree) call the #categoryTree parser function. Unloaded, Scribunto raises
+# `Lua error: callParserFunction: function "#categorytree" was not found` into
+# the rendered page -- deterministically, on every such page. The extension
+# ships in the MediaWiki tarball and only needed loading.
+wfLoadExtension( 'CategoryTree' );
+
 wfLoadExtension( 'ParserFunctions' );
 $wgPFEnableStringFunctions = true;
 wfLoadExtension( 'TemplateStyles' );
 wfLoadExtension( 'Cite' );
+
+# Wiktionary's own namespaces. The dump carries none of their pages -- that is
+# why `Appendix:Glossary` is read from Wikimedia (see concept-identification.md)
+# -- but the *names* have to exist all the same: modules resolve titles in them,
+# and `mw.title.new( x, 'Appendix' )` against a wiki that has never heard of
+# Appendix is `bad argument #2 to 'title.new' (unrecognized namespace name)`,
+# rendered into the entry. Measured over 113 languages: thirteen of them, all
+# on their number words, which are what link to Appendix:Numbers.
+$wgExtraNamespaces[100] = "Appendix";
+$wgExtraNamespaces[101] = "Appendix_talk";
+$wgExtraNamespaces[102] = "Concordance";
+$wgExtraNamespaces[103] = "Concordance_talk";
+$wgExtraNamespaces[104] = "Index";
+$wgExtraNamespaces[105] = "Index_talk";
+$wgExtraNamespaces[106] = "Rhymes";
+$wgExtraNamespaces[107] = "Rhymes_talk";
+$wgExtraNamespaces[108] = "Transwiki";
+$wgExtraNamespaces[109] = "Transwiki_talk";
+$wgExtraNamespaces[110] = "Thesaurus";
+$wgExtraNamespaces[111] = "Thesaurus_talk";
+$wgExtraNamespaces[114] = "Citations";
+$wgExtraNamespaces[115] = "Citations_talk";
+$wgExtraNamespaces[116] = "Sign_gloss";
+$wgExtraNamespaces[117] = "Sign_gloss_talk";
+$wgExtraNamespaces[118] = "Reconstruction";
+$wgExtraNamespaces[119] = "Reconstruction_talk";
 
 # Emit <div class="mw-heading"> wrappers, as Wikimedia's parser does.
 $wgParserEnableLegacyHeadingDOM = false;

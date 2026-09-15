@@ -27,7 +27,7 @@ from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 
-from decker.languages import name_of
+from decker.languages import section_of
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -69,6 +69,8 @@ _IPA = re.compile(r'<span class="IPA[^"]*">([^<]+)</span>')
 _AUDIO = re.compile(r'src="(//upload\.wikimedia\.org/[^"]+\.(?:ogg|oga|mp3|wav))"')
 _SECTION = re.compile(r'<h2 id="([^"]+)"')
 _ETYMOLOGY_HEADING = re.compile(r'<h[34] id="Etymology[^"]*"')
+#: Any heading at all, used to stop an etymology running into what follows it.
+_ANY_HEADING = re.compile(r"<h[1-6]\b")
 _PARAGRAPH = re.compile(r"<p\b[^>]*>(.*?)</p>", re.DOTALL)
 
 
@@ -105,6 +107,12 @@ class Sense:
     #: definition to `Appendix:Glossary`, which is how the terminology is told
     #: from the words around it without a lexicon of decker's own.
     concepts: tuple[str, ...] = ()
+    #: The titles this definition says its word is a form of, as Wiktionary's
+    #: own markup names them: a form-of line wraps the word it points at in
+    #: `form-of-definition-link`. Empty where the line is written by hand
+    #: rather than through a template, and :func:`decker.glosses._targets`
+    #: reads the prose instead.
+    targets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,6 +138,18 @@ class Entry:
     language: str
     part_of_speech: str
     senses: tuple[Sense, ...]
+    #: The etymology of the block this part of speech sits under, where the
+    #: section has more than one. Wiktionary nests a language as Etymology 1..N
+    #: -> part of speech -> senses, and the senses under one etymology have
+    #: nothing to do with the next: Spanish `mate` is from French in its first
+    #: etymology and from Quechua in its third, and the drink belongs to the
+    #: third. ``None`` where the section numbers no etymologies, and
+    #: :attr:`Page.etymology` answers for the whole section as before.
+    etymology: str | None = None
+    #: Wiktionary's headword line for this part of speech, minus the headword
+    #: itself: `f (plural servilletas)`. The gender and the paradigm, as the
+    #: page announces them. Empty where the line carries nothing but the word.
+    headword: str = ""
 
 
 @dataclass(frozen=True)
@@ -157,6 +177,34 @@ class Page:
             for entry in self.entries
             for sense in entry.senses
         ]
+
+    def etymology_of(self, sense: Sense) -> str | None:
+        """The etymology that belongs to this sense, not to the section.
+
+        By identity rather than by value, the way sense pooling already
+        matches them: one page can carry the same definition text under two
+        etymologies, and those are two different words.
+
+        The entry's own answer is the whole answer, ``None`` included. A
+        numbered etymology is allowed to have no prose -- an inflected form
+        has no origin of its own, it is the base word's -- and falling back to
+        the section would hand it the first etymology on the page, which is
+        the bug this exists to fix. :attr:`etymology` answers only for a sense
+        this page does not hold.
+        """
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return entry.etymology
+        return self.etymology
+
+    def headword_of(self, sense: Sense) -> str:
+        """The headword line of the part of speech this sense sits under."""
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return entry.headword
+        return ""
 
 
 class _Stripper(HTMLParser):
@@ -219,10 +267,16 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     payloads = _payloads(title, edition=edition, refresh=refresh)
     if payloads is None:
         return None
-    language = name_of(lang)
+    language = section_of(lang)
     entries = _entries_from_html(payloads.get("parse"), language)
     if not entries and _is_split(payloads):
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
+    if not entries:
+        pointed_at = _points_at(payloads, language, title)
+        if pointed_at is not None:
+            payloads, entries = _from_pointer(
+                pointed_at, payloads, language, edition=edition, refresh=refresh
+            )
     if not entries:
         return None
     language = entries[0].language or language
@@ -236,6 +290,69 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         audio_urls=audios,
         source=payloads.get("source", ""),
     )
+
+
+#: A spelling whose entry lives under another spelling: Wiktionary writes one
+#: as a box that points there, not as an entry of its own. The simplified 人类
+#: heads a Chinese section whose whole content is "For pronunciation and
+#: definitions of 人类 -- see 人類", and the sense reader, looking for a
+#: numbered list, finds a page with nothing on it. Most of Chinese is written
+#: this way: 82 % coverage in `docs/execution/language-survey.md` was a mixed-
+#: script sample, and a wholly simplified text would lose most of itself.
+#:
+#: The box is a table whose class names the language's own see-template --
+#: `zh-see` -- and the spelling it points at is the first link after the word
+#: "see". Two regexes, as narrow as the form-of pair in `glosses.py` and for
+#: the same reason: a page that merely *mentions* another is not this.
+_SEE_BOX = re.compile(
+    r'<table[^>]*\bclass="[^"]*\b[a-z]{2,4}-see\b[^"]*"[^>]*>(.*?)</table>',
+    re.DOTALL,
+)
+_SEE_TARGET = re.compile(r'\bsee\b\s*(?:<[^>]+>\s*)*<a href="/wiki/([^"#]+)')
+
+
+def _points_at(payloads: dict, language: str, title: str) -> str | None:
+    """The spelling this page hands its section to, if it hands it anywhere.
+
+    Read from inside the language section, so a box under another language --
+    a page can be a variant spelling in one language and a word of its own in
+    the next -- cannot answer for this one.
+    """
+    parse = payloads.get("parse")
+    if not isinstance(parse, dict):
+        return None
+    html = parse.get("parse", {}).get("text")
+    if not isinstance(html, str):
+        return None
+    section = _language_section(html, language)
+    if section is None:
+        return None
+    box = _SEE_BOX.search(section)
+    if box is None:
+        return None
+    pointed = _SEE_TARGET.search(box.group(1))
+    if pointed is None:
+        return None
+    target = urllib.parse.unquote(pointed.group(1)).replace("_", " ")
+    return target if target and target != title else None
+
+
+def _from_pointer(
+    target: str, payloads: dict, language: str, *, edition: str, refresh: bool
+) -> tuple[dict, list]:
+    """Read the section at the spelling this page points at.
+
+    One hop, and the title stays the one the text used: 人类 is what the
+    reader met and what the card teaches, and 人類 is only where the
+    definitions are kept. The payloads travel with the entries, the way a
+    split page's do, so the reading and the etymology come from the same
+    place as the senses.
+    """
+    found = _payloads(target, edition=edition, refresh=refresh)
+    if found is None:
+        return payloads, []
+    entries = _entries_from_html(found.get("parse"), language)
+    return (found, entries) if entries else (payloads, [])
 
 
 #: Wiktionary moves the language sections of an oversized page onto subpages
@@ -276,7 +393,7 @@ def _from_split(
         found = _payloads(subpage, edition=edition, refresh=refresh)
         if found is None:
             continue
-        entries = _entries_from_html(found.get("parse"), name_of(lang))
+        entries = _entries_from_html(found.get("parse"), section_of(lang))
         if entries:
             return found, entries
     return payloads, []
@@ -324,18 +441,28 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
     return payloads
 
 
-#: Wiktionary's server-side failures that come back as page text under a 200.
+#: Wiktionary's server-side failures that come back as page text under a 200,
+#: and only those: a failure worth not caching is one that a second run might
+#: not hit, which means a timeout and nothing else. Every other Scribunto
+#: error is a fact about the wiki that answered -- `Lua error in
+#: Module:zh-glyph`, which every Chinese page with a glyph box raises against
+#: the mirror, and `Lua error: callParserFunction: function "#categoryTree"
+#: was not found`, which every Hebrew prefix page raises there because the
+#: mirror has no CategoryTree extension. Both will say the same thing
+#: tomorrow, and neither touches the definitions. Matching them refused to
+#: cache 狗, 雨, `ב־` and `מ־` at all, so the two languages this release
+#: taught decker to read would have been re-fetched word by word on every run.
+#: A page whose *definitions* really are error text yields no entries, and a
+#: page with no entries was never going to be cached as a gloss anyway.
 _TRANSIENT = (
-    "The time allocated for running Lua modules has expired",
-    "Lua error",
-    "script error",
+    re.compile(r"the time allocated for running (?:lua modules|scripts) has expired"),
 )
 
 
 def _transient_failure(definition: object) -> bool:
     """Whether a definition payload is Wiktionary reporting its own failure."""
     text = json.dumps(definition, ensure_ascii=False).lower()
-    return any(marker.lower() in text for marker in _TRANSIENT)
+    return any(marker.search(text) for marker in _TRANSIENT)
 
 
 class Refused(Exception):
@@ -357,7 +484,16 @@ FAILURES: Counter[str] = Counter()
 
 
 def report() -> None:
-    """Say how many fetches failed, if any did."""
+    """Say how many fetches failed, and how many senses were error text."""
+    if ERRORED_SENSES:
+        total = sum(ERRORED_SENSES.values())
+        kinds = ", ".join(f"{count} {kind}" for kind, count in sorted(ERRORED_SENSES.items()))
+        print(
+            f"[decker] {total} definitions were the wiki reporting a failure "
+            f"({kinds}) and were left out; a mirror missing an extension is "
+            "the usual reason -- see docs/execution/local-wiktionary.md",
+            file=sys.stderr,
+        )
     if not FAILURES:
         return
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(FAILURES.items()))
@@ -591,6 +727,66 @@ def _html_examples(item: dict) -> list[Example]:
 GLOSSARY_PAGE = "Appendix:Glossary"
 _GLOSSARY_LINK = f"/wiki/{GLOSSARY_PAGE}#"
 
+#: What Wiktionary wraps the word a form-of definition points at in. Its own
+#: name for the relation decker otherwise has to infer from English prose.
+_FORM_OF_LINK = "form-of-definition-link"
+
+#: What Wiktionary wraps the line announcing a part of speech in: the word,
+#: its gender, and the forms of its paradigm, each of them a link.
+_HEADWORD_LINE = "headword-line"
+#: The word itself inside that line, which the card already shows beside it.
+_HEADWORD = "headword"
+
+
+def _headword_of(line) -> str:
+    """A headword line with the headword taken off the front.
+
+    `servilleta f (plural servilletas)` becomes `f (plural servilletas)`: the
+    gender and the paradigm, which is what the line adds, without the word,
+    which the card is already showing. A line that is nothing but the word --
+    an inflected form announcing itself -- comes back empty.
+    """
+    whole = _tidy(_text(line))
+    head = ""
+    for node in _find(line, lambda n: _HEADWORD in _classes(n)):
+        head = _tidy(_text(node))
+        break
+    if head and whole.startswith(head):
+        whole = whole[len(head) :]
+    return whole.strip(" \t\n")
+
+
+def _form_of_targets(node, *, skip=()) -> tuple[str, ...]:
+    """The titles a form-of definition points at, as its markup names them.
+
+    Wiktionary wraps them in `form-of-definition-link`, so the relation is
+    read rather than guessed at: the prose reader takes the token after the
+    word "of" and truncates every multi-word lemma -- `bichitos de luz` came
+    back pointing at `bichito` where the page says `bichito de luz` -- and it
+    knows only the two dozen grammar words someone wrote down. Empty for a
+    line written by hand, which is why the prose reader stays as the fallback.
+    """
+    found: list[str] = []
+
+    def walk(child, inside: bool) -> None:
+        if isinstance(child, str) or child.get("tag") in skip:
+            return
+        inside = inside or _FORM_OF_LINK in _classes(child)
+        if inside and child.get("tag") == "a":
+            href = child["attrs"].get("href") or ""
+            if href.startswith("/wiki/"):
+                title = urllib.parse.unquote(href[len("/wiki/") :].split("#", 1)[0])
+                #: A URL spells a space as an underscore; a title has the space.
+                title = title.replace("_", " ")
+                if title and title not in found:
+                    found.append(title)
+        for grandchild in child["children"]:
+            walk(grandchild, inside)
+
+    for child in node["children"]:
+        walk(child, False)
+    return tuple(found)
+
 
 def _concepts_in(node, *, skip=()) -> tuple[str, ...]:
     """The glossary anchors linked under a node, in order, without repeats.
@@ -618,12 +814,30 @@ def _concepts_in(node, *, skip=()) -> tuple[str, ...]:
     return tuple(found)
 
 
+#: A definition that is the wiki reporting its own failure rather than a
+#: meaning. It happens where a module a template calls is missing or broken --
+#: an extension not loaded, an API the wiki's Scribunto predates -- and the
+#: rendered page carries the message in the place the definition should be.
+#: Two of those were found on the mirror and fixed there
+#: (`docs/execution/local-wiktionary.md`); this is the guard that does not
+#: depend on having found them. A card whose definition reads "Lua error in
+#: Module:foo at line 63" is worse than a missing card: it is silent, it is
+#: studied, and nothing in the run says it happened.
+_ERROR_DEFINITION = re.compile(r"\b(?:lua error|script error)\b", re.I)
+
+#: How many senses were dropped for being that, so a run can say so.
+ERRORED_SENSES: Counter[str] = Counter()
+
+
 def _senses_of(items: list) -> list[Sense]:
     """One sense per list item, with a nested list read as what it nests under.
 
     An item whose own text ends in a colon is a header and not a meaning --
     `inflection of auswandern:` -- so it is not a sense of its own and its text
     goes in front of each item nested under it.
+
+    A sense that is a Lua or script error is not a sense at all and is dropped
+    here, counted rather than glossed.
     """
     senses = []
     for item in items:
@@ -645,12 +859,20 @@ def _senses_of(items: list) -> list[Sense]:
         #: Over the same subtree `raw` was read over, so the terminology a
         #: sense is credited with is the terminology its own definition names.
         own_concepts = _concepts_in(item, skip=("dl", "ol", "ul"))
+        own_targets = _form_of_targets(item, skip=("dl", "ol", "ul"))
+        if own and _ERROR_DEFINITION.search(own):
+            #: Before the header test: an error can land anywhere a definition
+            #: can, and one that happens to end in a colon is not a header
+            #: with sub-senses, it is an error.
+            ERRORED_SENSES[_ERROR_DEFINITION.search(own).group(0).lower()] += 1
+            continue
         if own and not header:
             senses.append(
                 Sense(
                     definition=own,
                     examples=tuple(_html_examples(item)),
                     concepts=own_concepts,
+                    targets=own_targets,
                 )
             )
         for child in nested:
@@ -658,6 +880,7 @@ def _senses_of(items: list) -> list[Sense]:
             if not inner:
                 continue
             inner_concepts = _concepts_in(child, skip=("dl", "ol", "ul"))
+            inner_targets = _form_of_targets(child, skip=("dl", "ol", "ul"))
             senses.append(
                 Sense(
                     definition=f"{own}: {inner}".strip() if header and own else inner,
@@ -666,6 +889,10 @@ def _senses_of(items: list) -> list[Sense]:
                     #: terminology is theirs too -- `inflection of curar:`
                     #: carries the word, the lines under it carry the tags.
                     concepts=_merge(own_concepts if header else (), inner_concepts),
+                    #: And so is the word it names: `inflection of curar:` is
+                    #: where the link sits, and the lines under it are the
+                    #: inflections *of* it.
+                    targets=_merge(own_targets if header else (), inner_targets),
                 )
             )
     return senses
@@ -684,12 +911,8 @@ def _merge(*groups: tuple[str, ...]) -> tuple[str, ...]:
 def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
     """The language's entries, read from the rendered page.
 
-    The walk follows document order rather than looking only at the top of the
-    section: the section is sliced from its `<h2>`, which sits *inside* the
-    heading's wrapper div, so the fragment is unbalanced and nesting depth
-    means nothing. A list is a sense list when the nearest heading before it
-    names a part of speech; a list inside a list item is a sub-sense and is
-    left to the item that holds it.
+    One etymology block at a time, so each part of speech keeps the etymology
+    the page hangs it under rather than the section's first.
     """
     if not isinstance(parse, dict):
         return []
@@ -699,9 +922,58 @@ def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
     section = _language_section(html, language)
     if section is None:
         return []
+    return [
+        entry
+        for etymology, block in _etymology_blocks(section)
+        for entry in _entries_in(block, language, etymology)
+    ]
 
+
+def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
+    """The section cut at its Etymology headings, each block with its own text.
+
+    Wiktionary numbers the etymologies of a language and hangs the parts of
+    speech under whichever one they belong to. Reading the section whole gives
+    every sense the first etymology, which is wrong on every page that has
+    more than one -- Spanish `mate` has six, and the card for the drink said
+    it came from French. Cutting first and walking each piece keeps the
+    association the page already states.
+
+    A section that numbers nothing is one block with no etymology of its own;
+    :attr:`Page.etymology` answers for it, exactly as before.
+    """
+    headings = list(_ETYMOLOGY_HEADING.finditer(section))
+    if not headings:
+        #: Nothing numbered: one block, and whatever the section says once.
+        return [(_etymology(section), section)]
+    blocks: list[tuple[str | None, str]] = []
+    #: Whatever precedes the first Etymology heading -- a Pronunciation the
+    #: whole section shares, usually -- belongs to no etymology in particular.
+    if headings[0].start() > 0:
+        blocks.append((None, section[: headings[0].start()]))
+    for position, heading in enumerate(headings):
+        end = (
+            headings[position + 1].start()
+            if position + 1 < len(headings)
+            else len(section)
+        )
+        block = section[heading.start() : end]
+        blocks.append((_etymology(block), block))
+    return blocks
+
+
+def _entries_in(section: str, language: str, etymology: str | None) -> list[Entry]:
+    """The parts of speech of one slice of a language section.
+
+    The walk follows document order rather than looking only at the top of the
+    slice: the slice is cut at an `<h2>` or an `<h3>`, which sits *inside* the
+    heading's wrapper div, so the fragment is unbalanced and nesting depth
+    means nothing. A list is a sense list when the nearest heading before it
+    names a part of speech; a list inside a list item is a sub-sense and is
+    left to the item that holds it.
+    """
     entries: list[Entry] = []
-    state = {"heading": None}
+    state = {"heading": None, "headword": ""}
 
     def walk(node, inside_item: bool) -> None:
         for child in node["children"]:
@@ -710,6 +982,12 @@ def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
             tag = child.get("tag")
             if tag in ("h2", "h3", "h4", "h5", "h6"):
                 state["heading"] = _tidy(_text(child, skip=("span",)))
+                #: A part of speech announces itself or it does not; the one
+                #: before it must not answer for it.
+                state["headword"] = ""
+                continue
+            if _HEADWORD_LINE in _classes(child):
+                state["headword"] = _headword_of(child)
                 continue
             if tag == "ol" and not inside_item and state["heading"]:
                 if (
@@ -728,6 +1006,8 @@ def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
                                 language=language,
                                 part_of_speech=state["heading"],
                                 senses=tuple(senses),
+                                etymology=etymology,
+                                headword=state["headword"],
                             )
                         )
                     continue
@@ -750,14 +1030,24 @@ def _language_section(html: str, language: str) -> str | None:
 
 
 def _etymology(section: str) -> str | None:
-    """The first paragraph under the section's first Etymology heading."""
+    """The first paragraph under the section's first Etymology heading.
+
+    Bounded by the next heading of any level, because a numbered etymology is
+    allowed to have no prose at all: `carga`'s second is a bare heading
+    followed straight by its Verb, and an unbounded search walked past it and
+    came back with the headword line -- "Deverbal from cargar." for the noun
+    and "carga" for the verb form.
+    """
     heading = _ETYMOLOGY_HEADING.search(section)
     if heading is None:
         return None
-    for paragraph in _PARAGRAPH.finditer(section, heading.end()):
+    following = _ANY_HEADING.search(section, heading.end())
+    end = following.start() if following else len(section)
+    for paragraph in _PARAGRAPH.finditer(section, heading.end(), end):
         text = strip_html(paragraph.group(1))
         if text:
             return text
+    return None
     return None
 
 
@@ -783,7 +1073,7 @@ def glossary(edition: str, *, refresh: bool = False) -> dict[str, Concept]:
     The glossary is one long definition list: a `dt` naming a piece of
     terminology, carrying an invisible anchor for each spelling it answers to,
     and a `dd` explaining it. Several anchors therefore land on one entry --
-    1,005 anchors over 622 entries in the English edition -- and returning the
+    1,005 anchors over 595 entries in the English edition -- and returning the
     same :class:`Concept` for all of them is what keeps `first_person` and
     `1st_person` one card rather than two.
 
@@ -827,50 +1117,91 @@ REVISION_PATH = (
 
 
 def _glossary_page(edition: str, *, refresh: bool = False) -> dict | None:
-    """`Appendix:Glossary` from Wikimedia, re-read only when it has changed.
+    """`Appendix:Glossary`, from the mirror when it has one, Wikimedia when not.
 
-    **From Wikimedia whatever `--wiktionary-host` says.** A mirror built from
-    `pages-articles` has no `Appendix:` namespace, so pointing this at one
-    would turn concept identification off for exactly the runs a mirror is
-    meant to serve. It costs nothing the mirror exists to protect: the title is
-    the same on every run and for every text, so asking for it says only that
-    someone is using decker -- unlike the vocabulary stream, which is what the
-    mirror is for.
+    It used to be Wikimedia unconditionally, because a mirror built from
+    `pages-articles` appeared to have no `Appendix:` namespace, and pointing
+    this at one would have turned concept identification off for exactly the
+    runs a mirror is meant to serve. That turned out to be a property of how
+    the mirror was built rather than of the dump: the pages were imported into
+    the main namespace with their prefix as part of the title, because the
+    namespace had not been declared yet. Declared, and with MediaWiki's own
+    `namespaceDupes.php` run over them, the local `Appendix:Glossary` renders
+    all 622 entries -- see `docs/execution/local-wiktionary.md`.
 
-    Read once and then only when it changes. The glossary is a live wiki page
-    that gains an entry now and then, and a cache with no way to notice would
-    hold a stale copy for good; re-fetching half a megabyte every run to find
-    out would be worse. So the revision id is asked for -- a few hundred bytes
-    -- and the page itself only when that id has moved.
+    So the mirror is asked first and Wikimedia is the fallback, which keeps the
+    guarantee that made this an exception (a run never silently loses its
+    concepts) and adds the one thing the exception cost: a run with no network
+    at all now has them. A mirror's copy is a dump's copy, so it is cached
+    without a revision and never re-asked.
 
-    A run that cannot reach Wikimedia keeps the copy it has: a glossary one
-    revision old explains `dative case` exactly as well.
+    From Wikimedia, the page is live, and read once and then only when it
+    changes: a cache with no way to notice would hold a stale copy for good,
+    and re-fetching half a megabyte every run to find out would be worse. So
+    the revision id is asked for -- a few hundred bytes -- and the page itself
+    only when that id has moved. A run that cannot reach Wikimedia keeps the
+    copy it has: a glossary one revision old explains `dative case` exactly as
+    well.
     """
     upstream = DEFAULT_ORIGIN.format(edition=edition).rstrip("/")
+    mirror = origin(edition)
+    quoted = urllib.parse.quote(GLOSSARY_PAGE, safe="")
     path = page_cache_path(GLOSSARY_PAGE, edition)
+
     cached = None
     if path.exists() and not refresh:
         with gzip.open(path, "rt", encoding="utf-8") as stored:
             cached = json.load(stored)
-        if cached.get("source") != upstream:
-            #: Written by an older decker, or against a mirror that answered
-            #: with something else. Either way it is not what this reads.
+        if cached.get("source") not in (upstream, mirror):
+            #: Written against a source this run is not reading from.
             cached = None
 
-    revision = _revision(upstream, GLOSSARY_PAGE)
-    if cached is not None and (revision is None or revision == cached.get("revision")):
-        return cached
+    if mirror != upstream:
+        if cached is not None and cached.get("source") == mirror:
+            return cached
+        parse = _get_json(mirror + PARSE_PATH.format(title=quoted))
+        if _has_entries(parse):
+            payloads = {"parse": parse, "source": mirror}
+            _keep_glossary(path, payloads)
+            return payloads
+        print(
+            f"[decker] {mirror} has no {GLOSSARY_PAGE}; reading it from "
+            "Wikimedia instead, which is the one title a mirrored run still "
+            "names upstream",
+            file=sys.stderr,
+        )
 
-    quoted = urllib.parse.quote(GLOSSARY_PAGE, safe="")
+    revision = _revision(upstream, GLOSSARY_PAGE)
+    if cached is not None and cached.get("source") == upstream and (
+        revision is None or revision == cached.get("revision")
+    ):
+        return cached
     parse = _get_json(upstream + PARSE_PATH.format(title=quoted))
     if parse is None:
         #: Offline, or refused. What is already here beats nothing.
         return cached
     payloads = {"parse": parse, "source": upstream, "revision": revision}
+    _keep_glossary(path, payloads)
+    return payloads
+
+
+def _has_entries(parse: object) -> bool:
+    """Whether a parse payload carries a glossary rather than an API error.
+
+    The definition list is the whole page, so one `<dt` is the test: a missing
+    title comes back as an `error` object and a namespace that does not exist
+    comes back as a page with no list in it.
+    """
+    if not isinstance(parse, dict):
+        return False
+    text = parse.get("parse", {}).get("text")
+    return isinstance(text, str) and "<dt" in text
+
+
+def _keep_glossary(path: Path, payloads: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "wt", encoding="utf-8") as out:
         json.dump(payloads, out, ensure_ascii=False)
-    return payloads
 
 
 def _revision(origin: str, title: str) -> int | None:

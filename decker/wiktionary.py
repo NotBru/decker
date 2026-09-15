@@ -23,6 +23,7 @@ from pathlib import Path
 import stanza
 
 from decker import trees
+from decker.languages import joiner_of
 from decker.nlp import pipeline
 from decker.trees import Node
 
@@ -129,13 +130,14 @@ def build_index(
     build the whole index the design's one-time setup describes.
     """
     path = dump_path(edition, refresh=refresh)
+    joiner = joiner_of(lang)
     index = TitleIndex(edition=edition)
     pending: list[str] = []
     for title in iter_titles(path):
         if " " in title:
             if vocabulary is None or _reachable(title, vocabulary):
                 pending.append(title)
-        elif vocabulary is None or title.lower() in vocabulary:
+        elif vocabulary is None or _spelled(title, joiner) in vocabulary:
             index.words.add(title)
     print(
         f"[decker] {len(index.words)} single-word titles, "
@@ -145,6 +147,18 @@ def build_index(
     for title, tree in _parse_titles(pending, lang=lang, edition=edition):
         index.add_phrase(title, tree)
     return index
+
+
+def _spelled(title: str, joiner: str) -> str:
+    """The title as a source text could spell it, for the vocabulary filter.
+
+    A bound morpheme is written with a joiner the running text never has --
+    Hebrew `ל־` against a text that only ever writes `ל` -- so a vocabulary
+    built from the text would throw the title away before term extraction
+    could ask for it. The joiner is only stripped for a language that has one,
+    so nothing else grows an entry it did not have.
+    """
+    return (title.rstrip(joiner) if joiner else title).lower()
 
 
 def _reachable(title: str, vocabulary: set[str]) -> bool:

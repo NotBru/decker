@@ -38,6 +38,11 @@ class Side:
     etymology: str | None = None
     #: Cached sound file, on the face that names the pronunciation.
     audios: tuple[str, ...] = ()
+    #: How Wiktionary announces the word -- gender and paradigm. On the
+    #: answers of both cards: it is part of knowing the word, not part of the
+    #: question, and a recognition card showing `f (plural servilletas)` on
+    #: its front would be answering half of itself.
+    headword: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,6 +145,7 @@ def _pair(
             ipa=gloss.ipa,
             etymology=etymology,
             audios=gloss.audios,
+            headword=gloss.headword,
         ),
         depends_on=_after(builder, gloss),
     )
@@ -161,7 +167,12 @@ def _pair(
         anchor=gloss.anchor,
         attribution=gloss.attribution,
         challenge=Side(definition=definition),
-        answer=Side(term=gloss.surface, ipa=gloss.ipa, etymology=etymology),
+        answer=Side(
+            term=gloss.surface,
+            ipa=gloss.ipa,
+            etymology=etymology,
+            headword=gloss.headword,
+        ),
         #: Its own recognition card, and nothing else: whatever the gloss
         #: depends on is already behind that card, and the ordering the
         #: design asks for is transitive.

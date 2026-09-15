@@ -67,7 +67,9 @@ def run(
     return [
         SentenceTerms(
             text=sentence.text,
-            terms=extract(sentence, index, join_particles=join_particles),
+            terms=extract(
+                sentence, index, join_particles=join_particles, lang=target_lang
+            ),
         )
         for sentence in sentences
     ]

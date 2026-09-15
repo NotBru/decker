@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from decker import trees
+from decker.languages import joiner_of
 from decker.wiktionary import TitleIndex
 
 
@@ -31,24 +32,52 @@ class Term:
     #: Whether the term opens its sentence, so a leading capital may be an
     #: artefact of that position rather than the term's own spelling.
     sentence_initial: bool = False
+    #: The parse's part of speech for the term's head token, as a UD tag:
+    #: `NOUN`, `ADP`, `VERB`. The sentence's own grammar, which is a thing
+    #: nothing downstream had -- sense disambiguation was choosing between a
+    #: preposition and the name of a letter with only the sentence to go on.
+    upos: str = ""
+    #: The morphological categories the parse marks on the tokens this term
+    #: covers, by UD's names for them and without their values: `Case`,
+    #: `Number`, `Gender`. What the *values* are is this occurrence's
+    #: business; which categories exist at all is the language's, and that is
+    #: what the rules stage is given so it does not write a rule about
+    #: feminine nouns in Turkish.
+    features: tuple[str, ...] = ()
+    #: Wiktionary's own spelling of this form as a bound morpheme, where the
+    #: term is one and the dictionary has it: `ל` in the text is `ל־` on the
+    #: page. The same form under the dictionary's convention rather than
+    #: another word, so :attr:`spellings` carries it and definition fetching
+    #: pools its senses with the plain spelling's instead of ranking one
+    #: behind the other.
+    joined: str = ""
 
     @property
     def spellings(self) -> tuple[str, ...]:
-        """The form's own spellings: as written, and, where the capital is
-        only the sentence start, without it.
+        """The form's own spellings: as written, without a sentence-initial
+        capital, and as a bound morpheme where it is one.
 
-        Which of the two the term really is depends on the sense, not on the
-        position, so both are kept and definition fetching pools the entries
-        they reach rather than picking one here.
+        Which of them the term really is depends on the sense, not on the
+        position and not on the dictionary's typography, so they are all kept
+        and definition fetching pools the entries they reach rather than
+        picking one here.
         """
-        if not self.sentence_initial:
-            return (self.surface,)
-        lowered = decapitalize(self.surface)
-        return (self.surface,) if lowered == self.surface else (self.surface, lowered)
+        found = [self.surface]
+        if self.sentence_initial:
+            lowered = decapitalize(self.surface)
+            if lowered != self.surface:
+                found.append(lowered)
+        if self.joined:
+            found.append(self.joined)
+        return tuple(found)
 
 
 def extract(
-    sentence: Any, index: TitleIndex, *, join_particles: bool = False
+    sentence: Any,
+    index: TitleIndex,
+    *,
+    join_particles: bool = False,
+    lang: str = "",
 ) -> list[Term]:
     """Extract the terms of one parsed sentence.
 
@@ -81,10 +110,19 @@ def extract(
     ]
     kept.sort(key=min)
 
+    joiner = joiner_of(lang)
     terms: list[Term] = []
     seen: set[str] = set()
     for covered in kept:
-        term = _term(matches[covered], covered, words, initial, base)
+        bound = _bound_title(covered, words, joiner, index) if joiner else ""
+        term = _term(
+            matches[covered] | ({bound} if bound else set()),
+            covered,
+            words,
+            initial,
+            base,
+            joined=bound,
+        )
         if term.surface not in seen:
             seen.add(term.surface)
             terms.append(term)
@@ -123,12 +161,35 @@ def decapitalize(text: str) -> str:
     return text[:1].lower() + text[1:]
 
 
+def _bound_title(
+    covered: frozenset[int], words: dict[int, Any], joiner: str, index: TitleIndex
+) -> str:
+    """The title this term has as a bound morpheme, if it has one.
+
+    A clitic is what the tokenizer split *off*: a word of a multiword token
+    that is not the token's last. A word standing on its own is not one
+    however short it is, so `ל` used as a noun keeps the letter's page and
+    only the prefix reaches the preposition's. The title has to exist for it
+    to be offered -- `של־` does not, and `של` is a free word anyway.
+    """
+    if len(covered) != 1:
+        return ""
+    word = words[next(iter(covered))]
+    siblings = list(getattr(getattr(word, "parent", None), "words", ()) or ())
+    if len(siblings) < 2 or siblings[-1].id == word.id:
+        return ""
+    title = f"{word.text}{joiner}"
+    return title if title in index.words else ""
+
+
 def _term(
     entries: set[str],
     covered: frozenset[int],
     words: dict[int, Any],
     initial: set[int],
     base: int,
+    *,
+    joined: str = "",
 ) -> Term:
     ids = tuple(sorted(covered))
     tokens = [words[token_id] for token_id in ids]
@@ -141,6 +202,9 @@ def _term(
         token_ids=ids,
         sentence_initial=ids[0] in initial,
         spans=_spans(tokens, base),
+        upos=_head(tokens).upos or "",
+        features=_features(tokens),
+        joined=joined,
     )
     own = set(term.spellings)
     return dataclasses.replace(
@@ -158,3 +222,34 @@ def _entry_rank(entry: str, own: set[str], lemma: str) -> tuple[int, str]:
     if entry == lemma:
         return (1, entry)
     return (2, entry)
+
+
+def _head(tokens: list[Any]) -> Any:
+    """The token the others of a term hang off.
+
+    A term is one word as often as not, and then this is that word. Where it
+    is a phrase -- `gave up`, `tener que` -- the part of speech that describes
+    the whole of it is the head's, so the token whose own head lies outside
+    the term is the one asked. The first token answers for a term whose head
+    is not in the parse at all, which a cycle or a fragment can produce.
+    """
+    covered = {token.id for token in tokens}
+    for token in tokens:
+        if getattr(token, "head", 0) not in covered:
+            return token
+    return tokens[0]
+
+
+def _features(tokens: list[Any]) -> tuple[str, ...]:
+    """The names of the morphological categories the parse marks on ``tokens``.
+
+    Stanza writes them as `Case=Dat|Gender=Fem|Number=Sing`; the halves before
+    the equals signs are what this is, sorted and without repeats.
+    """
+    found = set()
+    for token in tokens:
+        for feature in (getattr(token, "feats", None) or "").split("|"):
+            name, _, value = feature.partition("=")
+            if name and value:
+                found.add(name)
+    return tuple(sorted(found))

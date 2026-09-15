@@ -109,6 +109,12 @@ class Gloss:
     #: than quoted from it, and a card crediting Wiktionary for it would be
     #: saying something false about a licence.
     attribution: str = ""
+    #: How Wiktionary announces the word: its gender and its paradigm, as
+    #: `f (plural servilletas)`. Bru's call, 2026-09-14: it goes on the
+    #: answers, on whichever word the page states it for, and it culls
+    #: nothing -- an inflected form of the text still gets its own card.
+    #: Empty for a concept, a rule, and for a form that announces only itself.
+    headword: str = ""
 
 
 @dataclass
@@ -226,7 +232,10 @@ class _Builder:
                 definition=sense.definition,
                 language=page.language,
                 examples=sense.examples,
-                etymology=page.etymology,
+                #: The etymology of this sense's own block, which is the
+                #: section's only where the page numbers just one.
+                etymology=page.etymology_of(sense),
+                headword=page.headword_of(sense),
                 ipa=page.ipa,
                 audio_urls=page.audio_urls,
                 audios=self._audios(page),
@@ -426,6 +435,7 @@ def build(
         host=host,
         enabled=rules,
         refresh=refresh_answers,
+        categories=_categories(sentences),
     )
     builder = _Builder(
         edition=edition,
@@ -485,6 +495,25 @@ def build(
     morphology.report()
     print(f"[decker] {len(builder.glosses)} glosses", file=sys.stderr)
     return builder.glosses
+
+
+def _categories(sentences: list["SentenceTerms"]) -> tuple[str, ...]:
+    """Every morphological category the parse marks anywhere in the text.
+
+    Read off the terms rather than off the document, because the terms are
+    what this stage was given -- and they are nearly all of it: a category a
+    language inflects for is marked on words that have Wiktionary entries.
+    """
+    return tuple(
+        sorted(
+            {
+                category
+                for sentence in sentences
+                for term in sentence.terms
+                for category in term.features
+            }
+        )
+    )
 
 
 def _gloss_term(builder: _Builder, term: Term, sentence: str) -> None:
@@ -648,7 +677,18 @@ def references(page: Page) -> dict[str, tuple[str, ...]]:
     found: dict[str, tuple[str, ...]] = {}
     for entry in page.entries:
         for sense in entry.senses:
-            if targets := _targets(sense.definition, page.title):
+            #: Wiktionary's own markup first, the prose only where there is
+            #: none. Measured over nine Spanish sources: the two agree on
+            #: 1,228 definitions and disagree on nine, and the markup is right
+            #: in all nine -- the prose reader truncates a multi-word lemma to
+            #: its first word. The markup also catches sixteen relations the
+            #: word list does not know (`female equivalent of`, `ellipsis
+            #: of`), and misses fifty-five that are written by hand rather
+            #: than through a template, which is what the fallback is for.
+            targets = tuple(
+                title for title in sense.targets if title != page.title
+            ) or _targets(sense.definition, page.title)
+            if targets:
                 found[sense.definition] = targets
         #: Only a block that *opens* by naming the word is a form-of block.
         #: Keying off any sense let `ir`, whose tenth definition mentions the
@@ -709,6 +749,7 @@ def _pooled_senses(
         language=candidates[0].language,
         parts_of_speech=tuple(part for _, part, _ in labelled),
         sources=tuple(page.title for page, _, _ in labelled),
+        upos=term.upos,
     )
     surviving = {id(sense) for sense in kept}
     chosen = [(page, sense) for page, _, sense in labelled if id(sense) in surviving]
@@ -730,12 +771,18 @@ def _pooled_senses(
 def _spelling(term: Term, page: Page) -> str:
     """The term's form, spelled the way Wiktionary spells the entry it won.
 
-    Only the capital is at stake: where the entry is the same word, its
-    spelling is taken whole, so `Cuando` glossed from `cuando` is one thing to
-    learn rather than two. Where the entry is a different word -- `enrulada`
-    glossed from `enrulado`, for want of a page of its own -- the form the
-    text uses is kept, since the entry's is not the term.
+    Whatever matched is what the card is fronted with, as long as it is one of
+    the term's own spellings. The capital was the first case -- `Cuando`
+    glossed from `cuando` is one thing to learn rather than two -- and the
+    bound morpheme is the second: a clitic that won its entry at `ל־` is
+    fronted `ל־`, with the maqaf, because that is what the dictionary calls
+    the thing the card teaches and the maqaf is the part that says it attaches
+    to the next word. Bru's call, 2026-09-15.
+
+    Where the entry is a different word -- `enrulada` glossed from `enrulado`,
+    for want of a page of its own -- the form the text uses is kept, since the
+    entry's is not the term.
     """
-    if term.surface.lower() == page.title.lower():
+    if page.title in term.spellings or term.surface.lower() == page.title.lower():
         return page.title
     return term.surface
