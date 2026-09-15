@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from decker import anki, languages, markdown, pages, pipeline, shuffling
+from decker import anki, languages, markdown, pages, pipeline, shuffling, subtitles
 from decker.wiktionary import USER_AGENT
 from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
 from decker.translation import SOURCE_LANG
@@ -308,9 +308,28 @@ def _taught(previous: str | None) -> frozenset[str]:
 
 
 def _source_text(source: str) -> str:
+    """The source as running text, whatever file it arrived in.
+
+    The extension decides: `.srt` and `.vtt` are cue files and are folded back
+    into prose by :mod:`decker.subtitles` before anything else sees them.
+    Standard input has no extension to go by, so it is sniffed instead -- a
+    timing line is unmistakable -- which also catches a cue file saved under
+    the wrong name.
+    """
     if source == "-":
-        return sys.stdin.read()
-    return Path(source).read_text(encoding="utf-8")
+        raw = sys.stdin.read()
+        return subtitles.text_of(raw) if subtitles.looks_like(raw) else raw
+    path = Path(source)
+    raw = path.read_text(encoding="utf-8")
+    if path.suffix.lower() not in subtitles.SUFFIXES:
+        return raw
+    text = subtitles.text_of(raw)
+    print(
+        f"[decker] {path.suffix} read as text: {len(raw.splitlines())} lines "
+        f"of cues -> {len(text)} characters",
+        file=sys.stderr,
+    )
+    return text
 
 
 def _run_extract(arguments: argparse.Namespace) -> int:

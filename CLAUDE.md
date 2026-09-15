@@ -34,6 +34,9 @@ the code changes.
   properly.
 - [Deck growth](docs/execution/deck-growth.md) — what a deck costs as the corpus grows, measured over
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
+- [Subtitles as a source](docs/execution/subtitles.md) — `.srt` and `.vtt` folded back into prose:
+  the rolling repeats, the markup, and where sentence boundaries come from when a machine wrote the
+  captions and left no punctuation.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.
@@ -46,6 +49,7 @@ uv run decker deck --target-lang es --format text source.txt   # the cards, in s
 uv run decker define --target-lang es --format markdown source.txt   # glosses, and stop there
 uv run decker extract --target-lang es source.txt      # terms, sentence by sentence
 uv run decker index --target-lang es                   # build the whole title index up front
+uv run decker --target-lang es episode.vtt             # subtitles: .srt and .vtt read as prose
 ```
 
 With no subcommand the whole pipeline runs, which is what `deck` does; `define`, `extract` and
