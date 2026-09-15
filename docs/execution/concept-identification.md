@@ -46,13 +46,24 @@ what follows is the consequence of taking that literally and finding where it ne
 
 ## The glossary, and what a concept is called
 
-- **One page, from Wikimedia, re-read only when it changes.** `Appendix:Glossary` is a single
-  554 KB page holding the whole inventory, and it is read from `<edition>.wiktionary.org` whatever
-  `--wiktionary-host` says. Two reasons: a mirror built from `pages-articles` has no `Appendix:`
-  namespace, so pointing this at one would turn the stage off for exactly the runs a mirror is
-  meant to serve; and the title is the same on every run and for every text, so asking for it says
-  only that someone is using decker — which is not the vocabulary stream the mirror exists to keep
-  off the network.
+- **One page — from the mirror when it has one, from Wikimedia when it does not.**
+  `Appendix:Glossary` is a single 554 KB page holding the whole inventory: 1,005 anchors over 595
+  entries.
+
+  This used to read from `<edition>.wiktionary.org` unconditionally, on the grounds that a mirror
+  built from `pages-articles` has no `Appendix:` namespace, so pointing the stage at one would turn
+  it off for exactly the runs a mirror is meant to serve. The grounds were wrong, and measuring
+  them is what showed it: the dump *does* carry the Appendix pages — 32,175 of them — and they had
+  been imported into the main namespace with `Appendix:` as part of the title, because the namespace
+  had not been declared when the import ran. Declared, and with MediaWiki's `namespaceDupes.php`
+  run over them, the local page gives decker 1,003 anchors over the same 595 entries; the two
+  anchors are on a decorative Wikipedia box. See `local-wiktionary.md`.
+
+  So the mirror is asked first, Wikimedia is the fallback, and the guarantee that made this an
+  exception survives: a run never silently loses its concepts. What it gains is the case the old
+  rule could not serve at all — no network, mirror only, concepts intact. The fallback still leaks
+  nothing the mirror exists to hide: the title is the same on every run and for every text, so
+  asking for it says only that someone is using decker.
 
   It is a live wiki page that gains an entry now and then, so a cache with no way to notice would
   hold a stale copy for good, while re-fetching half a megabyte every run to find out would be

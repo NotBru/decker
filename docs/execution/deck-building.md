@@ -26,6 +26,34 @@ source of truth: where one of these contradicts them, the design wins and the co
   deck would mean fetching audio the learner never hears. If the design meant the list to be
   exhaustive, this is the line to cut.
 
+### What a card carries of the source text: the word, and nothing else
+
+Worth stating outright, because it is load-bearing and because nothing enforces it. A `Gloss` holds
+the inflected form, the entry it was read from, Wiktionary's definition, examples, etymology and
+IPA, the audio paths, and — for a rule card — prose a model wrote. **No sentence of the source text
+is anywhere on a card.** The text is read to decide *which* words to teach and in what order, and a
+sentence of it goes into the disambiguation prompt to settle a sense; neither survives into a
+gloss, so neither reaches the deck.
+
+What that buys, in order of how much it matters:
+
+- **A deck is distributable in a way the source text is not.** A `.apkg` built from a copyrighted
+  work — a subtitle track, a novel — contains Wiktionary's CC BY-SA text, a model's prose, and a
+  list of which words the work uses in the order a learner should meet them. It does not reproduce
+  the work. That is a much weaker thing for a rights holder to object to than a deck of its
+  sentences would be, and it is the reason the licensing section can talk only about Wiktionary.
+- **The example sentences on a card are Wiktionary's**, which is also why they are attributed to it
+  and why the translator is allowed to touch the rendering half and not the sentence half.
+- **It is not an accident and it is not defended.** Adding the source sentence to the recognition
+  card is an obvious feature request — it is the sentence the learner actually met — and it would be
+  a real improvement to the deck. It would also change what a deck *is*, from a word list into a
+  quotation of the work, and every sentence above stops being true. If that is ever built, the
+  licensing section needs rewriting in the same commit.
+
+The prompts are the other half of this: a hosted model backend sends those sentences verbatim to a
+third party. `model-backends.md` records that as privacy exposure; for a text that is not the
+user's own it is a copyright question too, and the ollama default is what keeps both answers simple.
+
 ## Translation
 
 - v1's mother language *is* the edition's, so the ordinary run translates nothing and never opens a

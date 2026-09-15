@@ -29,6 +29,14 @@ the code changes.
 - [Morphological rules](docs/execution/morphological-rules.md) — the regularity behind an inflected
   form, learned once: what a feature bundle is, when a rule is written and when its card appears,
   and what the stage costs.
+- [Detecting a form-of](docs/execution/form-of-detection.md) — the two regexes that decide what
+  points at what: how precise they are, what widening them costs, and the markup that would do it
+  properly.
+- [Deck growth](docs/execution/deck-growth.md) — what a deck costs as the corpus grows, measured over
+  nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
+- [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
+  languages for a speaker of English: what works everywhere, which stage gives way in each, and what
+  was done about the first four findings.
 
 ## Running it
 
@@ -69,11 +77,14 @@ from Wikimedia afterwards; the payload records which source it was, since a mirr
 no audio and a run has to be able to say that. Cards built against one are silent. The title dump
 still comes from `dumps.wikimedia.org`, once per edition.
 
-`Appendix:Glossary` is the exception: it is read from Wikimedia whatever `--wiktionary-host` says,
-because a `pages-articles` mirror has no `Appendix:` namespace and pointing this at one would turn
-concept identification off for exactly the runs a mirror serves. It leaks nothing the mirror exists
-to hide — the title is the same on every run and for every text. It is a live page, so its revision
-id is asked for each run and the page itself re-read only when that id has moved.
+`Appendix:Glossary` is read from the mirror when the mirror has it and from Wikimedia when it does
+not, which keeps concept identification working for exactly the runs a mirror serves. A mirror has
+it only if its namespaces were declared and `namespaceDupes.php` run — the dump carries the pages,
+but an import with no `Appendix:` namespace files them under main — see
+[A local Wiktionary](docs/execution/local-wiktionary.md). The Wikimedia fallback leaks nothing the
+mirror exists to hide, the title being the same on every run and for every text; it is a live page
+there, so its revision id is asked for each run and the page re-read only when that id has moved.
+A mirror's copy is a dump's copy and is cached without a revision.
 
 ## Tests
 

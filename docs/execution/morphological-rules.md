@@ -75,6 +75,41 @@ Both prompts put their fixed instructions first and their variable parts last, s
 share as long a prefill as ollama can keep — the same shape, and for the same reason, as the other
 two stages' prompts.
 
+### The prompt names the categories the language actually has
+
+The ten-language survey found the model stating rules over a gender the language does not have —
+Turkish "for **feminine** nouns, add the ending -ın to form the genitive singular", Hungarian "for
+nouns that are **masculine**, the singular form is created by adding -a". The endings are often
+right and the class is invented, which is the worst shape a wrong card can take: it teaches a
+distinction the language does not make, and a learner has no way to see that from the card.
+
+The parse already knows. Stanza marks the categories a language inflects for on every word it reads,
+so a category marked nowhere in a whole text is one the language does not have — for the pervasive
+six, at least (gender, number, case, person, tense, definiteness), which are marked on nearly every
+word that could carry one. Term extraction collects the names off the tokens it covers,
+`glosses.build` unions them over the text, and `PROMPT_REGULAR` gains a paragraph naming both
+halves: what the language marks, what it never marks, and not to state a rule over the second.
+
+Three things were deliberately left out:
+
+- **The rarer categories.** Aspect, voice, animacy and degree are neither claimed present nor
+  claimed absent. Absent from 2,500 characters they may be absent from the sample only, and a prompt
+  that says so with confidence would be worse than one that says nothing.
+- **Any paragraph at all when there is nothing to warn about.** A language marking all six — every
+  European language in the survey but the two agglutinative ones — gets the prompt exactly as it was,
+  because the inventory could only tell the model things it is not getting wrong. It costs the
+  languages that do not need it nothing.
+- **Any paragraph when the parse marked none of them.** Japanese marks none of the six, and the
+  honest reading of that is that the parse has nothing to say about the language, not that the
+  language has no grammar.
+
+**Mood was in the list and was taken out**, which is what keeping the list short is for. Run over
+all ten samples it came back absent for Dutch and Hebrew, both of which have an imperative: UD
+treebanks mark `Mood` sparsely, so the absence is the treebank's habit and not the language's. The
+other six came back absent only where the language really has nothing — gender in Hungarian,
+Turkish, Japanese and Chinese, definiteness in Turkish, tense in Chinese — which is the check this
+kind of table needs before it is allowed to tell a model anything.
+
 ### Irregular means: no rule, and a card forever
 
 A model answering "not regular" leaves the word with the ordinary form-of card definition fetching
@@ -191,6 +226,99 @@ four instances it may be culled and the learner loses a card they cannot derive.
 no is an extra rule card. Neither corrupts the rest of the deck, and a better model changes both
 without a code change. This is the stage's real accuracy ceiling, and it is the model's, not the
 pipeline's.
+
+### What naming the categories changed, measured — and what it did not
+
+`gemma4:latest`, the model the survey ran on, over the survey's Turkish and Hungarian samples, with
+the paragraph and without it and nothing else different. Every run starts from an empty rule book,
+so "rules written" means the same thing in both:
+
+| | rules written | stated over a gender the language lacks |
+|---|---|---|
+| Turkish, with the inventory | 13 | **0** |
+| Turkish, without | 11 | 2 |
+| Hungarian, with the inventory | 7 | **0** |
+| Hungarian, without | 7 | 3 |
+
+The arm without it reproduces the survey's own sentences word for word, which is the useful part —
+the same model, the same words, the same bundles, and the failure appears and disappears with the
+paragraph:
+
+```
+kızın   <- kız    "For feminine nouns, add the ending -ın to form the genitive singular."
+                  "For singular nouns, add the suffix -ın to the base word to form the genitive case."
+annesi  <- anne   "For feminine nouns, add the suffix -si to form the third-person singular possessive."
+                  "For nouns, add the possessive suffix -si to form the third-person singular possessive."
+fivérek <- fivér  "For masculine nouns ending in a consonant, the nominative plural is formed by adding -ek."
+                  "For nouns, the nominative plural is formed by adding the ending -ek to the base form."
+```
+
+**It is not a general fix, and the wording is most of it.** Asked of four models
+([Model backends](model-backends.md) has the table), the first version of the paragraph *caused* the
+invention in two of them: `gemma3:4b` wrote four gendered Turkish rules with it and none without,
+`qwen3:14b` one with and none without. That version ended "an ending that applies to feminine nouns
+cannot be the rule in a language without gender" — the sentence telling a model not to say *feminine
+nouns* was the only place in the prompt those words appeared. Rewritten to say the same thing
+without naming a class, the totals over eight model-language pairs are:
+
+| | gendered rules, all four models, Turkish and Hungarian |
+|---|---|
+| no paragraph | 8 |
+| the first wording | 7 |
+| the wording that ships | **5** |
+
+Five is not zero. `gemma3:4b` still writes two gendered Turkish rules and two Hungarian ones with the
+paragraph in, having written none without it; a 4B model told that a language has no gender is still
+capable of writing a rule about masculine nouns two sentences later. What the paragraph reliably does
+is fix the model whose failure motivated it, and it is measured rather than assumed for everything
+else.
+
+What it does not fix is everything else the prose gets wrong, and that is worth being plain about.
+Turkish vowel harmony is still named once and never explained; a bundle Wiktionary labels oddly
+still produces "the second-person singular imperative is formed by adding the ending -", which is a
+rule about nothing. The inventory removes one specific invention — a class of base word the language
+does not have — and leaves the accuracy ceiling above exactly where it was.
+
+### Does a bigger model write the prose properly? Partly, and not at a price this hardware can pay
+
+The expectation worth testing was that the prose failures are a small-model problem. To ask it
+without running the pipeline behind a model too slow to finish one, `_ask_regular`'s inputs are
+captured once — they are a pure function of the text and the pages — and replayed to each model:
+47 questions from the Turkish sample, 31 from the Hungarian, the same questions for everyone, with
+the inventory paragraph and without.
+
+| model | gendered rules, no paragraph | with it | names vowel harmony (tr) | states its alternants (tr) | seconds per call |
+|---|---|---|---|---|---|
+| `qwen3.5:4b` | 0 | 0 | 1 | 1 | 0.4 – 0.7 |
+| `gemma4:latest` | 10 | **0** | 0 | 2 | 1.4 |
+| `qwen3:14b` | 4 | 3 | 8 | 1 | 2.6 – 3.8 |
+| `gpt-oss:20b` | — | — | (see below) | (see below) | 50 – 96 |
+
+Two different things, and only one of them is about size.
+
+- **Inventing a gender is a per-model habit, and it is not size-ordered.** The 8B invents it ten
+  times and stops completely when the prompt names the categories; the 4B never does it at all; the
+  14B does it four times in Hungarian and keeps doing it three times with the paragraph in. A bigger
+  model is not the fix, and neither, for every model, is the paragraph.
+- **Stating vowel harmony does improve with size, and the 14B is where it stops being useful.** It
+  *names* harmony eight times — "the suffix follows a vowel harmony rule", which is the survey's
+  complaint verbatim — and gives the alternants once. `gpt-oss:20b`, asked the same first question,
+  answers:
+
+  > For a noun in singular, add the genitive-case suffix. The suffix is written as –ın, –in, –un or
+  > –ün, chosen by vowel harmony: use –ın after a back unrounded vowel, –in after a front unrounded
+  > vowel, –un after a back rounded vowel, and –ün after a front rounded vowel.
+
+  That is the card the survey said was missing, written without being asked twice.
+
+**And it costs 96 seconds.** 50 at low reasoning effort, 71 at medium, and `gpt-oss:20b` answers
+*nothing at all* with reasoning off (`model-backends.md`). Bru's ceiling, 2026-09-15: a deck may be
+slow, but not much slower than ten seconds a card. Against that, everything up to the 14B fits with
+room — 0.4 s a call for the default, 3.8 s for the worst of the 14B's — and a 20B reasoning model is
+five to ten times over it at every setting there is. So the rule prose stays where
+`language-survey.md` found it: better models write it better, the best one measured here writes it
+properly, and none of them is affordable on the hardware decker runs on. That is a hardware
+statement, not a design one, and it will age.
 
 ## The deck is a function of the text *and* the book
 

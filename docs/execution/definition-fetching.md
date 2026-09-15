@@ -118,6 +118,56 @@ design wins and the code is wrong.
 
 ## Sense disambiguation
 
+- **The parse's part of speech is in the prompt, as a hint.** The survey's Hebrew run taught five of
+  the commonest words in the language as names of letters: Stanza splits the clitic prefixes off, as
+  it should, and a one-letter token's page offers the letter of the alphabet beside everything else,
+  with a sentence-context prompt giving a small model nothing to choose between them with. The parse
+  knew all along — the token is an adposition — and nothing downstream was being told. `keep()` now
+  takes the term's UD tag and `reading_of` turns it into a sentence: *the parse reads the marked
+  occurrence as an adposition (a preposition or a postposition); prefer a sense listed under that
+  part of speech*. A hint and not an instruction, because a parse is wrong sometimes and
+  Wiktionary's part of speech is not always UD's. Tags that say only what a thing is not — `X`,
+  `SYM`, `PUNCT` — produce no line, since a hint the model cannot act on is prompt spent for nothing.
+
+- **A clitic is looked up under the title Wiktionary gives a bound morpheme.** The hint above was
+  not enough, and the measurement said why: the preposition is not on the page at all. `ל` is a page *about the letter* — Lamed, the twelfth letter, and two noun senses — and the
+  preposition is at `ל־`, with a maqaf. The model was choosing correctly among what it was shown.
+  What the parser calls a clitic is what the tokenizer split *off* — a word of a multiword token that
+  is not its last — and for a language in `languages._JOINERS` that form is also looked up with the
+  joiner attached; the title has to exist for it to be offered. Both spellings then go into
+  `Term.spellings`, so their senses are *pooled* the way `Bueno` and `bueno` are, rather than one
+  ranked behind the other: which of them the term is depends on the sense, which is the model's
+  question and not the pipeline's. The table holds one language, because one has been measured — a
+  hyphen is the Latin-script spelling of the same idea and would be wrong for it, since Spanish `del`
+  splits into two *free* words and pooling the prefix `de-` into the preposition `de` would offer a
+  morpheme the sentence never used. Seven prefixes, 62 of the Hebrew sample's 333 term occurrences,
+  reach their real entries this way: ל ב ה ו ש מ כ.
+
+  Measured on the survey's Hebrew sample, one arm per fix, `gemma4:latest` over the tunnel:
+
+  | | cards for the seven prefixes | from the prefix's own entry | a letter of the alphabet | glosses |
+  |---|---|---|---|---|
+  | neither fix (the survey's run) | 9 | **0** | 7 | 264 |
+  | the part-of-speech hint alone | 12 | **0** | 6 | 270 |
+  | the bound title alone | 12 | **9** | 3 | 262 |
+  | both, which is what ships | 11 | **8** | 3 | 265 |
+
+  The second row is the finding worth keeping: told to prefer an adposition among senses none of
+  which is one, the model hedged and kept *more* wrong cards — the numeral 2, a lexicographic
+  initialism — rather than fewer. A prompt cannot choose a sense that is not in front of it, and
+  that is what "try the part-of-speech hint" was worth on its own. With the title, ל teaches *to*,
+  ב *in*, ה the definite article, ו *and*, ש *introduces a subordinate clause*, מ *from* and כ
+  *like, as*; three of them keep the letter's card alongside, which is a sense the page really has.
+
+  The third row is why the hint stays anyway. It does nothing for `gemma4:latest`, which is
+  discriminating enough without it — but `qwen3.5:4b`, the default, answers the title alone with 39
+  cards for those seven words and 302 glosses, and with the hint as well with 19 and 271. A page
+  with 23 senses is exactly where a model needs telling which part of speech it is looking for. On
+  the nine-check Spanish benchmark the hint takes `gemma4:latest` from 7/9 to 8/9 — it recovers
+  `vaya` as the subjunctive of `ir` — and leaves `qwen3.5:4b` at 8/9 with five glosses fewer.
+  Spanish and German decks are otherwise unchanged by it: 277 glosses against 276, and 286 against
+  289, with a dozen substitutions either way.
+
 - One ollama call per glossed occurrence, carrying the sentence with the occurrence bracketed, the
   form as it appears, and every sense of the page numbered and labelled with its part of speech; the
   model answers with the numbers it keeps, under a JSON schema. On `El perro corrió hacia la
@@ -150,6 +200,51 @@ design wins and the code is wrong.
   anywhere but a loopback or a tunnel.
 
 ## Fetching, and the page it reads
+
+- **The section heading is named by a table of decker's own, not by Stanza's.** A gloss is read from
+  the language's `<h2>`, and the name that finds it came from Stanza's four hundred codes, which
+  agree with Wiktionary's headings nearly everywhere — and not for Chinese: Stanza calls `zh-hans`
+  *Simplified Chinese* and the page 狗 heads its section `Chinese`. Unpatched, every Chinese lookup
+  returned nothing and the deck was empty. `languages.section_of` is that table, and it is five
+  entries long: the three Chinese codes, and `nb`/`no`, where Stanza says *Norwegian* and `hund` and
+  `bok` both head `Norwegian Bokmål`. An entry goes in when a run has been seen to find nothing
+  because of it, never on suspicion. What a *prompt* calls the language is left alone — a text in
+  `zh-hans` really is in Simplified Chinese, and `name_of` still says so.
+
+- **A page that points somewhere else is read where it points.** The English Wiktionary writes a
+  simplified Chinese spelling as a box that points at the traditional one — 人类's whole Chinese
+  section is "For pronunciation and definitions of 人类 – see 人類" — and the sense reader, looking
+  for a numbered list, found a page with nothing on it. `_points_at` reads the box (a table whose
+  class names the language's own see-template, `zh-see`) and `_from_pointer` re-reads the section at
+  the title after the word "see": one hop, inside the language section only, and the title stays the
+  one the text used, because 人类 is the spelling the reader met and 人類 is only where the
+  dictionary keeps the definitions. On the survey's Chinese sample this took coverage from **82 % to
+  99 %** — 240 glosses to 302 — and the four occurrences still without an entry are *Canis lupus*,
+  *Cendrillon* and *Cenerentola*, which are not Chinese.
+
+- **A definition that is a Lua or script error is not a definition.** MediaWiki renders a failed
+  module into the page, in the place its output would have gone, so a broken template upstream or a
+  missing extension on a mirror can put `Lua error in Module:foo at line 63` where a sense belongs.
+  A card teaching that is worse than a missing card: it is silent, it is studied, and nothing in the
+  run says it happened. `_senses_of` drops such a sense and counts it, and `report()` says how many
+  and points at `local-wiktionary.md`, since a mirror missing an extension is the usual reason.
+  Measured over 113 languages and 1,192 senses read from the mirror, this has never yet fired —
+  every error found sat in a glyph box, a category tree or a conjugation table, all of which the
+  sense reader walks past. The guard is there so that the claim does not rest on having audited the
+  right hundred languages.
+
+- **Only a timeout is a reason not to cache a page.** The rule that refuses to cache a page whose
+  definitions came back as Wiktionary's own error text was matching `Lua error` anywhere in the
+  payload. Every Chinese page with a glyph-origin box raised `Lua error in Module:zh-glyph` against
+  the mirror, and every Hebrew prefix page raised `Lua error: callParserFunction: function
+  "#categoryTree" was not found`. (Both have since been fixed on the mirror itself — see
+  [A local Wiktionary](local-wiktionary.md) — which is the better place to fix them, and neither
+  fix makes the caching rule any less wrong.) In both the
+  definitions were fine, and the page was thrown away and re-fetched on every run — the page cache
+  turned off for the two languages this release had just taught decker to read. A named module and a
+  missing extension will say the same thing tomorrow, so those pages are kept; the expiry message is
+  the only one that means the render gave up, and it is still not written. A page whose *definitions*
+  really are error text yields no entries, and a page with no entries was never cached as a gloss.
 
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
@@ -326,6 +421,40 @@ design wins and the code is wrong.
   actual subjunctive `vaya` had it dropped. Spans come from the tokens the term covers, so a
   multiword token (`del` = `de` + `el`) marks whole.
 
+## One etymology per sense, not one per section
+
+Wiktionary nests a language as **Etymology 1..N -> part of speech -> senses**, and decker read it as
+**language -> senses** with a single etymology string beside them. On any page numbering more than
+one etymology, every sense got the first.
+
+Spanish `mate` has six. The deck built on 2026-09-14 taught *maté, the drink prepared from yerba
+maté* with the line "Borrowed from French mat, mate." — true of Etymology 1, which is the adjective
+*matte*; the drink is Etymology 3, "Borrowed from Quechua mati."
+
+Fixed by cutting before walking. `_etymology_blocks` slices the language section at its Etymology
+headings; `_entries_in` walks each slice as before and stamps that slice's etymology on the parts of
+speech inside it; `Entry` carries it and `Page.etymology_of` answers per sense, by identity, the way
+sense pooling already matches them. A section numbering nothing is one block and behaves exactly as
+it did.
+
+Two things fell out of it that are worth keeping written down.
+
+- **A numbered etymology is allowed to have no prose at all.** `carga`'s second is a bare heading
+  followed straight by its Verb, and `_etymology` searched forward without a bound, walked past the
+  heading and returned the *headword line* — so the inflected form was taught as "carga". It now
+  stops at the next heading of any level.
+- **An entry's own answer is the whole answer, `None` included.** Falling back to the section for a
+  block with no prose puts the first etymology back on the card, which is the bug. An inflected form
+  has no origin of its own; it has its lemma's, and the lemma has its own card.
+
+Over the 2,671 entry titles of the nine-source corpus: 3,397 parts of speech keep what they had, 237
+now carry a different, block-local etymology, 91 correctly carry none, and 15 gained one the section
+had not offered. Spot-checked, the changes are right — `alto` the noun and interjection are "Borrowed
+from German halt." and not the adjective's Latin *altus*; `aire` has two Spanish nouns and the second
+really is "From zorá, named by a zoologist"; every `See the etymology of the corresponding lemma` now
+lands on a verb form instead of that form inheriting its lemma's prose.
+
+
 ## Licensing
 
 - Wiktionary's text is CC BY-SA 4.0, and a gloss quotes it whole — definitions, examples,
@@ -354,8 +483,9 @@ design wins and the code is wrong.
   single Pronunciation heading. Only `/a/` comes from further down the page. Dialectal variants are
   the word's, and a learner is better off seeing them, so the readings stay as they are. What is
   genuinely wrong is small and structural: a page whose language section holds several etymologies
-  pools their pronunciation blocks, and separating them means splitting the section by sub-heading.
-  Left for v2.
+  pools their pronunciation blocks. The etymologies themselves no longer pool — see above, the
+  section is cut by sub-heading before it is walked — and the same cut would serve the readings.
+  Still open, and now a smaller job than it was.
 
 - Audio was also written up as fetching a neighbouring entry's recording — the `el` gloss handed a
   recording of `él`. That is wrong too. The file Wiktionary lists under `el`'s own *Audio (Spain)*

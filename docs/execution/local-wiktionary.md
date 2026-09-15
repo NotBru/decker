@@ -190,6 +190,114 @@ is recovered — the labels are simply absent — but a page shows its definitio
 where its labels would be. Without it, `book` printed a Lua error in place of
 `(Hong Kong Cantonese, colloquial)`; the definition itself was never affected.
 
+## Two Lua errors the mirror used to render into pages
+
+Both were cosmetic in the sense that the definitions were never affected, and neither was cosmetic in
+effect: MediaWiki renders a failed module *into the page*, under a 200, and decker refused to cache
+any page whose payload said `Lua error` — a rule that exists because Wikimedia really does time Lua
+out on big pages. So every page carrying one of these was re-fetched on every run, which against a
+mirror is slow and against Wikimedia is the stream of titles the mirror exists to prevent. The
+caching rule is now narrower (`definition-fetching.md`), and both errors are gone.
+
+- **`Lua error: callParserFunction: function "#categorytree" was not found`**, on every Hebrew
+  prefix entry (`ל־`, `ב־`, `מ־`) and anything else whose templates draw a category tree. The
+  CategoryTree extension ships in the MediaWiki tarball and was simply never loaded;
+  `wfLoadExtension( 'CategoryTree' )` is in the config block now. Purge the page and it renders
+  clean.
+
+- **`Lua error in Module:zh-glyph at line 63: attempt to call field 'newBatch' (a nil value)`**, on
+  every Chinese entry with a glyph-origin box — 狗, 雨, and most of the frequent characters.
+  `mw.title.newBatch( titles ):lookupExistence():getTitles()` is a batched existence lookup that
+  Scribunto grew *after* the 1.43 LTS this runs; master has it, with a PHP side built on
+  `LinkBatchFactory`, and backporting that is more than a mirror needs. `tools/wiktionary/newbatch-shim.lua`
+  is ten lines of Lua appended to Scribunto's own `mw.title.lua`: it takes the path upstream takes
+  when existence was not asked for, one `mw.title.new` per title, each lazily expensive against an
+  `$wgExpensiveParserFunctionLimit` already raised to 2000. Wiktionary asks for a few dozen per page.
+  The glyph gallery comes out empty, because the mirror has no media either way, and the page has no
+  error in it. Reapply after a Scribunto update, or drop it when Scribunto ships the real one.
+
+## The namespaces the import needed and did not have
+
+`$wgCapitalLinks` and `$wgCompressRevisions` were already documented as settings that decide what
+the import *writes* and are worthless afterwards. `$wgExtraNamespaces` turned out to be a third,
+and it was missing.
+
+The dump does carry Wiktionary's other namespaces — it is not a main-namespace-only file, whatever
+the name `pages-articles` suggests. What it does not carry is the wiki's namespace *configuration*,
+so `importDump.php` met `Appendix:Glossary`, found no namespace called Appendix, and stored it in
+the main namespace under the literal title `Appendix:Glossary`. Six namespaces' worth of pages
+landed that way:
+
+| namespace | pages |
+|---|---|
+| Reconstruction | 51,671 |
+| Citations | 47,566 |
+| Rhymes | 32,613 |
+| Appendix | 32,175 |
+| Thesaurus | 6,620 |
+| Sign gloss | 206 |
+
+**What it cost, before anyone noticed.** Modules resolve titles in those namespaces, and
+`mw.title.new( x, 'Appendix' )` against a wiki that has never heard of Appendix is
+`bad argument #2 to 'title.new' (unrecognized namespace name)` — rendered into the entry, in the
+place a definition goes. The 113-language audit below found it on thirteen languages, every one of
+them on its *number* words, which are what link to `Appendix:Numbers`. And decker's concept stage
+was reading `Appendix:Glossary` from Wikimedia on every run, on the documented grounds that a mirror
+has no such namespace, which was true of this mirror and not of the dump.
+
+**The repair**, which MediaWiki ships: declare the namespaces (they are in the config block now,
+with the ids Wiktionary uses), then `php maintenance/namespaceDupes.php` to see what it would do and
+`--fix` to do it. It moved 170,851 pages and reported no conflicts, and `Appendix:Glossary` now
+renders locally with the same 595 entries decker reads from Wikimedia — 1,003 anchors against 1,005,
+the two on a decorative Wikipedia box the mirror has no image for.
+
+**On a rebuild, set `$wgExtraNamespaces` before importing** and none of this is needed. The config
+block does; this paragraph is for the mirror that already exists.
+
+## The audit: 113 languages, and what actually breaks
+
+Two errors found by hand say nothing about the other five hundred languages, and the mirror has no
+search index to ask with — `--no-updates` leaves the link tables empty. The translation tables are
+the way in: every line names a language and links that language's entry, and the link carries the
+section name in its fragment, which is the string decker looks a section up by. Fifteen common
+English words (`water`, `dog`, `house`, `fire`, `one`, …) give 632 languages and 1,651 entries;
+the audit takes the hundred-odd most spoken of them, four entries each, and asks of every one the
+question decker asks: find the section, read the senses, and look for an error — in the section, and
+separately *inside a definition*.
+
+| | entries read | sections found | senses read | languages with an error in the section | senses that were error text |
+|---|---|---|---|---|---|
+| before the repairs | 430 | 406 | 1,192 | 13 | **0** |
+| after | 430 | 406 | 1,192 | 1 | **0** |
+
+Four things worth keeping from it.
+
+- **No error has ever landed where decker reads.** Zero senses out of 1,192, before or after. Every
+  error found sits in a box the sense reader walks past: a glyph origin, a category tree, a
+  conjugation table. That is the empirical half of the claim; `definition-fetching.md` has the other
+  half, a guard that drops a sense which *is* an error and counts it, so the claim does not depend
+  on having audited the right hundred languages.
+- **Thirteen languages down to one.** The thirteen were all the missing `Appendix` namespace, and
+  all on number words. The one that is left is Nepali: `Module:ne-conj` hits `chunk has too many
+  syntax levels`, a nesting limit in the standalone Lua 5.1 the mirror runs. It is one module in one
+  language, it renders the conjugation table and nothing else, and it is left alone.
+- **406 sections of 430, and every section that was found gave senses.** The 24 misses are not
+  failures of the mirror: they are `Cantonese`, `Hakka` and `Wu`, whose entries live under the one
+  `Chinese` heading — the same finding as `zh-hans`, and the reason `languages._SECTIONS` now maps
+  `yue`, `wuu` and `lzh` to `Chinese` as well.
+- **"Why not just load every extension?"** Because the audit says which ones are missing, and the
+  answer is one. A missing parser *function* errors into the page, which is what the table counts;
+  a missing parser *tag* does not — MediaWiki escapes it and renders it as text. Scanning all 6,135
+  cached pages for that shows `imagemap` on 24 of them, `math` on one, and nothing else, none of it
+  inside a definition. Against that, the extensions still on disk are not free: `Math` and
+  `SyntaxHighlight` need binaries this container does not have and render *errors* when half
+  installed, and `AbuseFilter`, `Echo`, `DiscussionTools` and `Linter` want schema updates and touch
+  editing rather than rendering. Load what the audit names; leave the rest.
+
+`tools/wiktionary/` does not carry the audit — it is a measurement, not a piece of the mirror — but
+it is a short script and the method is the part worth keeping: translation tables for titles, then
+decker's own reader over them.
+
 ## What the mirror cannot give
 
 - **Audio URLs.** `File:` description pages are not in `pages-articles`, and the media itself is in
@@ -197,8 +305,6 @@ where its labels would be. Without it, `book` printed a Lua error in place of
   URL. The two ways out — construct Commons URLs from the filename, or keep fetching audio live —
   both put a vocabulary-shaped stream back on the network, and both were refused: see the decision
   at the end of this document. A mirror's cards are silent, and a run says so.
-- **`Module:zh-glyph`** fails on `newBatch` for Chinese glyph-origin lines. Unrelated to Wikidata,
-  unfixed, cosmetic.
 - **Link tables, search and site statistics** are empty by choice: `--no-updates` skips the
   secondary updates, which would mean parsing all nine million pages and running Lua for each.
   Rendering is unaffected because pages parse on view, and red/blue link colouring is decided at

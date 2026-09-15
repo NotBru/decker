@@ -56,8 +56,14 @@ Three consequences worth writing down:
   writing one plain schema (`disambiguation.SCHEMA` and friends) and the backend wraps it. A stage
   that had to know which backend it was talking to would defeat the point.
 
-- **Thinking is off everywhere, by different means.** `_chat` passes `think=False` to ollama and
-  remembers when a client rejects it. Hosted small models either have no thinking or take a
+- **Thinking is off everywhere, by different means — and some models refuse.** `_chat` passes
+  `think=False` to ollama and remembers when a client rejects it. It also remembers when a *model*
+  takes the argument and then answers nothing: `gpt-oss:20b` returns an empty content and an empty
+  thinking on every call made that way, and answers perfectly with the argument left off. Read as a
+  broken schema, which is what it looked like before 2026-09-15, that is a whole run degraded for no
+  reason a warning could explain — every sense kept, no rules written. An empty answer to a
+  `think=False` call now costs one retry with thinking on, one line on stderr, and nothing else for
+  the rest of the run. Hosted small models either have no thinking or take a
   parameter to disable it; whichever it is belongs in the backend, because the reason is the same
   everywhere and was measured once: qwen3:1.7b spent 4222 reasoning tokens and 80 seconds on a
   question it answers in 2.3 seconds without.
@@ -134,6 +140,82 @@ the page offers Noun/*saying* among its eleven senses. The models simply choose 
 It costs ~25% more wall time than gemma3:4b for fewer glosses, so it is slower per call. It is not
 measured on the translation evidence that put `gemma4:latest` here before it — see
 `definition-fetching.md` for what that trade is.
+
+### Four models over the two failures the survey found, 2026-09-14
+
+A different question from the benchmark above, and the one
+[the ten-language survey](language-survey.md) left open: are its two worst failures the model's or
+the pipeline's? Same samples (Hebrew, Turkish and Hungarian, ~2,500 characters each), same cached
+pages, one arm per fix, every run from an empty rule book. `qwen3.5:4b` and `qwen3:14b` were pulled
+onto the GPU box for this; it already held the other two. Wall-clock times are not comparable —
+`gemma4:latest` walked in with most of the survey's answers already in the answer cache — so the
+tables carry counts, which are the same workload by construction.
+
+**Hebrew: the seven clitic prefixes, as `cards / from the prefix's own entry / names of letters`,
+with the run's total glosses beside them.** "Neither" is what the survey ran; "hint" is the
+part-of-speech line alone; "title" is the bound-morpheme lookup alone; "both" is what ships. The
+sample uses these seven 62 times in 333 term occurrences.
+
+| model | size | neither | hint only | title only | both (ships) |
+|---|---|---|---|---|---|
+| `gemma4:latest` | 8B Q4_K_M | 9 / 0 / 7 (264 gl) | 12 / 0 / 6 (270 gl) | 12 / 9 / 3 (262 gl) | 11 / 8 / 3 (265 gl) |
+| `qwen3.5:4b` | 4B Q4_K_M | 15 / 0 / 7 (281 gl) | 17 / 0 / 7 (272 gl) | 39 / 34 / 4 (302 gl) | 19 / 15 / 3 (271 gl) |
+| `gemma3:4b` | 4B Q4_K_M | 12 / 0 / 7 (304 gl) | — | — | 48 / 43 / 3 (428 gl) |
+| `qwen3:14b` | 14B Q4_K_M | 19 / 0 / 8 (283 gl) | — | — | 17 / 9 / 4 (274 gl) |
+
+**Turkish and Hungarian: `rules written / rules stated over a gender the language does not have`**,
+with no inventory paragraph, with the first wording of it, and with the wording that ships (the
+first named *feminine nouns* in its own warning; see `morphological-rules.md`).
+
+| model | Turkish: none / first wording / shipped | Hungarian: none / first / shipped |
+|---|---|---|
+| `gemma4:latest` | 11 / 2 · 11 / 0 · 13 / 0 | 7 / 3 · 6 / 0 · 7 / 0 |
+| `qwen3.5:4b` | 8 / 0 · 8 / 0 · 7 / 0 | 4 / 0 · 7 / 0 · 7 / 0 |
+| `gemma3:4b` | 13 / 0 · 12 / 4 · 12 / 2 | 8 / 1 · 9 / 0 · 8 / 2 |
+| `qwen3:14b` | 7 / 0 · 6 / 1 · 7 / 0 | 7 / 2 · 7 / 2 · 6 / 1 |
+
+Four things this says.
+
+- **The letter-name failure was the pipeline's, not the model's.** Not one model gets a single
+  prefix right until the bound title is in front of it — the 14B included, which is the best
+  evidence that size was never going to fix it — and every model gets most of them right once it is.
+- **The part-of-speech hint earns its place, but not where it was expected to.** On its own it fixes
+  nothing. Alongside the title it is what stops a 23-sense page flooding the deck: `qwen3.5:4b`
+  keeps 39 prefix cards with the title alone and 19 with the hint as well, and 302 glosses against
+  271. On the nine-check Spanish benchmark it takes `gemma4:latest` from 7/9 to 8/9 (38 glosses to
+  41) — it recovers `vaya` as the subjunctive of `ir` — and leaves `qwen3.5:4b` at 8/9 with five
+  glosses fewer (52 to 47). Two small gains and no loss, so it stays.
+- **Gender invention is a habit of some models and a hazard of the prompt.** `qwen3.5:4b` never
+  writes a gendered rule for either language under any arm; `gemma4:latest` writes five without the
+  paragraph and none with it; and the first wording *caused* four in `gemma3:4b` and one in
+  `qwen3:14b`, which had written none without it. Over the eight model-language pairs: 8 gendered
+  rules with no paragraph, 7 with the first wording, 5 with the shipped one.
+- **How many senses a model keeps is its own habit, and pooling amplifies it.** `gemma3:4b` answers
+  the pooled prefix pages with 48 cards for seven words — 25 of them for ל alone — and its Hebrew
+  deck goes from 304 glosses to 428. The fix gives every model the right senses to choose from; it
+  does not give a model the judgement to choose among them.
+
+### What decker can afford, 2026-09-15
+
+Bru's ceiling: a deck may be slow, but not much slower than **ten seconds a card**. A run makes
+roughly one model call per card — one disambiguation call per glossed occurrence, plus a rules call
+per new inflected form — so that is a per-call budget, and these are the measured rates over the
+tunnel to the GTX 2060, on uncached runs of the survey samples:
+
+| model | seconds per call | a 300-card deck |
+|---|---|---|
+| `qwen3.5:4b` | 0.4 – 0.7 | 2 – 4 min |
+| `gemma3:4b` | 0.6 | 3 min |
+| `gemma4:latest` | 1.4 | 7 min |
+| `qwen3:14b` | 2.6 – 3.8 | 13 – 19 min |
+| `gpt-oss:20b` | 50 – 96 | **4 – 8 hours** |
+
+The cliff is where the model stops fitting the card: `qwen3:14b` is 9.3 GB against 6 GB of VRAM and
+still answers in seconds; `gpt-oss:20b` is 13.8 GB *and* wants to reason, and reasoning is not
+optional for it — with thinking off it answers nothing at all. Low effort costs 50 s, medium 71 s,
+high 96 s, so there is no setting that brings it inside the budget. What it buys is in
+`morphological-rules.md`: it is the only model measured here that writes Turkish vowel harmony out
+in full. It is not a model decker can use on this hardware, and that is the whole of the reason.
 
 Local runs are capped — `OMP_NUM_THREADS=8` and `OLLAMA_NUM_THREAD=8` against 16 cores — because
 Stanza builds its pipeline with no thread limit and torch will otherwise take all of them alongside

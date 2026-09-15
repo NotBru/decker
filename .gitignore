@@ -1,10 +1,22 @@
 # Source texts and anything decker makes from them: the inputs are
 # copyrighted (barbapedro is a children's book) and the outputs quote them.
 barbapedro*
+flamencos*
+gama*
 *.apkg
+# Built decks and their text dumps, whatever the source was called: a deck
+# quotes Wiktionary and names the words of the text it was built from.
+decks/
 __pycache__/
 *.py[cod]
 
 # Environment, local to this machine.
 .devcontainer/
 .python-version
+
+# Experiment outputs: aggregate curves and tables, regenerable from the cache.
+growth-*.png
+growth-*.csv
+languages-*.png
+languages*.csv
+report.md
