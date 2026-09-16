@@ -100,12 +100,14 @@ def extract(
 
     words = {word.id: word for word in sentence.words}
     punctuation = {word.id for word in sentence.words if word.upos == "PUNCT"}
+    numerals = {word.id for word in sentence.words if _is_number(word.text)}
     initial = trees.sentence_initial_ids(list(sentence.words))
     base = sentence.tokens[0].start_char if sentence.tokens else 0
     kept = [
         covered
         for covered in matches
         if not covered <= punctuation
+        and not covered <= numerals
         and not any(covered < other for other in matches)
     ]
     kept.sort(key=min)
@@ -222,6 +224,37 @@ def _entry_rank(entry: str, own: set[str], lemma: str) -> tuple[int, str]:
     if entry == lemma:
         return (1, entry)
     return (2, entry)
+
+
+#: The separators a number is written with, by the conventions decker has been
+#: run over: `17,5` and `17.5` are the same number, and `1 000` and `1,000` are
+#: the same thousand.
+_NUMERIC = str.maketrans({",": ".", "\u00a0": "", "\u202f": "", " ": ""})
+
+
+def _is_number(text: str) -> bool:
+    """Whether a token is a number written in digits, and so not a word.
+
+    Written in digits: `11`, `1758`, `17,5`, `-3.6`, `1 000`. Not `dos`, not
+    `二十`, not `第一` -- a numeral spelled out is vocabulary, and a learner
+    needs it as much as any other word. The design's term is "a word of the
+    text", and 1758 is not one: it has no entry, no sense to choose and no
+    lemma, and until this it cost a title lookup, a line of stderr and a place
+    in the coverage figure. Nine of the survey's ten languages had some.
+
+    A digit inside a word leaves it alone -- `COVID-19`, `1º`, `x86` -- since
+    those are spelled, said and learned.
+    """
+    candidate = text.strip().translate(_NUMERIC)
+    if not candidate:
+        return False
+    try:
+        float(candidate)
+    except ValueError:
+        return False
+    #: `float` takes `nan` and `inf`, which are words in some texts and
+    #: numbers in none of them.
+    return any(character.isdigit() for character in candidate)
 
 
 def _head(tokens: list[Any]) -> Any:
