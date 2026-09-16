@@ -33,6 +33,18 @@ of a new speaker dropped. Where such a file has no punctuation at all — some r
 write none — the sentence boundaries come from the cue timings instead. It may also be `-` for
 standard input, which is sniffed for cue files, since standard input has no extension to go by.
 
+**Several sources** may be given at once, and they are read in order:
+
+```
+uv run decker --target-lang ru ep01.srt ep02.srt ep03.srt
+```
+
+Each is read by its own extension, so subtitles and plain text can be mixed, and a blank line is put
+between them so that no sentence spans two — which is what `cat` gets wrong, running the last
+sentence of one file into the first of the next. The deck is named after the first and says how many
+followed (`ep01+2.apkg`, "ep01 and 2 more"), so building from three episodes cannot overwrite the
+deck you built from one; `--out` and `--name` override both.
+
 `--format` chooses the output — `text` and `json` everywhere, `markdown` for `define`, `apkg` for
 `deck` — and `--out` names the file.
 

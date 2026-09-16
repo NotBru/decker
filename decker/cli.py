@@ -67,9 +67,12 @@ def _main(argv: list[str] | None = None) -> int:
     )
     extract.add_argument(
         "source",
-        nargs="?",
-        default="-",
-        help="source text file, or - for standard input",
+        nargs="*",
+        default=["-"],
+        help=(
+            "source text files, or - for standard input; several are read in "
+            "order and separated, so no sentence spans two of them"
+        ),
     )
     _add_language_arguments(extract)
     extract.add_argument(
@@ -208,9 +211,12 @@ def _add_source_arguments(parser: argparse.ArgumentParser) -> None:
     """The source text, its language, and how much of the index to build."""
     parser.add_argument(
         "source",
-        nargs="?",
-        default="-",
-        help="source text file, or - for standard input",
+        nargs="*",
+        default=["-"],
+        help=(
+            "source text files, or - for standard input; several are read in "
+            "order and separated, so no sentence spans two of them"
+        ),
     )
     _add_language_arguments(parser)
     parser.add_argument(
@@ -322,8 +328,32 @@ def _taught(previous: str | None) -> frozenset[str]:
     return keys
 
 
-def _source_text(source: str) -> str:
-    """The source as running text, whatever file it arrived in.
+#: What goes between two sources. A blank line, because that is what the
+#: sentence splitter breaks on: `cat a.txt b.txt` runs the last sentence of one
+#: into the first of the next -- `...se cortaba.El perro corrio...` -- and the
+#: parser is handed a sentence nobody wrote. Two cue files concatenated have
+#: the same problem one level down, their timings restarting mid-stream, so
+#: each is folded on its own and the results are separated here.
+SOURCE_SEPARATOR = "\n\n"
+
+
+def _source_text(sources: list[str] | str) -> str:
+    """Every source as one running text, whatever files they arrived in.
+
+    Each is read by its own extension, so a `.srt` and a `.txt` can be given
+    together, and they are joined by :data:`SOURCE_SEPARATOR`. The order is the
+    order given: an episode at a time, and the deck teaches the earlier ones
+    first, which is what the shuffle then paces.
+    """
+    if isinstance(sources, str):
+        sources = [sources]
+    return SOURCE_SEPARATOR.join(
+        _one_source(source).strip() for source in sources
+    )
+
+
+def _one_source(source: str) -> str:
+    """One source as running text.
 
     The extension decides: `.srt` and `.vtt` are cue files and are folded back
     into prose by :mod:`decker.subtitles` before anything else sees them.
@@ -340,8 +370,8 @@ def _source_text(source: str) -> str:
         return raw
     text = subtitles.text_of(raw)
     print(
-        f"[decker] {path.suffix} read as text: {len(raw.splitlines())} lines "
-        f"of cues -> {len(text)} characters",
+        f"[decker] {path.name}: {len(raw.splitlines())} lines of cues -> "
+        f"{len(text)} characters",
         file=sys.stderr,
     )
     return text
@@ -482,12 +512,30 @@ def _side(side) -> list[str]:
     return pieces
 
 
-def _document_stem(source: str) -> str:
-    return "deck" if source == "-" else Path(source).stem
+def _document_stem(sources: list[str] | str) -> str:
+    """What the deck file is called when `--out` does not say.
+
+    Several sources name the file after the first and say how many followed --
+    `ep01+2.apkg`. Naming it `ep01.apkg` would be the obvious thing and the
+    wrong one: a deck built from three episodes would silently overwrite the
+    deck built from the first, and `--out` overwrites without asking.
+    """
+    sources = [sources] if isinstance(sources, str) else sources
+    first = "deck" if sources[0] == "-" else Path(sources[0]).stem
+    return first if len(sources) == 1 else f"{first}+{len(sources) - 1}"
 
 
-def _document_title(source: str) -> str:
-    return "Standard input" if source == "-" else Path(source).stem
+def _document_title(sources: list[str] | str) -> str:
+    """What the deck is called inside Anki, and what a document credits."""
+    sources = [sources] if isinstance(sources, str) else sources
+    def named(source: str) -> str:
+        return "Standard input" if source == "-" else Path(source).stem
+
+    if len(sources) == 1:
+        return named(sources[0])
+    if len(sources) == 2:
+        return f"{named(sources[0])} and {named(sources[1])}"
+    return f"{named(sources[0])} and {len(sources) - 1} more"
 
 
 def _format_gloss(gloss) -> str:
