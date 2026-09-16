@@ -17,6 +17,7 @@ the reader met, and neither carries a production pair.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import re
 import sys
@@ -32,6 +33,8 @@ from decker.morphology import Morphology, Outcome, Rule, label_of
 from decker.ollama import default_model
 from decker.pages import Concept, Example, Page, Sense
 from decker.terms import Term
+from decker.unknown import ATTRIBUTION as UNKNOWN_ATTRIBUTION
+from decker.unknown import Unknowns
 
 if TYPE_CHECKING:
     from decker.pipeline import SentenceTerms
@@ -157,6 +160,10 @@ class _Builder:
     concept_count: int = 0
     #: How many are morphological rules.
     rule_count: int = 0
+    #: What becomes of the terms Wiktionary has no entry for.
+    unknowns: Unknowns | None = None
+    #: How many of those were taught anyway, as foreign words.
+    foreign_count: int = 0
 
     def glossary(self) -> dict[str, Concept]:
         if self._glossary is None:
@@ -323,6 +330,38 @@ class _Builder:
         self.concept_count += 1
         return index
 
+    def add_unknown(self, surface: str, explanation: str, model: str) -> int | None:
+        """Append the card for a foreign word, explained by the model.
+
+        No entry, because there is none -- that is what put the word here --
+        so the card credits the model and links nowhere, and carries no
+        production pair: a learner cannot be asked to produce a word of another
+        language from a sentence about it.
+        """
+        key = (surface, explanation)
+        if key in self.seen:
+            return self.seen[key]
+        if gloss_key(*key) in self.known:
+            self.skipped += 1
+            return None
+        index = len(self.glosses)
+        self.glosses.append(
+            Gloss(
+                index=index,
+                surface=surface,
+                lemma=surface,
+                entry="",
+                definition=explanation,
+                language=name_of(self.lang),
+                key=gloss_key(*key),
+                production=False,
+                attribution=UNKNOWN_ATTRIBUTION.format(model=model or "a model"),
+            )
+        )
+        self.seen[key] = index
+        self.foreign_count += 1
+        return index
+
     def bundle_of(self, sense: Sense) -> tuple[str, ...]:
         """The feature bundle a form-of sense expresses.
 
@@ -420,6 +459,7 @@ def build(
     audio: bool = True,
     concepts: bool = True,
     rules: bool = True,
+    unknowns: str = "fix",
     refresh: bool = False,
     refresh_answers: bool = False,
     known: frozenset[str] = frozenset(),
@@ -444,6 +484,13 @@ def build(
         lang=target_lang,
         disambiguator=disambiguator,
         morphology=morphology,
+        unknowns=Unknowns(
+            lang=target_lang,
+            model=model or default_model(),
+            host=host,
+            refresh=refresh_answers,
+            mode=unknowns,
+        ),
         audio=audio,
         concepts=concepts,
         refresh=refresh,
@@ -499,6 +546,14 @@ def build(
             f"({pages.GLOSSARY_PAGE})"
         )
     morphology.report()
+    if builder.unknowns is not None:
+        for line in builder.unknowns.report():
+            log(line)
+    if builder.foreign_count:
+        log(
+            f"[decker] {builder.foreign_count} of them are foreign words, "
+            "explained by the model rather than by Wiktionary"
+        )
     log(f"[decker] {len(builder.glosses)} glosses", kind="head")
     return builder.glosses
 
@@ -594,11 +649,7 @@ def _gloss_term(
         page for page in (builder.first_page(term.entries),) if page is not None
     ]
     if not candidates:
-        log(
-            f"[decker] no {builder.lang} entry for {term.surface!r} "
-            f"({', '.join(term.entries)})",
-            level=VERBOSE, kind="detail",
-        )
+        _no_entry(builder, term, sentence, around)
         return
 
     #: The occurrence is bracketed inside its own sentence and the neighbours
@@ -642,6 +693,91 @@ def _gloss_term(
             continue
         if (examples := builder.morphology.example(outcome.rule, index)) is not None:
             builder.rule(outcome.rule, examples)
+
+
+def _no_entry(
+    builder: _Builder, term: Term, sentence: str, around: tuple[str, str]
+) -> None:
+    """A word Wiktionary has no entry for, and what becomes of it.
+
+    Dropped, before this stage existed and still whenever the model cannot be
+    reached or says it is nothing. Otherwise: a misspelling is looked up as the
+    word that was meant and glossed as that word, a foreign word the reader
+    would not know is taught with the model's own explanation, and a foreign
+    word they would know is dropped like any other thing not worth a card.
+    """
+    unknowns = builder.unknowns
+    if unknowns is None or not unknowns.enabled:
+        log(
+            f"[decker] no {builder.lang} entry for {term.surface!r} "
+            f"({', '.join(term.entries)})",
+            level=VERBOSE, kind="detail",
+        )
+        return
+
+    marked = mark_occurrence(sentence, term.spans)
+    passage = " ".join(part for part in (around[0], marked, around[1]) if part)
+    verdict = unknowns.verdict(term.surface, passage, name_of(builder.lang))
+    if verdict is None:
+        log(
+            f"[decker] no {builder.lang} entry for {term.surface!r}",
+            level=VERBOSE, kind="detail",
+        )
+        return
+
+    if verdict.is_correction:
+        page = builder.page(verdict.correction)
+        if page is None or not page.senses:
+            log(
+                f"[decker] {term.surface!r} looks like {verdict.correction!r}, "
+                "which has no entry either",
+                level=VERBOSE, kind="detail",
+            )
+            return
+        log(
+            f"[decker] {term.surface!r} -> {verdict.correction!r} (spelling)",
+            level=VERBOSE, kind="detail",
+        )
+        #: Glossed as the word that was meant, and fronted with it: the text's
+        #: spelling is a mistake in the text, and a card teaching it would
+        #: teach the mistake.
+        corrected = dataclasses.replace(
+            term, surface=verdict.correction, joined="", entries=(verdict.correction,)
+        )
+        _gloss_term(builder, corrected, sentence, around)
+        return
+
+    if verdict.is_native:
+        index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
+        if index is not None:
+            log(
+                f"[decker] {term.surface!r} is a {builder.lang} word Wiktionary "
+                "lacks; explained by the model",
+                level=VERBOSE, kind="detail",
+            )
+        return
+
+    if verdict.kind == "foreign":
+        if verdict.widely_known and not unknowns.teaches_known_foreign():
+            log(
+                f"[decker] {term.surface!r} is foreign and widely known; no card",
+                level=VERBOSE, kind="detail",
+            )
+            return
+        if not verdict.explanation:
+            return
+        index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
+        if index is not None:
+            log(
+                f"[decker] {term.surface!r} taught as a foreign word",
+                level=VERBOSE, kind="detail",
+            )
+        return
+
+    log(
+        f"[decker] {term.surface!r} is nothing recognizable; dropped",
+        level=VERBOSE, kind="detail",
+    )
 
 
 def _morphology(

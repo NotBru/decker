@@ -284,6 +284,16 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--unknowns",
+        choices=("off", "fix", "all"),
+        default="fix",
+        help=(
+            "what to do with a word Wiktionary has no entry for: 'off' drops it, "
+            "'fix' looks up a misspelling and teaches a foreign word the reader "
+            "would not know, 'all' also teaches the foreign words they would"
+        ),
+    )
+    parser.add_argument(
         "--no-rules",
         action="store_true",
         help=(
@@ -331,6 +341,7 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         audio=not arguments.no_audio,
         concepts=not arguments.no_concepts,
         rules=not arguments.no_rules,
+        unknowns=arguments.unknowns,
         refresh_pages=arguments.refresh_pages,
         refresh_answers=arguments.refresh_answers,
         known=_taught(arguments.previous),

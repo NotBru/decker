@@ -38,6 +38,8 @@ the code changes.
   properly.
 - [Deck growth](docs/execution/deck-growth.md) — what a deck costs as the corpus grows, measured over
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
+- [Words Wiktionary has no entry for](docs/execution/unknown-words.md) — misspellings looked up,
+  foreign words explained or dropped, and the fabrications the first prompt produced.
 - [The benchmark](docs/execution/benchmark.md) — 24 sentences, four languages, known answers: what
   sense disambiguation is checked against, and why the five-sentence one stopped discriminating.
 - [Subtitles as a source](docs/execution/subtitles.md) — `.srt` and `.vtt` folded back into prose:

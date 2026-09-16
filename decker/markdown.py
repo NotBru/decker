@@ -72,10 +72,16 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
     facts = []
     if gloss.lemma != gloss.surface:
         facts.append(f"**lemma** {gloss.lemma}")
-    facts.append(
-        "**entry** "
-        f"[{gloss.entry}]({entry_url(gloss.entry, edition, gloss.anchor or gloss.language)})"
-    )
+    if gloss.entry:
+        facts.append(
+            "**entry** "
+            f"[{gloss.entry}]"
+            f"({entry_url(gloss.entry, edition, gloss.anchor or gloss.language)})"
+        )
+    else:
+        #: A foreign word has no entry -- that is what made it one -- so there
+        #: is nothing to link and nothing of Wiktionary's on the card to credit.
+        facts.append("**entry** none: this word has no Wiktionary entry")
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
     if gloss.audio_urls:

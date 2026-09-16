@@ -76,6 +76,13 @@ faster, much worse. `--no-concepts` and `--no-rules` switch off the two stages t
 their own — the grammatical terminology a definition is written in, and the regularity behind an
 inflected form.
 
+`--unknowns` decides what happens to a word Wiktionary has no entry for: `off` drops it, as decker
+always did; `fix` (the default) looks the word up again when it is a misspelling, and teaches a
+foreign word the reader would not know with a one-sentence explanation from the model; `all` also
+teaches the foreign words they would know. Those cards say the model wrote them and link to no
+entry, there being none — see
+[docs/execution/unknown-words.md](docs/execution/unknown-words.md).
+
 ### Offline Wiktionary
 
 `--wiktionary-host`, or `$DECKER_WIKTIONARY_HOST`, points every page fetch at a mirror instead of
