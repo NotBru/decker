@@ -31,6 +31,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from decker.console import log
 from decker.languages import name_of
 from decker.ollama import DEFAULT_MODEL, Session
 
@@ -589,17 +590,15 @@ class Morphology:
         if not self.enabled:
             return
         if self.explained:
-            print(
+            log(
                 f"[decker] {len(self.explained)} of them are morphological rules "
                 f"({self.written} written this run; {len(self.book.rules)} known "
-                f"for {self.lang!r})",
-                file=sys.stderr,
+                f"for {self.lang!r})"
             )
         if self.dropped:
-            print(
+            log(
                 f"[decker] {self.dropped} inflected forms left out, covered by "
-                "a rule already shown (their base words are still taught)",
-                file=sys.stderr,
+                "a rule already shown (their base words are still taught)"
             )
 
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 
+from decker.console import log
 from decker.glosses import Gloss
 from decker.ollama import default_model
 from decker.pages import Example
@@ -117,7 +118,7 @@ def build(
         )
         _pair(builder, gloss, definition, examples, etymology)
     translator.report()
-    print(f"[decker] {len(builder.cards)} cards", file=sys.stderr)
+    log(f"[decker] {len(builder.cards)} cards", kind="head")
     return builder.cards
 
 

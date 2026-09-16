@@ -16,6 +16,7 @@ from decker import cards as deck_cards
 from decker import pages
 from decker import shuffling, trees, wiktionary
 from decker.cards import Card
+from decker.console import log
 from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
 from decker.nlp import pipeline
@@ -48,7 +49,7 @@ def run(
     """Run the v1 pipeline over ``text`` up to term extraction."""
     document = pipeline(target_lang)(text)
     sentences = document.sentences
-    print(f"[decker] {len(sentences)} sentences", file=sys.stderr)
+    log(f"[decker] {len(sentences)} sentences", kind="head")
 
     join_particles = trees.joins_particles(target_lang)
     vocabulary = None

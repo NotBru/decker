@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from decker import pages
+from decker.console import DETAIL, VERBOSE, console, log
 from decker.disambiguation import Disambiguator
 from decker.languages import name_of
 from decker.morphology import Morphology, Outcome, Rule, label_of
@@ -169,6 +170,7 @@ class _Builder:
 
     def page(self, title: str) -> Page | None:
         if title not in self.fetched:
+            log(f"[decker]   {title}", level=VERBOSE, kind="detail")
             self.fetched[title] = pages.fetch(
                 title, edition=self.edition, lang=self.lang, refresh=self.refresh
             )
@@ -264,10 +266,10 @@ class _Builder:
             #: nothing was cached from an earlier run. There is nothing to
             #: resolve against, so the stage stands down rather than counting
             #: every anchor as an entry that does not exist.
-            print(
+            log(
                 f"[decker] could not read {pages.GLOSSARY_PAGE} and none is "
                 "cached; no concept cards this run",
-                file=sys.stderr,
+                kind="warn",
             )
             self.concepts = False
             return ()
@@ -447,18 +449,21 @@ def build(
         refresh=refresh,
         known=known,
     )
-    for position, sentence in enumerate(sentences):
-        around = _around(sentences, position)
-        for term in sentence.terms:
-            _gloss_term(builder, term, sentence.text, around)
+    with console.phase("glossing", sum(len(one.text) for one in sentences)):
+        for position, sentence in enumerate(sentences):
+            around = _around(sentences, position)
+            log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
+            for term in sentence.terms:
+                _gloss_term(builder, term, sentence.text, around)
+            console.advance(len(sentence.text))
     if audio and builder.glosses and not builder.offered:
         #: A source that carries no media at all is not the same as a word
         #: that happens to have no recording, and the two look identical on
         #: a card. A local mirror is the ordinary reason: media is in no dump.
-        print(
+        log(
             "[decker] no recordings offered by this source; cards will have no "
             "audio (a local Wiktionary carries none: media is in no dump)",
-            file=sys.stderr,
+            kind="warn",
         )
     elif audio and builder.silent:
         #: The mixed case, which the cache now makes ordinary: some pages were
@@ -466,35 +471,31 @@ def build(
         #: deck has audio on most cards and none on these, for a reason that
         #: has nothing to do with the words.
         count = len(builder.silent)
-        print(
+        log(
             f"[decker] {count} page{'' if count == 1 else 's'} came from a "
             "source with no media; those cards have no audio (--refresh-pages "
             "against Wikimedia gets it, at the cost of naming them to it)",
-            file=sys.stderr,
+            kind="warn",
         )
     if builder.skipped:
-        print(
-            f"[decker] {builder.skipped} glosses already taught, left out",
-            file=sys.stderr,
-        )
+        log(f"[decker] {builder.skipped} glosses already taught, left out")
     if builder.unresolved:
         #: An anchor the glossary has no entry for is terminology decker can
         #: see and cannot explain, so it is counted rather than guessed at.
         total = sum(builder.unresolved.values())
         names = ", ".join(anchor for anchor, _ in builder.unresolved.most_common(5))
-        print(
+        log(
             f"[decker] {total} links to glossary entries that do not exist "
             f"({len(builder.unresolved)} distinct: {names}); no cards for those",
-            file=sys.stderr,
+            level=VERBOSE, kind="warn",
         )
     if builder.concept_count:
-        print(
+        log(
             f"[decker] {builder.concept_count} of them are concepts "
-            f"({pages.GLOSSARY_PAGE})",
-            file=sys.stderr,
+            f"({pages.GLOSSARY_PAGE})"
         )
     morphology.report()
-    print(f"[decker] {len(builder.glosses)} glosses", file=sys.stderr)
+    log(f"[decker] {len(builder.glosses)} glosses", kind="head")
     return builder.glosses
 
 
@@ -589,10 +590,10 @@ def _gloss_term(
         page for page in (builder.first_page(term.entries),) if page is not None
     ]
     if not candidates:
-        print(
+        log(
             f"[decker] no {builder.lang} entry for {term.surface!r} "
             f"({', '.join(term.entries)})",
-            file=sys.stderr,
+            level=VERBOSE, kind="detail",
         )
         return
 
@@ -835,10 +836,10 @@ def _pooled_senses(
     winner = max(candidates, key=lambda page: (counts[page.title], -candidates.index(page)))
     dropped = [title for title in counts if title != winner.title]
     if dropped:
-        print(
+        log(
             f"[decker] {term.surface!r}: kept senses from {winner.title!r}, "
             f"dropping those from {', '.join(repr(t) for t in dropped)}",
-            file=sys.stderr,
+            level=VERBOSE, kind="detail",
         )
     return winner, tuple(sense for page, sense in chosen if page.title == winner.title)
 

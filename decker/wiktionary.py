@@ -23,6 +23,7 @@ from pathlib import Path
 import stanza
 
 from decker import trees
+from decker.console import VERBOSE, console, log
 from decker.languages import joiner_of
 from decker.nlp import pipeline
 from decker.trees import Node
@@ -96,7 +97,7 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
     url = DUMP_URL.format(edition=edition)
-    print(f"[decker] downloading {url}", file=sys.stderr)
+    log(f"[decker] downloading {url}", kind="head")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     partial = path.with_suffix(".gz.part")
     with urllib.request.urlopen(request) as response, partial.open("wb") as out:
@@ -139,10 +140,9 @@ def build_index(
                 pending.append(title)
         elif vocabulary is None or _spelled(title, joiner) in vocabulary:
             index.words.add(title)
-    print(
+    log(
         f"[decker] {len(index.words)} single-word titles, "
-        f"{len(pending)} multi-word titles to parse",
-        file=sys.stderr,
+        f"{len(pending)} multi-word titles to parse"
     )
     for title, tree in _parse_titles(pending, lang=lang, edition=edition):
         index.add_phrase(title, tree)
@@ -182,10 +182,12 @@ def _parse_titles(
     cached = _load_parsed(cache_path)
     missing = [title for title in titles if title not in cached]
     if missing:
-        print(f"[decker] parsing {len(missing)} titles", file=sys.stderr)
+        log(f"[decker] parsing {len(missing)} titles", kind="head")
         nlp = pipeline(lang)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with cache_path.open("a", encoding="utf-8") as cache_file:
+        with cache_path.open("a", encoding="utf-8") as cache_file, console.phase(
+            "titles", len(missing)
+        ):
             for done, (title, tree) in enumerate(
                 _parse_chunked(nlp, missing), start=1
             ):
@@ -197,8 +199,10 @@ def _parse_titles(
                     )
                     + "\n"
                 )
+                console.advance()
                 if done % 2000 == 0:
-                    print(f"[decker] parsed {done}/{len(missing)}", file=sys.stderr)
+                    log(f"[decker] parsed {done}/{len(missing)}", level=VERBOSE,
+                        kind="detail")
 
     for title in titles:
         tree = cached.get(title)

@@ -17,6 +17,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from decker.console import log
+
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything, and it is measured rather than guessed.
 #:
@@ -173,10 +175,8 @@ class Session:
             return
         self._warned = True
         tail = f"; {self.fallback}" if self.fallback else ""
-        print(
-            f"[decker] {self.what} unavailable ({reason}){self._held()}{tail}",
-            file=sys.stderr,
-        )
+        log(f"[decker] {self.what} unavailable ({reason}){self._held()}{tail}",
+            kind="error")
 
     def _held(self) -> str:
         """What the host does have, when it does not have what was asked for.
@@ -238,9 +238,9 @@ class Session:
                 if _said_something(response):
                     return response
                 self._thinkable = False
-                print(
+                log(
                     f"[decker] {self.model} answers nothing with its reasoning "
                     "turned off; leaving it on for this run, which is slower",
-                    file=sys.stderr,
+                    kind="warn",
                 )
         return self.client().chat(**arguments)

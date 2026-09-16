@@ -29,6 +29,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass, field
 
+from decker.console import log
 from decker.languages import name_of
 from decker.ollama import DEFAULT_MODEL, Session
 from decker.pages import Example
@@ -198,10 +199,10 @@ class Translator:
         if not self.kept:
             return
         parts = ", ".join(f"{count} {kind}" for kind, count in sorted(self.kept.items()))
-        print(
+        log(
             f"[decker] {sum(self.kept.values())} fields kept their "
             f"{SOURCE_LANGUAGE}: {parts}",
-            file=sys.stderr,
+            kind="warn",
         )
 
 

@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from decker import anki, languages, markdown, pages, pipeline, shuffling, subtitles
+from decker import anki, console, languages, markdown, pages, pipeline, shuffling, subtitles
 from decker.wiktionary import USER_AGENT
 from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
 from decker.translation import SOURCE_LANG
@@ -25,13 +25,13 @@ def main(argv: list[str] | None = None) -> int:
         #: Loudly, and with a non-zero status: every later fetch would be
         #: refused the same way, and a run that carried on would finish
         #: "successfully" with a deck missing most of its glosses.
-        print(
+        console.log(
             f"[decker] Wikimedia refused the request (HTTP 403) for {refusal}.\n"
             "[decker] That is the client being turned away, not a missing page: "
             "usually the User-Agent policy or a blocked address.\n"
             f"[decker] decker identifies itself as {USER_AGENT!r}.\n"
             "[decker] Nothing further would succeed, so the run stopped here.",
-            file=sys.stderr,
+            level=console.QUIET, kind="error",
         )
         return 2
 
@@ -74,6 +74,7 @@ def _main(argv: list[str] | None = None) -> int:
             "order and separated, so no sentence spans two of them"
         ),
     )
+    _add_console_arguments(extract)
     _add_language_arguments(extract)
     extract.add_argument(
         "--format", choices=("text", "json"), default="text", help="output format"
@@ -157,9 +158,11 @@ def _main(argv: list[str] | None = None) -> int:
     index = subcommands.add_parser(
         "index", help="build the whole title index ahead of time"
     )
+    _add_console_arguments(index)
     _add_language_arguments(index)
 
     arguments = parser.parse_args(argv)
+    console.configure(getattr(arguments, "verbose", 0), getattr(arguments, "quiet", False))
     if getattr(arguments, "wiktionary_host", None):
         pages.HOST = arguments.wiktionary_host
     if arguments.command == "index":
@@ -187,6 +190,29 @@ def _language_code(value: str) -> str:
             "take (en, es, pt, zh-hans...), not a name"
         )
     return code
+
+
+def _add_console_arguments(parser: argparse.ArgumentParser) -> None:
+    """How much the run says, and how loudly.
+
+    Counted rather than named -- `-v`, `-vv` -- because the levels are ordered
+    and nobody remembers what the third one is called. `--quiet` is the floor:
+    what a run cannot continue past, and nothing else.
+    """
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="name each word as it is looked up; twice, each sentence and what "
+        "the model was asked",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="print only what stops the run",
+    )
 
 
 def _add_language_arguments(parser: argparse.ArgumentParser) -> None:
@@ -218,6 +244,7 @@ def _add_source_arguments(parser: argparse.ArgumentParser) -> None:
             "order and separated, so no sentence spans two of them"
         ),
     )
+    _add_console_arguments(parser)
     _add_language_arguments(parser)
     parser.add_argument(
         "--whole-index",
@@ -315,15 +342,12 @@ def _taught(previous: str | None) -> frozenset[str]:
     if not previous:
         return frozenset()
     keys = anki.taught(previous)
-    print(
-        f"[decker] {len(keys)} glosses already taught by {Path(previous).name}",
-        file=sys.stderr,
-    )
+    console.log(f"[decker] {len(keys)} glosses already taught by {Path(previous).name}")
     if not keys:
-        print(
+        console.log(
             "[decker] that deck records no gloss keys -- decks built before "
             "decker recorded them carry none, and every gloss will be made again",
-            file=sys.stderr,
+            kind="warn",
         )
     return keys
 
@@ -369,10 +393,9 @@ def _one_source(source: str) -> str:
     if path.suffix.lower() not in subtitles.SUFFIXES:
         return raw
     text = subtitles.text_of(raw)
-    print(
+    console.log(
         f"[decker] {path.name}: {len(raw.splitlines())} lines of cues -> "
-        f"{len(text)} characters",
-        file=sys.stderr,
+        f"{len(text)} characters"
     )
     return text
 
@@ -430,7 +453,7 @@ def _run_define(arguments: argparse.Namespace) -> int:
 
     if arguments.out:
         Path(arguments.out).write_text(rendered, encoding="utf-8")
-        print(f"[decker] wrote {arguments.out}", file=sys.stderr)
+        console.log(f"[decker] wrote {arguments.out}", kind="head")
     else:
         sys.stdout.write(rendered)
     return 0
@@ -458,7 +481,7 @@ def _run_deck(arguments: argparse.Namespace) -> int:
             description=arguments.description,
             edition=arguments.edition or pipeline.MOTHER_EDITION,
         )
-        print(f"[decker] wrote {out}", file=sys.stderr)
+        console.log(f"[decker] wrote {out}", kind="head")
         return 0
 
     if arguments.format == "json":
@@ -478,7 +501,7 @@ def _run_deck(arguments: argparse.Namespace) -> int:
 
     if arguments.out:
         Path(arguments.out).write_text(rendered, encoding="utf-8")
-        print(f"[decker] wrote {arguments.out}", file=sys.stderr)
+        console.log(f"[decker] wrote {arguments.out}", kind="head")
     else:
         sys.stdout.write(rendered)
     return 0
@@ -563,10 +586,10 @@ def _run_index(arguments: argparse.Namespace) -> int:
         edition=arguments.edition,
         refresh_titles=arguments.refresh_titles,
     )
-    print(
+    console.log(
         f"[decker] indexed {len(index.words)} single-word titles and "
         f"{sum(len(entries) for entries in index.phrases.values())} phrases",
-        file=sys.stderr,
+        kind="head",
     )
     return 0
 

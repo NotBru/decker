@@ -28,6 +28,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from decker.languages import lect_of, section_of
+from decker.console import NORMAL, VERBOSE, log
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -428,10 +429,10 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
         #: copies of the same message. `de` and `o` were both caught this way.
         #: The page is still returned -- a degraded run beats no run -- but it
         #: is not written, so the next run has a chance at the real thing.
-        print(
+        log(
             f"[decker] {title!r} came back as a Wiktionary error page; "
             "using it once, not caching it",
-            file=sys.stderr,
+            level=VERBOSE, kind="warn",
         )
         return payloads
 
@@ -488,19 +489,16 @@ def report() -> None:
     if ERRORED_SENSES:
         total = sum(ERRORED_SENSES.values())
         kinds = ", ".join(f"{count} {kind}" for kind, count in sorted(ERRORED_SENSES.items()))
-        print(
+        log(
             f"[decker] {total} definitions were the wiki reporting a failure "
             f"({kinds}) and were left out; a mirror missing an extension is "
             "the usual reason -- see docs/execution/local-wiktionary.md",
-            file=sys.stderr,
+            kind="warn",
         )
     if not FAILURES:
         return
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(FAILURES.items()))
-    print(
-        f"[decker] {sum(FAILURES.values())} fetches failed: {parts}",
-        file=sys.stderr,
-    )
+    log(f"[decker] {sum(FAILURES.values())} fetches failed: {parts}", kind="warn")
 
 
 def _fetch(
@@ -532,14 +530,15 @@ def _fetch(
                 raise Refused(url) from error
             if error.code not in (429, 503) or attempt == MAX_ATTEMPTS - 1:
                 if not quiet:
-                    print(f"[decker] {url}: HTTP {error.code}", file=sys.stderr)
+                    log(f"[decker] {url}: HTTP {error.code}",
+                        level=VERBOSE, kind="warn")
                     FAILURES[f"{what}: HTTP {error.code}"] += 1
                 return None
             time.sleep(_retry_after(error, attempt))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             if attempt == MAX_ATTEMPTS - 1:
                 if not quiet:
-                    print(f"[decker] {url}: {error}", file=sys.stderr)
+                    log(f"[decker] {url}: {error}", level=VERBOSE, kind="warn")
                     FAILURES[f"{what}: unreachable"] += 1
                 return None
             time.sleep(BACKOFF**attempt)
@@ -1217,11 +1216,11 @@ def _glossary_page(edition: str, *, refresh: bool = False) -> dict | None:
             payloads = {"parse": parse, "source": mirror}
             _keep_glossary(path, payloads)
             return payloads
-        print(
+        log(
             f"[decker] {mirror} has no {GLOSSARY_PAGE}; reading it from "
             "Wikimedia instead, which is the one title a mirrored run still "
             "names upstream",
-            file=sys.stderr,
+            kind="warn",
         )
 
     revision = _revision(upstream, GLOSSARY_PAGE)
