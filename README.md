@@ -76,6 +76,14 @@ faster, much worse. `--no-concepts` and `--no-rules` switch off the two stages t
 their own — the grammatical terminology a definition is written in, and the regularity behind an
 inflected form.
 
+`--teach-script` is off by default and goes the other way, adding cards rather than skipping them:
+with it, no card shows a character an earlier card has not taught — the letters of the alphabet, the
+punctuation English does not use, and the IPA symbols the readings are written in. A Spanish deck
+gains a few dozen such cards, a Russian one its alphabet, a Chinese one every character it displays.
+Which characters a reader already has is known for English only; under any other `--mother-lang` the
+flag says so and stays off. See
+[docs/execution/teaching-the-script.md](docs/execution/teaching-the-script.md).
+
 `--unknowns` decides what happens to a word Wiktionary has no entry for: `off` drops it, as decker
 always did; `fix` (the default) looks the word up again when it is a misspelling, and teaches a
 foreign word the reader would not know with a one-sentence explanation from the model; `all` also

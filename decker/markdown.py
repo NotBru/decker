@@ -81,7 +81,9 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
     else:
         #: A foreign word has no entry -- that is what made it one -- so there
         #: is nothing to link and nothing of Wiktionary's on the card to credit.
-        facts.append("**entry** none: this word has no Wiktionary entry")
+        #: A symbol card whose character is only in the Unicode tables says the
+        #: same thing, which is why the line does not say "word".
+        facts.append("**entry** none: Wiktionary has no entry for this")
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
     if gloss.audio_urls:

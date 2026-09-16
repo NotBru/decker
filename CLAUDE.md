@@ -47,6 +47,9 @@ the code changes.
   captions and left no punctuation.
 - [What a run says while it runs](docs/execution/the-console.md) — levels, the colour per outcome,
   the bar and its units, and what Ctrl+C ends.
+- [Teaching the script](docs/execution/teaching-the-script.md) — the default-off flag that makes
+  every character a card displays something an earlier card taught: what counts as foreign, where a
+  symbol card's text comes from, and what it costs.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.
@@ -71,6 +74,11 @@ cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
 The terminology a definition is written in — dative, diminutive, colloquial — becomes cards of its
 own, one per `Appendix:Glossary` entry it links to, titled `Concept:` and carrying no production
 pair. `--no-concepts` turns the stage off.
+
+`--teach-script`, off by default, adds the writing system itself: every character a card displays
+that the mother tongue does not use — a letter, a punctuation mark, an IPA symbol — becomes a
+`Symbol:` card, without a production pair, ahead of every card that shows it. The repertoire is
+known for English only; another `--mother-lang` turns the stage off with a line saying so.
 
 The regularity behind an inflected form becomes a card too, titled `Rule:` and likewise without a
 production pair: the model is asked whether a form obeys a rule already written for its feature

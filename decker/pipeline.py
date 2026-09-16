@@ -117,6 +117,9 @@ def define(
     refresh_pages: bool = False,
     refresh_answers: bool = False,
     known: frozenset[str] = frozenset(),
+    teach_script: bool = False,
+    mother_lang: str = SOURCE_LANG,
+    translate: bool = True,
 ) -> list[Gloss]:
     """Run the v1 pipeline the whole way, from text to glosses."""
     sentences = run(
@@ -140,6 +143,13 @@ def define(
         refresh=refresh_pages,
         refresh_answers=refresh_answers,
         known=known,
+        #: Which characters the reader already has is a question about the
+        #: mother tongue, and so is whether the prose on a card is still the
+        #: edition's by the time they see it -- so deck construction's two
+        #: flags are needed one stage earlier than deck construction.
+        teach_script=teach_script,
+        mother_lang=mother_lang,
+        translate=translate,
     )
     pages.report()
     return glosses
@@ -156,7 +166,13 @@ def deck(
     **define_arguments,
 ) -> list[Card]:
     """Run every stage: text, terms, glosses, cards, and the order to learn them."""
-    glosses = define(text, target_lang=target_lang, **define_arguments)
+    glosses = define(
+        text,
+        target_lang=target_lang,
+        mother_lang=mother_lang,
+        translate=translate,
+        **define_arguments,
+    )
     built = deck_cards.build(
         glosses,
         mother_lang=mother_lang,

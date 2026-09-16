@@ -294,6 +294,15 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--teach-script",
+        action="store_true",
+        help=(
+            "teach the writing system as well: every character a card displays "
+            "that the mother tongue does not use -- letters, punctuation, IPA "
+            "symbols -- gets a card of its own, ahead of the cards that show it"
+        ),
+    )
+    parser.add_argument(
         "--no-rules",
         action="store_true",
         help=(
@@ -341,6 +350,7 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         audio=not arguments.no_audio,
         concepts=not arguments.no_concepts,
         rules=not arguments.no_rules,
+        teach_script=arguments.teach_script,
         unknowns=arguments.unknowns,
         refresh_pages=arguments.refresh_pages,
         refresh_answers=arguments.refresh_answers,
