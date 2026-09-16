@@ -14,10 +14,11 @@ import hashlib
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from decker.console import log
+from decker.console import DETAIL, log
 
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything, and it is measured rather than guessed.
@@ -123,15 +124,26 @@ class Session:
         path = self._remembered(prompt, schema)
         if path is not None and not self.refresh and path.exists():
             try:
-                return json.loads(path.read_text(encoding="utf-8"))
+                answer = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 pass  # a half-written or unreadable answer is simply asked again
+            else:
+                log(f"[decker]     {self.what}: remembered", level=DETAIL,
+                    kind="detail")
+                return answer
+        #: Timed, because this is where a run's wall clock goes and the whole
+        #: of the model comparison in `DEFAULT_MODEL` is these seconds added
+        #: up. At `-vv` a slow model is visible in the first minute rather
+        #: than at the end of the run.
+        started = time.monotonic()
         try:
             response = self._chat(prompt, schema)
             answer = json.loads(response["message"]["content"])
         except Exception as error:  # ollama down, model missing, bad JSON
             self.warn(str(error))
             return None
+        log(f"[decker]     {self.what}: {self.model} answered in "
+            f"{time.monotonic() - started:.1f}s", level=DETAIL, kind="detail")
         if path is not None:
             self._remember(path, answer)
         return answer

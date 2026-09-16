@@ -16,7 +16,7 @@ translator on its way onto the card, which is where the design puts it.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from decker.console import console, log
 from decker.glosses import Gloss
@@ -34,7 +34,16 @@ class Side:
 
     term: str | None = None
     definition: str | None = None
+    #: The example sentences, in the language being taught and nothing else:
+    #: the challenge side carries them without their rendering, because the
+    #: rendering *is* the answer. `[la] servilleta -- the napkin` on the front
+    #: of a recognition card asks the learner to recall a word the card has
+    #: already told them.
     examples: tuple[Example, ...] = ()
+    #: The renderings of those sentences, in the same order, on the answer
+    #: side. Kept as their own field rather than a second copy of the examples
+    #: so the back does not repeat the sentences the front already shows.
+    renderings: tuple[str, ...] = ()
     ipa: tuple[str, ...] = ()
     etymology: str | None = None
     #: Cached sound file, on the face that names the pronunciation.
@@ -146,11 +155,12 @@ def _pair(
         language=gloss.language,
         anchor=gloss.anchor,
         attribution=gloss.attribution,
-        challenge=Side(term=gloss.surface, examples=examples),
+        challenge=Side(term=gloss.surface, examples=_unrendered(examples)),
         #: The sound file rides with the reading: both answer the same
         #: question, and the run has already downloaded it.
         answer=Side(
             definition=definition,
+            renderings=_renderings(examples),
             ipa=gloss.ipa,
             etymology=etymology,
             audios=gloss.audios,
@@ -186,6 +196,23 @@ def _pair(
         #: depends on is already behind that card, and the ordering the
         #: design asks for is transitive.
         depends_on=(recognition,),
+    )
+
+
+def _unrendered(examples: tuple[Example, ...]) -> tuple[Example, ...]:
+    """The examples as the question shows them: sentences alone."""
+    return tuple(replace(example, rendering=None) for example in examples)
+
+
+def _renderings(examples: tuple[Example, ...]) -> tuple[str, ...]:
+    """The renderings of those sentences, in the same order.
+
+    Only the ones there are: an example Wiktionary carries no rendering for
+    contributes nothing here rather than an empty line, and the answer side of
+    a gloss whose examples are all unrendered has no renderings at all.
+    """
+    return tuple(
+        example.rendering for example in examples if example.rendering
     )
 
 

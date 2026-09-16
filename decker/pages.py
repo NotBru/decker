@@ -28,7 +28,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from decker.languages import lect_of, section_of
-from decker.console import NORMAL, VERBOSE, log
+from decker.console import DETAIL, NORMAL, VERBOSE, log
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -151,6 +151,14 @@ class Entry:
     #: itself: `f (plural servilletas)`. The gender and the paradigm, as the
     #: page announces them. Empty where the line carries nothing but the word.
     headword: str = ""
+    #: The readings and recordings of *this block*, not of the section. A page
+    #: that numbers its etymologies gives each one its own Pronunciation, and
+    #: they are different words: Russian `в` is the letter, the preposition and
+    #: an abbreviation of `вольт`, and pooling them put the letter's phoneme
+    #: inventory and `[volʲt]` on the preposition's card. Empty where the block
+    #: has no pronunciation of its own, and :class:`Page` answers instead.
+    ipa: tuple[str, ...] = ()
+    audio_urls: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -198,6 +206,27 @@ class Page:
                 if one is sense:
                     return entry.etymology
         return self.etymology
+
+    def ipa_of(self, sense: Sense) -> tuple[str, ...]:
+        """The readings of the block this sense sits under.
+
+        The section's own where the block has none: a page with one
+        pronunciation above its etymologies shares it, which is the ordinary
+        case and the reason :attr:`ipa` still exists.
+        """
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return entry.ipa or self.ipa
+        return self.ipa
+
+    def audio_of(self, sense: Sense) -> tuple[str, ...]:
+        """The recordings of the block this sense sits under, by the same rule."""
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return entry.audio_urls or self.audio_urls
+        return self.audio_urls
 
     def headword_of(self, sense: Sense) -> str:
         """The headword line of the part of speech this sense sits under."""
@@ -269,19 +298,20 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if payloads is None:
         return None
     language = section_of(lang)
-    entries = _entries_from_html(payloads.get("parse"), language)
+    lect = lect_of(lang)
+    entries = _entries_from_html(payloads.get("parse"), language, lect)
     if not entries and _is_split(payloads):
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
         pointed_at = _points_at(payloads, language, title)
         if pointed_at is not None:
             payloads, entries = _from_pointer(
-                pointed_at, payloads, language, edition=edition, refresh=refresh
+                pointed_at, payloads, language, edition=edition, refresh=refresh, lect=lect
             )
     if not entries:
         return None
     language = entries[0].language or language
-    etymology, ipa, audios = _from_html(payloads.get("parse"), language, lect_of(lang))
+    etymology, ipa, audios = _from_html(payloads.get("parse"), language, lect)
     return Page(
         title=title,
         language=language,
@@ -339,7 +369,13 @@ def _points_at(payloads: dict, language: str, title: str) -> str | None:
 
 
 def _from_pointer(
-    target: str, payloads: dict, language: str, *, edition: str, refresh: bool
+    target: str,
+    payloads: dict,
+    language: str,
+    *,
+    edition: str,
+    refresh: bool,
+    lect: str = "",
 ) -> tuple[dict, list]:
     """Read the section at the spelling this page points at.
 
@@ -352,7 +388,7 @@ def _from_pointer(
     found = _payloads(target, edition=edition, refresh=refresh)
     if found is None:
         return payloads, []
-    entries = _entries_from_html(found.get("parse"), language)
+    entries = _entries_from_html(found.get("parse"), language, lect)
     return (found, entries) if entries else (payloads, [])
 
 
@@ -394,7 +430,7 @@ def _from_split(
         found = _payloads(subpage, edition=edition, refresh=refresh)
         if found is None:
             continue
-        entries = _entries_from_html(found.get("parse"), section_of(lang))
+        entries = _entries_from_html(found.get("parse"), section_of(lang), lect_of(lang))
         if entries:
             return found, entries
     return payloads, []
@@ -590,18 +626,8 @@ def _from_html(
     if section is None:
         return None, (), ()
 
-    spoken = _lect_block(section, lect) if lect else section
-    ipa = tuple(
-        reading
-        for raw in _IPA.findall(spoken)
-        #: A reconstruction is not a pronunciation of the word in front of the
-        #: learner: `/*Cə.kˤroʔ/` is what 狗 is thought to have sounded like
-        #: three thousand years ago, and it is written with the asterisk that
-        #: says so in every language that has one.
-        if (reading := strip_html(raw)).startswith(_IPA_DELIMITERS)
-        and "*" not in reading
-    )
-    return _etymology(section), ipa, _audios(spoken)
+    spoken = _spoken(_shared(section), lect)
+    return _etymology(section), _readings(spoken), _audios(spoken)
 
 
 #: The varieties the English Wiktionary gives a Chinese entry a pronunciation
@@ -645,6 +671,65 @@ def _lect_block(section: str, lect: str) -> str:
     if joined and (_IPA.search(joined) or _AUDIO.search(joined)):
         return joined
     return section
+
+
+#: The heading a reading sits under. Everything else in a block that looks like
+#: IPA is prose *about* pronunciation rather than the word's: Russian `я` says
+#: in a usage note that "г in the genitive ending is pronounced as /v/", and
+#: `/v/` became one of the pronoun's readings.
+_PRONUNCIATION_HEADING = re.compile(r'<h[2-6] id="Pronunciation[^"]*"')
+
+
+def _pronunciation(block: str, lect: str = "") -> str:
+    """The slice of a block that is its Pronunciation section.
+
+    From the heading to the next heading of any level. Nothing when the block
+    has no such heading, which is how a caller knows to fall back rather than
+    read the whole block and collect its usage notes.
+    """
+    found = _PRONUNCIATION_HEADING.search(block)
+    if found is None:
+        return ""
+    following = _ANY_HEADING.search(block, found.end())
+    slice_ = block[found.start() : following.start() if following else len(block)]
+    return _lect_block(slice_, lect) if lect else slice_
+
+
+def _shared(section: str) -> str:
+    """The part of a section that belongs to no etymology in particular.
+
+    Everything above the first `Etymology 1`, which is where a page that
+    numbers its etymologies puts the pronunciation they all share. A section
+    that numbers nothing has one etymology and shares all of it.
+
+    Reading the whole section instead is what put `[volʲt]` -- the abbreviation
+    of `вольт` -- on the Russian preposition `в`, whose three etymologies each
+    carry their own Pronunciation and are three different words.
+    """
+    headings = list(_ETYMOLOGY_HEADING.finditer(section))
+    return section[: headings[0].start()] if headings else section
+
+
+def _spoken(block: str, lect: str = "") -> str:
+    """The slice of a block to read a pronunciation out of.
+
+    Its Pronunciation section, and failing that the block itself -- a page that
+    writes IPA without a heading for it is still a page whose IPA is the word's.
+    A reconstruction is not: `/*Cə.kˤroʔ/` is what 狗 is thought to have sounded
+    like three thousand years ago, and the asterisk says so in every language
+    that has one, which is why `_readings` drops it.
+    """
+    return _pronunciation(block, lect) or (_lect_block(block, lect) if lect else block)
+
+
+def _readings(block: str) -> tuple[str, ...]:
+    """Every reading in a slice, minus what is not one."""
+    return tuple(
+        reading
+        for raw in _IPA.findall(block)
+        if (reading := strip_html(raw)).startswith(_IPA_DELIMITERS)
+        and "*" not in reading
+    )
 
 
 def _audios(section: str) -> tuple[str, ...]:
@@ -960,7 +1045,9 @@ def _merge(*groups: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(found)
 
 
-def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
+def _entries_from_html(
+    parse: dict | None, language: str, lect: str = ""
+) -> list[Entry]:
     """The language's entries, read from the rendered page.
 
     One etymology block at a time, so each part of speech keeps the etymology
@@ -974,11 +1061,22 @@ def _entries_from_html(parse: dict | None, language: str) -> list[Entry]:
     section = _language_section(html, language)
     if section is None:
         return []
-    return [
-        entry
-        for etymology, block in _etymology_blocks(section)
-        for entry in _entries_in(block, language, etymology)
-    ]
+    entries = []
+    for etymology, block in _etymology_blocks(section):
+        #: The block's own, not the section's. Empty above the first numbered
+        #: etymology and on a block that carries no Pronunciation of its own,
+        #: which is when :class:`Page` answers with the shared one instead.
+        spoken = _pronunciation(block, lect)
+        entries.extend(
+            _entries_in(
+                block,
+                language,
+                etymology,
+                ipa=_readings(spoken),
+                audio_urls=_audios(spoken),
+            )
+        )
+    return entries
 
 
 def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
@@ -1014,7 +1112,14 @@ def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
     return blocks
 
 
-def _entries_in(section: str, language: str, etymology: str | None) -> list[Entry]:
+def _entries_in(
+    section: str,
+    language: str,
+    etymology: str | None,
+    *,
+    ipa: tuple[str, ...] = (),
+    audio_urls: tuple[str, ...] = (),
+) -> list[Entry]:
     """The parts of speech of one slice of a language section.
 
     The walk follows document order rather than looking only at the top of the
@@ -1060,6 +1165,8 @@ def _entries_in(section: str, language: str, etymology: str | None) -> list[Entr
                                 senses=tuple(senses),
                                 etymology=etymology,
                                 headword=state["headword"],
+                                ipa=ipa,
+                                audio_urls=audio_urls,
                             )
                         )
                     continue
@@ -1111,6 +1218,7 @@ def audio_path(url: str, *, download: bool = True) -> Path | None:
         return path
     if not download:
         return None
+    log(f"[decker]     downloading {name}", level=DETAIL, kind="detail")
     data = _fetch(url, what="audio")
     if not isinstance(data, bytes):
         return None

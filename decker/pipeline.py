@@ -10,13 +10,14 @@ function here stops the pipeline one stage further along.
 from __future__ import annotations
 
 import sys
+import time
 from dataclasses import dataclass
 
 from decker import cards as deck_cards
 from decker import pages
 from decker import shuffling, trees, wiktionary
 from decker.cards import Card
-from decker.console import log
+from decker.console import VERBOSE, console, log
 from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
 from decker.nlp import pipeline
@@ -47,33 +48,56 @@ def run(
     refresh_titles: bool = False,
 ) -> list[SentenceTerms]:
     """Run the v1 pipeline over ``text`` up to term extraction."""
-    document = pipeline(target_lang)(text)
+    parser = pipeline(target_lang)
+    #: The parse is one call over the whole document and cannot report its way
+    #: through, so the only honest thing is to say it has started and how much
+    #: it was given. It is also where a run's memory goes: a series' worth of
+    #: subtitles is megabytes of text held as trees.
+    log(f"[decker] parsing {len(text)} characters", kind="head")
+    started = time.monotonic()
+    document = parser(text)
     sentences = document.sentences
-    log(f"[decker] {len(sentences)} sentences", kind="head")
+    log(f"[decker] {len(sentences)} sentences in "
+        f"{time.monotonic() - started:.1f}s", kind="head")
 
     join_particles = trees.joins_particles(target_lang)
     vocabulary = None
     if not whole_index:
+        log("[decker] collecting the text's vocabulary", level=VERBOSE)
         vocabulary = wiktionary.vocabulary_of(
             tree
             for sentence in sentences
             for tree in trees.sentence_tree(sentence, join_particles=join_particles)
         )
+        log(f"[decker] {len(vocabulary)} distinct spellings to look for",
+            level=VERBOSE)
     index = build_index(
         target_lang,
         edition=edition,
         vocabulary=vocabulary,
         refresh_titles=refresh_titles,
     )
-    return [
-        SentenceTerms(
-            text=sentence.text,
-            terms=extract(
-                sentence, index, join_particles=join_particles, lang=target_lang
-            ),
-        )
-        for sentence in sentences
-    ]
+    #: Term extraction is fast per sentence and slow over a series, and it is
+    #: the last stage before the one that talks to the network, so a bar here
+    #: is the difference between "it is working" and "it is stuck on the
+    #: index".
+    found = []
+    with console.phase("terms", sum(len(one.text) for one in sentences)):
+        for sentence in sentences:
+            if console.skipping():
+                break
+            found.append(
+                SentenceTerms(
+                    text=sentence.text,
+                    terms=extract(
+                        sentence, index, join_particles=join_particles,
+                        lang=target_lang,
+                    ),
+                )
+            )
+            console.advance(len(sentence.text))
+    log(f"[decker] {sum(len(one.terms) for one in found)} terms", kind="head")
+    return found
 
 
 def define(

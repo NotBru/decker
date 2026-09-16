@@ -45,6 +45,8 @@ the code changes.
 - [Subtitles as a source](docs/execution/subtitles.md) — `.srt` and `.vtt` folded back into prose:
   the rolling repeats, the markup, and where sentence boundaries come from when a machine wrote the
   captions and left no punctuation.
+- [What a run says while it runs](docs/execution/the-console.md) — levels, the colour per outcome,
+  the bar and its units, and what Ctrl+C ends.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.

@@ -382,9 +382,13 @@ def _source_text(sources: list[str] | str) -> str:
     """
     if isinstance(sources, str):
         sources = [sources]
-    return SOURCE_SEPARATOR.join(
-        _one_source(source).strip() for source in sources
+    text = SOURCE_SEPARATOR.join(_one_source(source).strip() for source in sources)
+    console.log(
+        f"[decker] read {len(sources)} source{'' if len(sources) == 1 else 's'}, "
+        f"{len(text)} characters",
+        kind="head",
     )
+    return text
 
 
 def _one_source(source: str) -> str:
@@ -397,9 +401,11 @@ def _one_source(source: str) -> str:
     the wrong name.
     """
     if source == "-":
+        console.log("[decker] reading standard input", level=console.VERBOSE)
         raw = sys.stdin.read()
         return subtitles.text_of(raw) if subtitles.looks_like(raw) else raw
     path = Path(source)
+    console.log(f"[decker] reading {path.name}", level=console.VERBOSE)
     raw = path.read_text(encoding="utf-8")
     if path.suffix.lower() not in subtitles.SUFFIXES:
         return raw
@@ -538,6 +544,7 @@ def _side(side) -> list[str]:
     if side.headword:
         pieces.append(side.headword)
     pieces += [str(example) for example in side.examples]
+    pieces += list(side.renderings)
     if side.ipa:
         pieces.append(" ".join(side.ipa))
     if side.etymology:

@@ -240,3 +240,16 @@ user's own it is a copyright question too, and the ollama default is what keeps 
 
 - The examples on a recognition card are the ones Wiktionary happens to give the sense, which for
   many senses is none. Nothing generates them.
+
+- **The example's rendering is on the back, and only the sentence is on the front.** An example is a
+  pair — the sentence in the language being taught, and the edition's rendering of it — and showing
+  the pair on the front of a recognition card answers the card: `Он в теа́тре — He's at the theater`
+  under the word `в` hands the learner the meaning they were being asked for. The front shows the
+  sentences alone; the renderings ride on the answer side, in the same order, as their own field.
+  Their own field rather than a second copy of the examples, because the back already opens with
+  `{{FrontSide}}`, and the sentences are right above where the renderings land.
+
+  `Renderings` is appended to the recognition note type rather than inserted, like `Headword` before
+  it: the model ids are stable, so a collection that already holds decker notes gains a column
+  instead of having its existing ones renumbered underneath them. A production card has no examples
+  and gains nothing.

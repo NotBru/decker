@@ -73,7 +73,7 @@ CSS = """\
 #: existing ones renumbered under the notes already in it.
 RECOGNITION_FIELDS = (
     "Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit",
-    "Headword",
+    "Headword", "Renderings",
 )
 PRODUCTION_FIELDS = ("Definition", "Term", "IPA", "Etymology", "Credit", "Headword")
 
@@ -85,6 +85,7 @@ RECOGNITION_FRONT = """\
 RECOGNITION_BACK = """\
 {{FrontSide}}
 <hr id="answer">
+{{#Renderings}}<div class="examples">{{Renderings}}</div>{{/Renderings}}
 <div class="definition">{{Definition}}</div>
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
@@ -206,6 +207,7 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             _sounds(card.answer.audios),
             credit,
             card.answer.headword,
+            _lines(card.answer.renderings),
         ]
     else:
         fields = [

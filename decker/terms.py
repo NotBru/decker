@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from decker import trees
+from decker.console import VERBOSE, log
 from decker.languages import joiner_of
 from decker.wiktionary import TitleIndex
 
@@ -101,6 +102,15 @@ def extract(
     words = {word.id: word for word in sentence.words}
     punctuation = {word.id for word in sentence.words if word.upos == "PUNCT"}
     numerals = {word.id for word in sentence.words if _is_number(word.text)}
+    if numerals:
+        #: Named rather than only counted: this is the one drop decker makes
+        #: without asking anything, so a run has to be able to show what it
+        #: took. A token listed here that is not a number is a bug in
+        #: :func:`_is_number` and nothing else will report it.
+        written = ", ".join(
+            dict.fromkeys(words[one].text for one in sorted(numerals) if one in words)
+        )
+        log(f"[decker] dropped as numbers: {written}", level=VERBOSE, kind="dropped")
     initial = trees.sentence_initial_ids(list(sentence.words))
     base = sentence.tokens[0].start_char if sentence.tokens else 0
     kept = [

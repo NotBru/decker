@@ -101,9 +101,18 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     partial = path.with_suffix(".gz.part")
     with urllib.request.urlopen(request) as response, partial.open("wb") as out:
-        while chunk := response.read(1 << 20):
-            out.write(chunk)
+        #: Tens of megabytes over whatever connection the run has, once per
+        #: edition, and the only stage that can honestly count bytes because
+        #: the server says how many there are. Not skippable: half a dump is
+        #: not a dump, and the run has nothing to do without it.
+        size = int(response.headers.get("Content-Length") or 0)
+        with console.phase("dump", size, skippable=False):
+            while chunk := response.read(1 << 20):
+                out.write(chunk)
+                console.advance(len(chunk))
     partial.replace(path)
+    log(f"[decker] {path.stat().st_size // (1 << 20)} MB of titles cached at "
+        f"{path}", level=VERBOSE, kind="detail")
     return path
 
 
@@ -134,12 +143,24 @@ def build_index(
     joiner = joiner_of(lang)
     index = TitleIndex(edition=edition)
     pending: list[str] = []
-    for title in iter_titles(path):
-        if " " in title:
-            if vocabulary is None or _reachable(title, vocabulary):
-                pending.append(title)
-        elif vocabulary is None or _spelled(title, joiner) in vocabulary:
-            index.words.add(title)
+    #: Nine million titles off a gzipped dump, which is twenty seconds of
+    #: nothing at all being printed. The bar counts compressed bytes -- the
+    #: only total known before the read -- and the line says where they are
+    #: coming from, since a run that is silently re-downloading the dump and a
+    #: run that is reading a cached one look identical from outside.
+    log(f"[decker] scanning {path.name} for titles this text could use",
+        kind="head")
+    read = 0
+    with console.phase("index", path.stat().st_size, skippable=False):
+        for read, title in enumerate(iter_titles(path), start=1):
+            if " " in title:
+                if vocabulary is None or _reachable(title, vocabulary):
+                    pending.append(title)
+            elif vocabulary is None or _spelled(title, joiner) in vocabulary:
+                index.words.add(title)
+            if read % _BAR_STEP == 0:
+                console.advance(int(_BAR_STEP / _TITLES_PER_BYTE))
+    log(f"[decker] {read} titles read", level=VERBOSE, kind="detail")
     log(
         f"[decker] {len(index.words)} single-word titles, "
         f"{len(pending)} multi-word titles to parse"
@@ -147,6 +168,17 @@ def build_index(
     for title, tree in _parse_titles(pending, lang=lang, edition=edition):
         index.add_phrase(title, tree)
     return index
+
+
+#: Titles per compressed byte, near enough for a bar: the dump is one short
+#: line per title and gzip gets it to about a byte and a half. The bar is drawn
+#: against the file's size on disk, so the share it shows is a few percent out
+#: at worst -- which is all a bar is for, and cheaper than asking the
+#: decompressor where it is every line.
+_TITLES_PER_BYTE = 0.66
+#: How often to redraw it. Every line would spend more time on the terminal
+#: than on the titles.
+_BAR_STEP = 50_000
 
 
 def _spelled(title: str, joiner: str) -> str:

@@ -177,10 +177,25 @@ class _Builder:
 
     def page(self, title: str) -> Page | None:
         if title not in self.fetched:
-            log(f"[decker]   {title}", level=VERBOSE, kind="detail")
+            log(f"[decker]   fetching {title}", level=DETAIL, kind="detail")
             self.fetched[title] = pages.fetch(
                 title, edition=self.edition, lang=self.lang, refresh=self.refresh
             )
+            #: The outcome rather than the request: a page that came back
+            #: without a section in this language is the ordinary reason a word
+            #: of the text gets no card, and at `-v` it is the line worth
+            #: seeing. The fetch itself is one level further down.
+            page = self.fetched[title]
+            if page is None:
+                log(f"[decker]   {title}: no {name_of(self.lang)} section",
+                    level=VERBOSE, kind="missing")
+            else:
+                log(
+                    f"[decker]   {title}: {len(page.senses)} sense"
+                    f"{'' if len(page.senses) == 1 else 's'}"
+                    f"{' from ' + page.source if page.source else ''}",
+                    level=VERBOSE, kind="found",
+                )
         return self.fetched[title]
 
     def first_page(self, titles: tuple[str, ...]) -> Page | None:
@@ -245,9 +260,15 @@ class _Builder:
                 #: section's only where the page numbers just one.
                 etymology=page.etymology_of(sense),
                 headword=page.headword_of(sense),
-                ipa=page.ipa,
-                audio_urls=page.audio_urls,
-                audios=self._audios(page),
+                #: And the pronunciation of that same block, for the same
+                #: reason: Russian `в` is a letter, a preposition and an
+                #: abbreviation of `вольт` under three numbered etymologies,
+                #: each with its own Pronunciation, and the preposition's card
+                #: was carrying all three -- `[v] [vʲ] [f] [vɛ] [v] [f] [və]
+                #: [volʲt]` -- and all three recordings with them.
+                ipa=page.ipa_of(sense),
+                audio_urls=(recordings := page.audio_of(sense)),
+                audios=self._audios(page, recordings),
                 depends_on=depends_on,
                 key=gloss_key(surface, sense.definition),
             )
@@ -426,15 +447,20 @@ class _Builder:
         self.rule_count += 1
         return index
 
-    def _audios(self, page: Page) -> tuple[str, ...]:
-        """Every recording of the page, downloaded, minus the ones that failed."""
-        if not self.audio:
+    def _audios(self, page: Page, urls: tuple[str, ...]) -> tuple[str, ...]:
+        """The given recordings, downloaded, minus the ones that failed.
+
+        Given rather than read off the page: which of a page's recordings
+        belong to a gloss is the etymology block's question, and the block is
+        what asked for these.
+        """
+        if not self.audio or not urls:
             return ()
         if not pages.carries_media(page.source):
             self.silent.add(page.title)
             return ()
-        self.offered += len(page.audio_urls)
-        paths = (pages.audio_path(url) for url in page.audio_urls)
+        self.offered += len(urls)
+        paths = (pages.audio_path(url) for url in urls)
         return tuple(str(path) for path in paths if path)
 
 
@@ -651,6 +677,12 @@ def _gloss_term(
     if not candidates:
         _no_entry(builder, term, sentence, around)
         return
+    #: What the word cost the deck, said once per occurrence. A term with an
+    #: entry that ends up adding nothing -- every sense already taught, every
+    #: instance culled by the rules stage -- otherwise looks exactly like one
+    #: that was never reached, and the two want telling apart while reading a
+    #: run go past.
+    before = len(builder.glosses)
 
     #: The occurrence is bracketed inside its own sentence and the neighbours
     #: go around the outside, so the model is shown a passage with exactly one
@@ -694,6 +726,14 @@ def _gloss_term(
         if (examples := builder.morphology.example(outcome.rule, index)) is not None:
             builder.rule(outcome.rule, examples)
 
+    added = len(builder.glosses) - before
+    if added:
+        log(f"[decker] {term.surface!r}: {added} gloss"
+            f"{'' if added == 1 else 'es'}", level=VERBOSE, kind="found")
+    else:
+        log(f"[decker] {term.surface!r}: nothing new to teach",
+            level=VERBOSE, kind="dropped")
+
 
 def _no_entry(
     builder: _Builder, term: Term, sentence: str, around: tuple[str, str]
@@ -711,7 +751,7 @@ def _no_entry(
         log(
             f"[decker] no {builder.lang} entry for {term.surface!r} "
             f"({', '.join(term.entries)})",
-            level=VERBOSE, kind="detail",
+            level=VERBOSE, kind="missing",
         )
         return
 
@@ -720,8 +760,9 @@ def _no_entry(
     verdict = unknowns.verdict(term.surface, passage, name_of(builder.lang))
     if verdict is None:
         log(
-            f"[decker] no {builder.lang} entry for {term.surface!r}",
-            level=VERBOSE, kind="detail",
+            f"[decker] no {builder.lang} entry for {term.surface!r}; the model "
+            "would not say what it is",
+            level=VERBOSE, kind="missing",
         )
         return
 
@@ -731,12 +772,12 @@ def _no_entry(
             log(
                 f"[decker] {term.surface!r} looks like {verdict.correction!r}, "
                 "which has no entry either",
-                level=VERBOSE, kind="detail",
+                level=VERBOSE, kind="missing",
             )
             return
         log(
             f"[decker] {term.surface!r} -> {verdict.correction!r} (spelling)",
-            level=VERBOSE, kind="detail",
+            level=VERBOSE, kind="fixed",
         )
         #: Glossed as the word that was meant, and fronted with it: the text's
         #: spelling is a mistake in the text, and a card teaching it would
@@ -751,9 +792,9 @@ def _no_entry(
         index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
         if index is not None:
             log(
-                f"[decker] {term.surface!r} is a {builder.lang} word Wiktionary "
-                "lacks; explained by the model",
-                level=VERBOSE, kind="detail",
+                f"[decker] {term.surface!r} is a {name_of(builder.lang)} word "
+                "Wiktionary lacks; explained by the model",
+                level=VERBOSE, kind="fixed",
             )
         return
 
@@ -761,7 +802,7 @@ def _no_entry(
         if verdict.widely_known and not unknowns.teaches_known_foreign():
             log(
                 f"[decker] {term.surface!r} is foreign and widely known; no card",
-                level=VERBOSE, kind="detail",
+                level=VERBOSE, kind="dropped",
             )
             return
         if not verdict.explanation:
@@ -776,7 +817,7 @@ def _no_entry(
 
     log(
         f"[decker] {term.surface!r} is nothing recognizable; dropped",
-        level=VERBOSE, kind="detail",
+        level=VERBOSE, kind="dropped",
     )
 
 

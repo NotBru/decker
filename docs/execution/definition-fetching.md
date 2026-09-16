@@ -310,6 +310,30 @@ design wins and the code is wrong.
   have sounded like three thousand years ago, not how the word in front of the learner is said, and
   the asterisk that says so is the same in every language that reconstructs.
 
+- **The pronunciation of the sense's own etymology block, and of its Pronunciation heading.** Two
+  narrowings, found together on one Russian letter. Russian `в` is three words under three numbered
+  etymologies — the letter, the preposition, and an abbreviation of `вольт` — and each carries its
+  own Pronunciation. Read as one section it gave every sense all of them: the preposition's card
+  said `[v] [vʲ] [f] [vɛ] [v] [f] [və] [volʲt]` and played three recordings, one of which is a
+  person saying "volt". `Entry` now carries the readings and recordings of the block it was cut
+  from, and `Page.ipa_of(sense)` / `Page.audio_of(sense)` answer per sense exactly as
+  `etymology_of` and `headword_of` already did. `Page.ipa` survives as the fallback for a block with
+  no pronunciation of its own, and it is now read from *above* the first `Etymology 1` — the place a
+  page puts the pronunciation its etymologies share — rather than from the whole section, which is
+  how `[volʲt]` was reaching everything in the first place.
+
+  The second narrowing is the heading. `я` has one shared pronunciation and, in the pronoun block, a
+  usage note saying that "г in the genitive/accusative ending is pronounced as /v/" — prose *about*
+  pronunciation, in IPA, and nothing to do with how `я` is said. The reading is now taken from the
+  slice that runs from the `Pronunciation` heading to the next heading of any level, so a note, a
+  descendants list or a quotation cannot contribute one. A block with no such heading falls back to
+  the block whole, which is how a page that writes IPA without a heading for it still works.
+
+  Measured: `в` taught as a preposition gets `[v] [f] [və]` and one recording, the letter gets its
+  four readings and three recordings, `вольт` gets `[volʲt]`; `я` gets `[ja]` and loses the `/v/`;
+  `мир`, `perro` and 狗 — one block apiece — are unchanged, 狗 keeping its four Mandarin readings.
+  The lect slice runs *inside* the Pronunciation section now, which is where it always belonged.
+
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
   the design says to fetch all that is available, and taking the first drops the rest silently.

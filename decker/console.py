@@ -36,6 +36,15 @@ QUIET, NORMAL, VERBOSE, DETAIL = 0, 1, 2, 3
 #: is scanning for, so they are the two that carry colour on their own; a
 #: heading is bright because it is the skeleton of the run; detail is dim
 #: because there is a great deal of it and it is only ever read in passing.
+#:
+#: The last four are not levels but *outcomes*, and they exist because at `-v`
+#: the interesting question is not how much is happening but what kind: a
+#: thousand dim lines all alike say a word was looked up and nothing about
+#: whether it became a card. Green is a word that did, cyan is one that was
+#: rescued into being one -- a misspelling corrected, a foreign word explained
+#: -- yellow is one Wiktionary has no entry for, and magenta is one thrown away
+#: on purpose. Scanning a run for magenta and finding a real word in it is how
+#: a bad drop rule gets noticed.
 _COLOURS = {
     "error": "\033[31m",
     "warn": "\033[33m",
@@ -43,6 +52,10 @@ _COLOURS = {
     "info": "",
     "detail": "\033[2m",
     "bar": "\033[36m",
+    "found": "\033[32m",
+    "fixed": "\033[36m",
+    "missing": "\033[33m\033[2m",
+    "dropped": "\033[35m\033[2m",
 }
 _RESET = "\033[0m"
 #: Erase the whole line and put the cursor back at its start.
