@@ -962,7 +962,7 @@ def _gloss_term(
     if term.upos in CONTEXT_FOR:
         marked = " ".join(part for part in (around[0], marked, around[1]) if part)
     page, senses = _pooled_senses(builder, candidates, term, marked)
-    surface = _spelling(term, page)
+    surface = _spelling(page)
     for sense in senses:
         #: Before anything decides whether this occurrence keeps a card of its
         #: own: what a form-of definition points at is glossed either way. The
@@ -1294,21 +1294,24 @@ def _pooled_senses(
     return winner, tuple(sense for page, sense in chosen if page.title == winner.title)
 
 
-def _spelling(term: Term, page: Page) -> str:
-    """The term's form, spelled the way Wiktionary spells the entry it won.
+def _spelling(page: Page) -> str:
+    """The form the card is fronted with: the entry the senses were read from.
 
-    Whatever matched is what the card is fronted with, as long as it is one of
-    the term's own spellings. The capital was the first case -- `Cuando`
-    glossed from `cuando` is one thing to learn rather than two -- and the
-    bound morpheme is the second: a clitic that won its entry at `ל־` is
-    fronted `ל־`, with the maqaf, because that is what the dictionary calls
-    the thing the card teaches and the maqaf is the part that says it attaches
-    to the next word. Bru's call, 2026-09-15.
+    The card's back is one entry's -- its senses, its etymology, its reading --
+    so its front is that entry's title. The capital was the first case
+    this settled -- `Cuando` glossed from `cuando` is one thing to learn rather
+    than two -- and the bound morpheme the second: a clitic that won its entry
+    at `ל־` is fronted `ל־`, with the maqaf, because that is what the
+    dictionary calls the thing the card teaches and the maqaf is the part that
+    says it attaches to the next word. Bru's call, 2026-09-15.
 
-    Where the entry is a different word -- `enrulada` glossed from `enrulado`,
-    for want of a page of its own -- the form the text uses is kept, since the
-    entry's is not the term.
+    The third case is why this is now the whole rule. A form Wiktionary has no
+    page for is glossed from its lemma's, and the text's own form used to stay
+    on the front: `Упавшего` fronting `упасть`'s definition, `упасть`'s
+    reading `[ʊˈpasʲtʲ]` and `упасть`'s example -- a card that asks for a
+    participle and answers with an infinitive, keeping a sentence-initial
+    capital on top. Bru found it in a deck he was studying, 2026-09-16. The
+    text's form is what the reader met, but it is not what this card teaches,
+    and nothing on the back of it says so.
     """
-    if page.title in term.spellings or term.surface.lower() == page.title.lower():
-        return page.title
-    return term.surface
+    return page.title

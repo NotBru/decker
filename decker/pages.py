@@ -237,15 +237,34 @@ class Page:
         return ""
 
 
+#: Elements whose contents are not text on the page. MediaWiki inlines a
+#: template's stylesheet *inside the list item it styles* -- the definition of
+#: 男の子 opens with a `<style>` holding
+#: `.mw-parser-output .defdate{font-size:smaller}` -- and a reader that takes
+#: every character it is handed puts that CSS on the card, in front of the
+#: definition. Every Japanese entry carrying a date qualifier had it.
+_UNREADABLE = frozenset(("style", "script"))
+
+
 class _Stripper(HTMLParser):
     """Turn a fragment of Wiktionary's HTML into plain text."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
+        self._muted = 0
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag in _UNREADABLE:
+            self._muted += 1
+
+    def handle_endtag(self, tag) -> None:
+        if tag in _UNREADABLE and self._muted:
+            self._muted -= 1
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if not self._muted:
+            self.parts.append(data)
 
     def text(self) -> str:
         return re.sub(r"\s+", " ", "".join(self.parts)).strip()
@@ -817,10 +836,15 @@ def _classes(node: dict) -> set[str]:
 
 
 def _text(node, *, skip=()) -> str:
-    """The text under a node, leaving out whole subtrees by tag."""
+    """The text under a node, leaving out whole subtrees by tag.
+
+    :data:`_UNREADABLE` is left out whatever the caller asks for: a
+    stylesheet inlined into a definition is not part of the definition, and no
+    caller has ever wanted it.
+    """
     if isinstance(node, str):
         return node
-    if node.get("tag") in skip:
+    if node.get("tag") in skip or node.get("tag") in _UNREADABLE:
         return ""
     return "".join(_text(child, skip=skip) for child in node["children"])
 

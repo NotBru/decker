@@ -103,9 +103,16 @@ design wins and the code is wrong.
   with a warning.
 
 - A gloss is then spelled the way that page spells it, so `Cuando` glossed from `cuando` is one gloss
-  rather than two identical ones, while `España` keeps its capital. Where the entry is a *different*
-  word — `enrulada` glossed from `enrulado`, for want of a page of its own — the text's form is kept,
-  since the entry's spelling is not the term.
+  rather than two identical ones, while `España` keeps its capital. **Always that page's spelling**,
+  including where the entry is a different word: a form Wiktionary has no page for is glossed from
+  its lemma's, and that card is the lemma's card. It used to keep the text's form on the front, and
+  Bru found what that produces in a deck he was studying (2026-09-16): a card fronted `Упавшего` —
+  sentence-initial capital included — whose back was `упасть`'s definition *to fall, to drop*,
+  `упасть`'s reading `[ʊˈpasʲtʲ]` and `упасть`'s example sentence. A card that asks for a participle
+  and answers with an infinitive is wrong in the direction that matters, and nothing on the back of
+  it admitted the swap. Where the form does have a page — `упавший` does, *past active perfective
+  participle of упасть* — nothing changes: it is glossed from its own entry and depends on the
+  lemma's, as before.
 
 - The Markdown renderer gives `depends_on` a line of its own — **Depends on** [0. ser](#0-ser) —
   rather than a bare index trailing the fact line, where it was unreadable and unnavigable. The link
@@ -258,6 +265,19 @@ design wins and the code is wrong.
   dictionary keeps the definitions. On the survey's Chinese sample this took coverage from **82 % to
   99 %** — 240 glosses to 302 — and the four occurrences still without an entry are *Canis lupus*,
   *Cendrillon* and *Cenerentola*, which are not Chinese.
+
+- **A stylesheet inlined into a definition is not part of the definition.** MediaWiki puts a
+  template's CSS *inside the list item it styles*, so the rendered `<li>` for 男の子 opens with
+  `<style>.mw-parser-output .defdate{font-size:smaller}</style>` and the text readers, which took
+  every character they were handed, put that CSS on the front of the card ahead of *[from 1711] a
+  boy*. Bru found it in a Japanese run, 2026-09-16. Both readers — the tree walk that reads senses
+  and the stripper that reads etymologies — now skip `style` and `script` whatever the caller asks
+  to skip, since no caller has ever wanted either. It was never a Japanese problem: over 400 cached
+  pages sampled at random, 191 carry a stylesheet inside a definition item and 8 had a definition
+  change when the fix went in, among them English `main` (*[from 15th c.]*) and the Russian verbs
+  that carry object-usage tags — `назвать` read `to call .mw-parser-output .object-usage-tag{…}`
+  where it now reads *to call [with accusative ‘someone/something’…]*. The cache holds the raw
+  payload, so the fix applies to pages already fetched.
 
 - **A definition that is a Lua or script error is not a definition.** MediaWiki renders a failed
   module into the page, in the place its output would have gone, so a broken template upstream or a
