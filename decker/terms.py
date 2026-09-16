@@ -30,9 +30,12 @@ class Term:
     #: Character spans of those tokens within the sentence, so a later stage
     #: can point at this occurrence rather than at the form in the abstract.
     spans: tuple[tuple[int, int], ...] = ()
-    #: Whether the term opens its sentence, so a leading capital may be an
-    #: artefact of that position rather than the term's own spelling.
-    sentence_initial: bool = False
+    #: Whether the term opens its sentence or its line, so a leading capital
+    #: may be an artefact of that position rather than the term's own
+    #: spelling. A line counts because lyrics and captions are lineated and
+    #: unpunctuated, and the parser reads several of their lines as one
+    #: sentence -- see :func:`decker.trees.positional_capital_ids`.
+    positional_capital: bool = False
     #: The parse's part of speech for the term's head token, as a UD tag:
     #: `NOUN`, `ADP`, `VERB`. The sentence's own grammar, which is a thing
     #: nothing downstream had -- sense disambiguation was choosing between a
@@ -64,7 +67,7 @@ class Term:
         picking one here.
         """
         found = [self.surface]
-        if self.sentence_initial:
+        if self.positional_capital:
             lowered = decapitalize(self.surface)
             if lowered != self.surface:
                 found.append(lowered)
@@ -111,7 +114,7 @@ def extract(
             dict.fromkeys(words[one].text for one in sorted(numerals) if one in words)
         )
         log(f"[decker] dropped as numbers: {written}", level=VERBOSE, kind="dropped")
-    initial = trees.sentence_initial_ids(list(sentence.words))
+    initial = trees.positional_capital_ids(sentence)
     base = sentence.tokens[0].start_char if sentence.tokens else 0
     kept = [
         covered
@@ -212,7 +215,7 @@ def _term(
         lemma=lemma,
         entries=(),
         token_ids=ids,
-        sentence_initial=ids[0] in initial,
+        positional_capital=ids[0] in initial,
         spans=_spans(tokens, base),
         upos=_head(tokens).upos or "",
         features=_features(tokens),

@@ -69,7 +69,7 @@ def sentence_tree(sentence: Any, *, join_particles: bool = False) -> list[Node]:
         else:
             roots.append(word)
 
-    lowerable = sentence_initial_ids(words)
+    lowerable = positional_capital_ids(sentence)
 
     def build(word: Any) -> Node:
         edges = tuple(
@@ -97,20 +97,59 @@ def sentence_tree(sentence: Any, *, join_particles: bool = False) -> list[Node]:
     return [build(root) for root in roots]
 
 
-def sentence_initial_ids(words: list[Any]) -> set[int]:
-    """Ids of the words that only have punctuation before them.
+def positional_capital_ids(sentence: Any) -> set[int]:
+    """Ids of the words whose capital may belong to the position, not to them.
 
-    Their capital is an artefact of the sentence start, so they may also be
-    looked up in lower case (``Lo`` -> ``lo``). A capital anywhere else is
-    the word's own until something says otherwise.
+    The sentence's opening, and the opening of every *line* inside it. The
+    first is the old rule: nothing but punctuation before it, so the capital
+    is the sentence start's and the word may also be looked up in lower case
+    (``Lo`` -> ``lo``). A capital anywhere else is the word's own.
+
+    The second is the same claim wherever the parser could not see a sentence
+    end. Lyrics and captions are written a line at a time and punctuated
+    barely or not at all, so Stanza reads five lines as one sentence, and
+    every line but the first keeps a capital that is the line's and not the
+    word's. Without this they are looked up capitalised only: `Упавший` never
+    reaches `упавший`, and the occurrence falls back to the lemma's entry,
+    `упасть`, which is a different word with a different card. Bru found the
+    card in a deck built from lyrics, 2026-09-16; 818 of that deck's 6,521
+    word cards were fronted with a form their back did not teach.
+
+    Punctuation at a line's head is passed over as it is at the sentence's --
+    a caption's leading dash does not make the speaker's first word the
+    word's own capital.
     """
+    words = list(sentence.words)
+    text = getattr(sentence, "text", "") or ""
+    tokens = getattr(sentence, "tokens", None) or []
+    base = tokens[0].start_char if tokens else 0
     initial: set[int] = set()
-    for word in words:
-        if word.upos != "PUNCT":
+    opening = True
+    for position, word in enumerate(words):
+        if opening:
             initial.add(word.id)
-            break
-        initial.add(word.id)
+            opening = word.upos == "PUNCT"
+        if _breaks_line(text, base, word, words[position + 1 :]):
+            opening = True
     return initial
+
+
+def _breaks_line(text: str, base: int, word: Any, rest: list[Any]) -> bool:
+    """Whether a line ends between this word and the next one.
+
+    Read off the sentence's own text rather than the tokens, because the
+    break is exactly what the tokens do not carry. A parse that offers no
+    offsets -- nothing decker runs does -- answers no, and the rule falls
+    back to the sentence's opening alone.
+    """
+    following = next((one for one in rest), None)
+    if following is None:
+        return False
+    ends = getattr(getattr(word, "parent", None) or word, "end_char", None)
+    starts = getattr(getattr(following, "parent", None) or following, "start_char", None)
+    if ends is None or starts is None:
+        return False
+    return "\n" in text[ends - base : starts - base]
 
 
 def title_tree(sentence: Any) -> Node | None:

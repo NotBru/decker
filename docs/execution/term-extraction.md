@@ -28,7 +28,7 @@ wins and the code is wrong.
 
 - The pattern side is matched by the spelling the title is written with; the source side offers
   every spelling a token can be looked up under: surface form, lemma, lower case when the capital
-  is only the sentence start, and, in languages that write separable verbs joined (de, nl, af, hu),
+  is only the position's (below), and, in languages that write separable verbs joined (de, nl, af, hu),
   the particle glued to the verb, so `siehst ... aus` matches `aussehen` and covers both tokens.
   Both the inflected entry and the lemma entry therefore match. They are not two terms: matches
   are grouped by the tokens they cover, so one occurrence is one term — carrying the inflected form
@@ -50,6 +50,26 @@ wins and the code is wrong.
   A capital anywhere else is the word's own. Offering the lower-case spelling for every capital was
   tried and reverted: it is the sentence start that makes a capital suspect, and lowering all of them
   buys a few fixes with proper-noun noise everywhere else.
+
+- **A line start counts as a sentence start when the parser could not tell.** Lyrics and captions are
+  written a line at a time and punctuated barely or not at all, so Stanza reads five lines of a song
+  as one sentence — and every line but the first then keeps a capital that belongs to the line. The
+  word is looked up capitalised only, finds nothing, and the occurrence falls back to its lemma's
+  entry: `Упавший` never reached `упавший` (*past active perfective participle of упасть*) and was
+  glossed from `упасть` instead, which is a different word with a different card. Bru found the card
+  in a deck built from lyrics, 2026-09-16.
+
+  So `positional_capital_ids` now marks the first word of every line as well as the first word of the
+  sentence, punctuation at the head of a line passed over as at the head of a sentence, and reads the
+  break off the sentence's own text because that is the one thing the tokens do not carry. It is not
+  the reverted rule: a capital *inside* a line is still the word's own, which is what keeps German's
+  nouns and everybody's proper nouns out of it — and captions proper are unaffected either way, since
+  `subtitles.py` folds cues into running prose with no line breaks left in it.
+
+  What it recovers, counted against the deck that showed the bug: of its 641 cards fronted with a
+  form their entry did not match, 42 have a page for the form itself and 29 of those are reachable
+  only in lower case. The other 579 are forms Wiktionary has no page for at all, where the lemma's
+  entry is the right card and the fix is the one in `definition-fetching.md` — the front now says so.
 
 - Joining the particle is restricted to languages that write separable verbs as one word.
   Ungated, English produced the archaic entry `upgive` from `gave ... up`.
