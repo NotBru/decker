@@ -8,11 +8,13 @@ which is exactly the relationship the design asks the inflected gloss to
 explain. Glosses appear in the order their terms occur in the source, a
 dependency always before what depends on it.
 
-Two kinds of gloss are not a word of the text: a concept, read from
-`Appendix:Glossary` for the terminology a definition is written in, and a
+Three kinds of gloss are not a word of the text: a concept, read from
+`Appendix:Glossary` for the terminology a definition is written in; a
 morphological rule, worked out in :mod:`decker.morphology` from the form-of
-line itself. Both explain the machinery a definition uses rather than a word
-the reader met, and neither carries a production pair.
+line itself; and, under `--teach-script`, a symbol -- one character of a term,
+written in a script the reader does not have. The first two explain the
+machinery a definition uses rather than a word the reader met; the third is
+what a word is spelled with. None of them carries a production pair.
 """
 
 from __future__ import annotations
@@ -60,10 +62,11 @@ RULE_ATTRIBUTION = (
 #: which question is being asked.
 SYMBOL_PREFIX = "Symbol: "
 
-#: What a symbol card says when Wiktionary has no entry for the character --
-#: `¿` is a redirect, and decker does not follow those -- and the Unicode
-#: name is all there is. A different claim from a quotation, so it reads as
-#: one, exactly as a rule's does.
+#: What a symbol card says when Wiktionary documents the character nowhere
+#: decker can reach and the Unicode name is all there is: `한` is a Hangul
+#: syllable block, and the English Wiktionary writes the alphabet one jamo at
+#: a time. A different claim from a quotation, so it reads as one, exactly as
+#: a rule's does.
 SYMBOL_ATTRIBUTION = (
     "Named from the Unicode character database; the English Wiktionary has no "
     "entry for this character."
@@ -71,33 +74,43 @@ SYMBOL_ATTRIBUTION = (
 
 #: The parts of speech under which a page talks about the character as a piece
 #: of writing, most telling first. `ж` heads a Russian Letter, a Particle and
-#: a Noun, and only the first is what a symbol card is for; `水` heads a
-#: Chinese word and a Translingual Han character, and the word already has a
-#: card of its own whenever the text used it.
+#: a Noun, and only the first is what a symbol card is for. Word parts of
+#: speech stay out, with the one exception noted below: Korean `한` heads a
+#: Numeral, a Determiner and four more, and *one (as a determiner numeral)* is
+#: a card about a word that happens to be one syllable, not about the
+#: syllable.
 SHAPE_PARTS = (
     "Letter",
     "Letters",
-    "Punctuation mark",
-    "Diacritical mark",
-    "Han character",
-    "Hanzi",
+    #: Before `Syllable`, which a Han character can also head: `子` is the
+    #: kanji for *child* and, further down the same section, an obsolete
+    #: man'yōgana spelling of the katakana ネ. The kanji is the card.
     "Kanji",
+    "Hanzi",
     "Hanja",
+    "Han character",
     "Syllable",
     "Character",
-    "Number",
-    "Numeral",
+    "Punctuation mark",
+    "Diacritical mark",
+    #: How the English Wiktionary heads a Chinese entry that pools its parts
+    #: of speech, and the only place a Han character's meaning is written:
+    #: 的 has no Translingual section at all, and without this its card would
+    #: read `CJK UNIFIED IDEOGRAPH-7684`. For a character the meaning *is* the
+    #: shape's, which is how the script is learned; and where the text uses
+    #: the character as a word of its own, that word's gloss answers first and
+    #: no symbol card is made.
+    "Definitions",
+    #: And how it heads a mark that attaches to what precedes it: Japanese
+    #: ー is a Combining form, *the long-vowel mark*, and nothing else.
+    "Combining form",
 )
 
-#: And the part of speech under which it is a piece of *notation*. Kept apart
-#: because a glyph is often both and the two answers are not interchangeable:
-#: the Translingual `¡` is an extIPA percussive, which is the right card for
-#: a reading that contains one and a false one for a Spanish sentence that
-#: opens with it -- Wiktionary writes the punctuation mark on the combined
-#: page `¿ ?`, which `¡` and `¿` redirect to and decker does not follow. So
-#: a character met in a reading is asked about as notation, a character met in
-#: the text is asked about as writing, and a text character with nothing but a
-#: notation entry falls through to its Unicode name instead.
+#: And the part of speech under which the character is a piece of *notation*
+#: rather than a piece of writing. A page's own language section may answer
+#: with one -- Japanese `々` is a Symbol there, and it is the right answer --
+#: but the Translingual section may not: its `¡` is an extIPA percussive,
+#: which would be a false card for a term that merely contains the glyph.
 NOTATION_PARTS = ("Symbol",)
 
 #: The section a character's own entry lives under when no language claims it:
@@ -216,26 +229,14 @@ class _Builder:
     unknowns: Unknowns | None = None
     #: How many of those were taught anyway, as foreign words.
     foreign_count: int = 0
-    #: Whether every character a card displays has to have been taught by one.
+    #: Whether the characters of a term have to have been taught before it.
     teach_script: bool = False
-    #: The characters the reader already reads, from their mother tongue.
-    familiar: frozenset[str] = frozenset()
-    #: Whether the prose a card carries is scanned along with the language on
-    #: it. It is the text the card shows only when the cards are left in the
-    #: edition's language -- otherwise what the reader sees is the
-    #: translation, and the English under it is a stage in the pipeline and
-    #: not a symbol anybody is shown.
-    prose: bool = True
+    #: The scripts the reader already reads, from their mother tongue.
+    reads: tuple[str, ...] = ()
     #: Characters already dealt with, to the gloss that teaches them: an index,
     #: or ``None`` where there is nothing to depend on -- a previous deck
     #: taught it, or the character could not be resolved at all.
     symbols: dict[str, int | None] = field(default_factory=dict)
-    #: Characters being resolved right now. A letter's own definition is
-    #: written in its own alphabet, so `ж` reaches `е` reaches `ж`, and a
-    #: dependency on a gloss that does not exist yet is a cycle the shuffle
-    #: would have to break. The second visit simply does not depend on the
-    #: first; both are taught either way.
-    pending: set[str] = field(default_factory=set)
     #: How many of the glosses are symbols.
     symbol_count: int = 0
     #: Every gloss by the form it teaches, for the one question `seen` cannot
@@ -327,23 +328,11 @@ class _Builder:
         #: Before the gloss itself, so a concept it names is already standing
         #: and carries the lower index: the terminology inside a definition is
         #: something to be met before the definition that uses it, which is
-        #: exactly what a dependency says. The script goes in front of both:
-        #: a card the reader cannot read is not improved by their knowing what
-        #: dative means.
+        #: exactly what a dependency says. The characters of the term go in
+        #: front of both: a card the reader cannot read is not improved by
+        #: their knowing what dative means.
         depends_on = _merge(
-            depends_on,
-            self.symbols_of(
-                surface,
-                page.headword_of(sense),
-                *(example.sentence for example in sense.examples),
-                *self.shown(
-                    sense.definition,
-                    page.etymology_of(sense) or "",
-                    *(example.rendering or "" for example in sense.examples),
-                ),
-            ),
-            self.symbols_of(*page.ipa_of(sense), notation=True),
-            self.concepts_of(sense),
+            depends_on, self.symbols_in(surface), self.concepts_of(sense)
         )
         index = len(self.glosses)
         self.glosses.append(
@@ -376,36 +365,25 @@ class _Builder:
         self.by_surface.setdefault(surface, index)
         return index
 
-    def shown(self, *texts: str) -> tuple[str, ...]:
-        """The prose of these, if prose is what the card will show.
+    def symbols_in(self, term: str) -> tuple[int, ...]:
+        """Gloss every character of ``term`` written in a script new to them.
 
-        Everything a card carries that the translator may touch goes through
-        here, and nothing else does.
-        """
-        return texts if self.prose else ()
-
-    def symbols_of(self, *texts: str, notation: bool = False) -> tuple[int, ...]:
-        """Gloss every character of ``texts`` the reader cannot yet read.
-
-        The design's writing-system stage, scoped to the card rather than to
-        the language: what has to be taught is what a card is about to
-        display. The texts given are the ones that reach a card -- the term,
-        its headword line, the readings, the example sentences, and the prose
-        when the prose is what is shown -- and the answer is the glosses the
-        card must come after.
-
-        ``notation`` says the texts are readings rather than language, which
-        is what decides how the character's own page is read.
+        **The term, and nothing else on the card.** Bru's call of 2026-09-16,
+        narrowing this stage the day it was written: not the definition, not
+        the readings, not the examples. What a learner has to be able to read
+        is the word they are being taught, and a deck that stopped to teach
+        the Greek of an etymology and the symbols of a transcription taught
+        neither the word nor the script.
         """
         if not self.teach_script:
             return ()
         found = [
-            self.symbol(character, notation=notation)
-            for character in script.foreign("\n".join(texts), self.familiar)
+            self.symbol(character)
+            for character in script.foreign(term, self.reads)
         ]
         return tuple(index for index in found if index is not None)
 
-    def symbol(self, character: str, *, notation: bool = False) -> int | None:
+    def symbol(self, character: str) -> int | None:
         """The gloss that teaches one character, making it if there is none.
 
         A character the text already teaches as a word of its own is that
@@ -415,36 +393,26 @@ class _Builder:
         """
         if character in self.symbols:
             return self.symbols[character]
-        if character in self.pending:
-            return None
         if (word := self.by_surface.get(character)) is not None:
             self.symbols[character] = word
             return word
-        self.pending.add(character)
-        try:
-            index = self._teach(character, notation=notation)
-        finally:
-            self.pending.discard(character)
+        index = self._teach(character)
         self.symbols[character] = index
         return index
 
-    def _teach(self, character: str, *, notation: bool = False) -> int | None:
+    def _teach(self, character: str) -> int | None:
         """Append the gloss for one character.
 
         Wiktionary first, as everything else here is: the target language's
         own section when it has one -- `ж` is *the eighth letter of the
-        Russian alphabet*, with `[ʐ]` and a recording -- and
-        :data:`TRANSLINGUAL` when it does not, which is where the IPA symbols,
-        the punctuation and the Han characters are written. Only the parts of
-        speech in :data:`SHAPE_PARTS` and :data:`NOTATION_PARTS`: a page is
-        asked about the shape, and the word that happens to be spelled with it
-        is a different card that the text will ask for itself if it uses it.
-
-        Which of the two a character is asked about is settled the first time
-        it is met and kept: a glyph is one card whether the text or a reading
-        showed it first.
+        Russian alphabet*, with `[ʐ]` and a recording, `あ` is *the hiragana
+        syllable* -- and :data:`TRANSLINGUAL` when it does not, which is where
+        the Han characters are written. Only the parts of speech in
+        :data:`SHAPE_PARTS` and :data:`NOTATION_PARTS`: a page is asked about
+        the shape, and the word that happens to be spelled with it is a
+        different card that the text will ask for itself if it uses it.
         """
-        entry, sense = self._symbol_entry(character, notation=notation)
+        entry, sense = self._symbol_entry(character)
         shown = script.displayed(character)
         surface = f"{SYMBOL_PREFIX}{shown}"
         definition = sense.definition if sense else script.unicode_name(character)
@@ -461,14 +429,6 @@ class _Builder:
         recordings = entry[1].audio_urls if entry else ()
         if page is not None and not recordings:
             recordings = page.audio_urls
-        #: The card's own text, read before it exists: a letter is defined in
-        #: its own alphabet and pronounced in symbols of another, and neither
-        #: may reach the reader unread. :attr:`pending` is what stops the
-        #: alphabet from depending on itself.
-        depends_on = _merge(
-            self.symbols_of(*readings, notation=True),
-            self.symbols_of(*self.shown(definition)),
-        )
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -484,13 +444,12 @@ class _Builder:
                 ipa=readings,
                 audio_urls=recordings,
                 audios=self._audios(page, recordings) if page is not None else (),
-                depends_on=depends_on,
                 key=gloss_key(*key),
                 #: No production pair, by the design's rule: only a word
-                #: definition gets one. "Given *voiceless palatoalveolar
-                #: sibilant*, write the symbol" is a phonetics exercise, and
-                #: the half of a script worth drilling in that direction --
-                #: writing it -- is not something a deck can mark.
+                #: definition gets one. The direction of a script that is
+                #: worth drilling the other way -- writing あ when asked for
+                #: the syllable *a* -- is handwriting, which is not something
+                #: a deck can mark.
                 production=False,
                 attribution="" if sense else SYMBOL_ATTRIBUTION,
             )
@@ -502,27 +461,21 @@ class _Builder:
         return index
 
     def _symbol_entry(
-        self, character: str, *, notation: bool
+        self, character: str
     ) -> tuple[tuple[Page, Entry] | None, Sense | None]:
         """The entry and sense that talk about the character itself.
 
-        The language's own section is asked first for a character met in the
-        text -- it is the section written about this language's writing -- and
-        the Translingual one first for a character met in a reading, that
-        being where the notation is defined. What each section is allowed to
-        answer with differs in the same way, and :data:`NOTATION_PARTS` says
-        why.
+        The language's own section first, that being the section written about
+        this language's writing, and the Translingual one after it for the
+        characters no language claims -- the Han characters above all. What
+        each is allowed to answer with differs, and :data:`NOTATION_PARTS`
+        says why.
         """
-        if notation:
-            asked = (
-                (self.translingual_page(character), NOTATION_PARTS + SHAPE_PARTS),
-                (self.page(character), NOTATION_PARTS + SHAPE_PARTS),
-            )
-        else:
-            asked = (
-                (self.page(character), SHAPE_PARTS + NOTATION_PARTS),
-                (self.translingual_page(character), SHAPE_PARTS),
-            )
+        own = self.page(character)
+        asked = (
+            (own, SHAPE_PARTS + NOTATION_PARTS),
+            (self.translingual_page(character), SHAPE_PARTS),
+        )
         for page, parts in asked:
             if page is None:
                 continue
@@ -530,6 +483,18 @@ class _Builder:
                 for entry in page.entries:
                     if entry.part_of_speech == part and entry.senses:
                         return (page, entry), entry.senses[0]
+        if own is not None and script.script_of(character) == script.HAN:
+            #: A Han character is a morpheme before it is anything else, so
+            #: where its page heads no Kanji and no Han character -- 辺 heads
+            #: Nouns and Suffixes and has no Translingual section -- the
+            #: entry's own first sense is what the character means, and
+            #: `CJK UNIFIED IDEOGRAPH-8FBA` is what the alternative says.
+            #: Only here: in an alphabet the letter and the word that is
+            #: spelled with it are different things, and Russian `я` would
+            #: come back as the pronoun.
+            for entry in own.entries:
+                if entry.senses:
+                    return (own, entry), entry.senses[0]
         return None, None
 
     def translingual_page(self, character: str) -> Page | None:
@@ -590,10 +555,6 @@ class _Builder:
         if gloss_key(*key) in self.known:
             self.skipped += 1
             return None
-        #: A glossary entry is prose about grammar and quotes the languages it
-        #: is explaining -- the entry for *dative* shows German -- so it is
-        #: read for symbols like any other card's text.
-        depends_on = self.symbols_of(*self.shown(surface, concept.description))
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -612,7 +573,6 @@ class _Builder:
                 #: answers instead.
                 language=name_of(self.lang),
                 anchor=concept.anchor,
-                depends_on=depends_on,
                 key=gloss_key(*key),
                 production=False,
             )
@@ -639,7 +599,7 @@ class _Builder:
         #: prose, and it is the half in a script the reader may not have: a
         #: misspelling and a foreign word are both spelled in the text's own
         #: writing system.
-        depends_on = self.symbols_of(surface, *self.shown(explanation))
+        depends_on = self.symbols_in(surface)
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -701,11 +661,8 @@ class _Builder:
             self.skipped += 1
             return None
         #: The title carries the representative word, which is a word of the
-        #: language and written in its script, and the rule's prose quotes
-        #: endings in it throughout.
-        depends_on = _merge(
-            depends_on, self.symbols_of(surface, *self.shown(rule.description))
-        )
+        #: language and written in its script.
+        depends_on = _merge(depends_on, self.symbols_in(surface))
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -774,22 +731,22 @@ def build(
     known: frozenset[str] = frozenset(),
     teach_script: bool = False,
     mother_lang: str = "en",
-    translate: bool = True,
 ) -> list[Gloss]:
     """Turn term extraction's output into the design's list of glosses."""
-    familiar = script.familiar(mother_lang) if teach_script else frozenset()
-    if teach_script and familiar is None:
-        #: The stage stands down rather than guessing at a repertoire: an
-        #: alphabet decker made up would teach a reader letters they have
-        #: written all their life, or leave out the ones they have not.
+    reads = script.scripts_of(mother_lang) if teach_script else ()
+    if teach_script and reads is None:
+        #: The stage stands down rather than guessing: decker would be saying
+        #: which writing systems this reader already has, and both ways of
+        #: being wrong -- teaching them their own alphabet, or leaving a
+        #: script untaught -- look like working cards.
         log(
-            f"[decker] --teach-script does not know which characters a reader "
-            f"of {name_of(mother_lang)} already reads, so nothing is taught "
-            "about the script (decker.script._ALPHABETS is where one goes)",
+            f"[decker] --teach-script does not know which scripts a reader of "
+            f"{name_of(mother_lang)} already reads, so nothing is taught about "
+            "the script (decker.script._READS is where one goes)",
             kind="warn",
         )
         teach_script = False
-        familiar = frozenset()
+        reads = ()
     disambiguator = Disambiguator(
         model=model or default_model(),
         host=host,
@@ -821,12 +778,7 @@ def build(
         refresh=refresh,
         known=known,
         teach_script=teach_script,
-        familiar=familiar,
-        #: The prose on a card is the edition's until the translator has been
-        #: over it. Scanning it is right when it stays that way and wrong when
-        #: it does not: an English definition on its way to becoming a German
-        #: one is not something the reader is ever shown.
-        prose=not translate or mother_lang == edition,
+        reads=reads,
     )
     with console.phase("glossing", sum(len(one.text) for one in sentences)):
         for position, sentence in enumerate(sentences):
@@ -880,14 +832,14 @@ def build(
     if builder.symbol_count:
         log(
             f"[decker] {builder.symbol_count} of them are symbols: every "
-            "character the cards display is taught by one of them first"
+            "character of a term is taught before the term is"
         )
     elif teach_script:
         #: Nothing foreign was found, which for a Latin-script language read
-        #: by a reader of English is a real answer and not a failure -- and an
-        #: unexpected one often enough to be worth a line.
-        log("[decker] nothing on the cards is outside the mother tongue's own "
-            "characters; --teach-script added nothing")
+        #: by a reader of English is the right answer and not a failure -- and
+        #: an unexpected one often enough to be worth a line.
+        log("[decker] every term is written in the mother tongue's own script; "
+            "--teach-script added nothing")
     morphology.report()
     if builder.unknowns is not None:
         for line in builder.unknowns.report():

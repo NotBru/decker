@@ -1,61 +1,102 @@
-"""Which of a card's characters the reader cannot yet read.
+"""Which of a term's characters are written in a script the reader lacks.
 
 The design's *closed-form writing schemes* asks decker to notice when the
 target language's writing system differs from the mother tongue's and teach
-it, "even if it's just pronunciation". Read literally -- and it is what
-`--teach-script` implements -- that is a property of a card rather than of a
-language: every symbol a card puts in front of the reader that is not one of
-their own must have been taught by an earlier card. A Spanish deck for a
-speaker of English is mostly letters they already have, and then `ñ`, `¿`, and
-the dozen IPA symbols the readings are written in; a Russian one is an
-alphabet; a Chinese one is every character it shows.
+it. `--teach-script` does that per character of a term rather than once per
+language, because a language is not always one script: a Japanese sentence is
+kanji, hiragana and katakana at once, and which of them a given word is written
+in is a property of the word.
 
-This module answers only the narrow question -- given a mother tongue, which
-characters of this text are foreign -- and :mod:`decker.glosses` turns the
-answer into glosses. The rule it applies is the *repertoire*, not the Unicode
-script, and that is the whole reason it exists: `ʃ` is a Latin letter as far
-as Unicode is concerned (LATIN SMALL LETTER ESH) and no reader of English has
-ever met it, so a script comparison would have let every IPA reading through
-untaught -- and IPA is on nearly every card decker builds.
+The comparison is between *scripts*, not between alphabets, and that is Bru's
+call of 2026-09-16: **the Latin alphabet acts as one.** A reader of English
+meeting `ñ`, `ç` or `é` is reading letters they can already read, with a mark
+on them, and a card teaching `ç` to such a reader buys nothing. A reader of
+English meeting `あ` cannot read it at all, and that card is the whole point --
+"if you're learning Japanese, learning the kanas is gonna be part of it".
+
+This module answers only the narrow question, given a mother tongue: which
+characters of this term are in another script. :mod:`decker.glosses` turns the
+answer into glosses.
 """
 
 from __future__ import annotations
 
-import string
 import unicodedata
 
-#: What every writing system decker has been pointed at shares: the ASCII
-#: digits, punctuation and space, the typographic spellings of the same marks,
-#: the printer's marks a page of any language uses, and the digits again in
-#: the two sizes a footnote and a formula write them in. Not "Unicode's Common
-#: script", which would take in `¿`, `«` and `。` -- punctuation that is exactly
-#: what a reader of English has to be taught.
+#: The scripts decker can name, spelled as the Unicode character database
+#: spells them inside a character's name -- `CYRILLIC SMALL LETTER ZHE`,
+#: `HIRAGANA LETTER A`, `CJK UNIFIED IDEOGRAPH-98DF`. A character's script is
+#: the first of these its name mentions, which is what makes the table cheap:
+#: Unicode has already done the work, and there is nothing here to keep up to
+#: date beyond adding a name.
 #:
-#: The marks past the dashes and quotes are here because a run turned them up:
-#: Wiktionary's own bullet came off the definition of `мальчик` and a subscript
-#: two off the etymology of `на`, and `Symbol: • BULLET` is not a card anybody
-#: should be shown. Modifier letters are deliberately *not* here: `ʰ` and `ʲ`
-#: are how IPA writes aspiration and palatalization, and teaching those is what
-#: this stage is for.
-SHARED = (
-    frozenset(string.digits + string.punctuation + string.whitespace)
-    | frozenset("–—‘’“”…")
-    | frozenset("•§©®™°±×÷′″†‡")
-    | frozenset("⁰¹²³⁴⁵⁶⁷⁸⁹")
-    | frozenset("₀₁₂₃₄₅₆₇₈₉")
+#: A character whose name mentions none of them has no script as far as this
+#: stage is concerned -- the digits, the punctuation, the currency signs, the
+#: IPA modifiers -- and is never taught. A writing system is what the flag is
+#: about; `¿` is not one, and neither is `%`.
+SCRIPTS = frozenset(
+    {
+        "LATIN",
+        "GREEK",
+        "COPTIC",
+        "CYRILLIC",
+        "ARMENIAN",
+        "HEBREW",
+        "ARABIC",
+        "SYRIAC",
+        "THAANA",
+        "NKO",
+        "SAMARITAN",
+        "DEVANAGARI",
+        "BENGALI",
+        "GURMUKHI",
+        "GUJARATI",
+        "ORIYA",
+        "TAMIL",
+        "TELUGU",
+        "KANNADA",
+        "MALAYALAM",
+        "SINHALA",
+        "THAI",
+        "LAO",
+        "TIBETAN",
+        "MYANMAR",
+        "GEORGIAN",
+        "ETHIOPIC",
+        "CHEROKEE",
+        "CANADIAN",
+        "OGHAM",
+        "RUNIC",
+        "KHMER",
+        "MONGOLIAN",
+        "HIRAGANA",
+        "KATAKANA",
+        "BOPOMOFO",
+        "HANGUL",
+        "CJK",
+        "KANGXI",
+        "YI",
+        "VAI",
+        "GOTHIC",
+        "DESERET",
+        "OSAGE",
+        "ADLAM",
+        "TIFINAGH",
+        "JAVANESE",
+        "BALINESE",
+        "CHAM",
+        "TAGALOG",
+    }
 )
 
-#: The letters a mother tongue writes with, by language code. One entry,
-#: because v1 assumes English as the mother language and English is the only
-#: repertoire a run here has been measured against; the rule for adding one is
-#: `_SECTIONS`' rule in :mod:`decker.languages`, and the cost of a missing
-#: entry is stated rather than guessed at -- :func:`familiar` answers ``None``
-#: for a language that is not here, and `--teach-script` says so and stands
-#: down rather than teaching a reader of Portuguese the letter `a`.
-#:
-#: Upper case is derived, not written: a repertoire is a set of letters and
-#: every one of them is displayed in both cases.
-_ALPHABETS = {"en": string.ascii_lowercase}
+#: The script or scripts a reader of this language already reads, by language
+#: code. One entry, because v1 assumes English as the mother language and it is
+#: the only one anything here has been run for; :func:`scripts_of` answers
+#: ``None`` for anything else and `--teach-script` then says so and stands
+#: down. The rule for adding one is `_SECTIONS`' rule in
+#: :mod:`decker.languages`: an entry goes in when a run has been seen to need
+#: it, and a Japanese reader learning Spanish is the run that would add `ja`.
+_READS = {"en": ("LATIN",)}
 
 #: What a combining mark is shown on, so a card teaching one is not a card
 #: showing nothing. U+25CC is the dotted circle typography already uses for
@@ -64,39 +105,61 @@ CARRIER = "◌"
 
 #: Characters that take up no room on a card: controls, the format characters
 #: (soft hyphen, the bidi marks, the zero-width joiners a script needs but a
-#: reader never sees) and every kind of space. Nothing here is a symbol to be
-#: taught, and a card fronted by an invisible one would be unanswerable.
+#: reader never sees) and every kind of space. A card fronted by one would be
+#: unanswerable.
 _INVISIBLE = {"Cc", "Cf", "Cs", "Co", "Cn", "Zs", "Zl", "Zp"}
 
 _MARKS = {"Mn", "Mc", "Me"}
 
 
-def familiar(code: str) -> frozenset[str] | None:
-    """Every character a reader of ``code`` already reads, or ``None``.
+#: The Han script, as Unicode names it inside a character: `CJK UNIFIED
+#: IDEOGRAPH-98DF`. Named here because :mod:`decker.glosses` has one rule that
+#: applies to it and to no other script -- a Han character is a morpheme, so a
+#: word entry may answer for it.
+HAN = "CJK"
 
-    ``None`` means decker does not know that language's repertoire, which is
-    not the same as it having none: the caller has to decide what to do about
-    it, and `--teach-script` turns itself off and says which language it was.
+
+def scripts_of(code: str) -> tuple[str, ...] | None:
+    """The scripts a reader of ``code`` already reads, or ``None``.
+
+    ``None`` means decker does not know, which is not the same as the language
+    having none: the caller decides what to do about it, and `--teach-script`
+    turns itself off and says which language it was.
     """
-    letters = _ALPHABETS.get(code.strip().casefold())
-    if letters is None:
-        return None
-    return SHARED | frozenset(letters) | frozenset(letters.upper())
+    return _READS.get(code.strip().casefold())
 
 
-def foreign(text: str, known: frozenset[str]) -> list[str]:
-    """The characters of ``text`` a reader of ``known`` cannot read.
+def script_of(character: str, after: str = "") -> str:
+    """The script ``character`` is written in, or ``""`` if it is in none.
 
-    In the order they first appear, deduplicated, and with the invisible ones
-    dropped. Case is *not* folded: `Д` and `д` are two shapes, and a learner
-    who has been taught one has not been taught the other.
+    ``after`` is the character before it in the text, and answers for the
+    combining marks: `COMBINING ACUTE ACCENT` names no script of its own, and
+    the acute on a Latin `e` belongs to the Latin word it is part of. A mark
+    that opens a string has nothing to belong to and is left scriptless.
+    """
+    if unicodedata.category(character) in _MARKS:
+        own = _named(character)
+        return own or (script_of(after) if after else "")
+    return _named(character)
+
+
+def foreign(term: str, reads: tuple[str, ...]) -> list[str]:
+    """The characters of ``term`` written in a script ``reads`` does not cover.
+
+    In the order they first appear, deduplicated. Case is *not* folded: `Д`
+    and `д` are two shapes, and a learner who has been taught one has not been
+    taught the other.
     """
     found: list[str] = []
     seen: set[str] = set()
-    for character in text:
-        if character in known or character in seen:
+    previous = ""
+    for character in term:
+        if character in seen or unicodedata.category(character) in _INVISIBLE:
+            previous = character
             continue
-        if unicodedata.category(character) in _INVISIBLE:
+        script = script_of(character, previous)
+        previous = character
+        if not script or script in reads:
             continue
         seen.add(character)
         found.append(character)
@@ -114,8 +177,23 @@ def unicode_name(character: str) -> str:
     """What the Unicode character database calls it, or its code point.
 
     The last thing a symbol card can say when Wiktionary has no entry for the
-    character. It is a poor definition -- INVERTED QUESTION MARK tells a
-    learner the name of the shape and nothing about when it is used -- and it
-    is true, which is the bar a card has to clear.
+    character. It is a poor definition -- `HIRAGANA LETTER SMALL A` tells a
+    learner the name of the shape and nothing about its sound -- and it is
+    true, which is the bar a card has to clear.
     """
     return unicodedata.name(character, f"U+{ord(character):04X}")
+
+
+def _named(character: str) -> str:
+    """The first script :data:`SCRIPTS` knows that this character's name names.
+
+    The name is read word by word, hyphens split as spaces, so
+    `KATAKANA-HIRAGANA PROLONGED SOUND MARK` is katakana and
+    `FULLWIDTH LATIN CAPITAL LETTER A` is Latin rather than a script called
+    fullwidth.
+    """
+    name = unicodedata.name(character, "")
+    for word in name.replace("-", " ").split():
+        if word in SCRIPTS:
+            return word
+    return ""
