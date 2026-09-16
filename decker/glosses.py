@@ -451,6 +451,10 @@ def build(
     )
     with console.phase("glossing", sum(len(one.text) for one in sentences)):
         for position, sentence in enumerate(sentences):
+            if console.skipping():
+                #: What is glossed is glossed; the deck is built from it and
+                #: the run carries on to the cards.
+                break
             around = _around(sentences, position)
             log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
             for term in sentence.terms:

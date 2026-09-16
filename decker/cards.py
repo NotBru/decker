@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 
-from decker.console import log
+from decker.console import console, log
 from decker.glosses import Gloss
 from decker.ollama import default_model
 from decker.pages import Example
@@ -109,14 +109,22 @@ def build(
         refresh=refresh_answers,
     )
     builder = _Builder()
-    for gloss in glosses:
-        definition, examples, etymology = translator.gloss(
-            definition=gloss.definition,
-            examples=gloss.examples,
-            etymology=gloss.etymology,
-            target_language=gloss.language,
-        )
-        _pair(builder, gloss, definition, examples, etymology)
+    #: The third long stage, and the third that degrades rather than fails:
+    #: a card whose translation was skipped keeps the edition's language, which
+    #: is what a run without a model does anyway, and the translator's report
+    #: says how many did.
+    with console.phase("cards", len(glosses)):
+        for gloss in glosses:
+            if console.skipping():
+                translator.enabled = False
+            definition, examples, etymology = translator.gloss(
+                definition=gloss.definition,
+                examples=gloss.examples,
+                etymology=gloss.etymology,
+                target_language=gloss.language,
+            )
+            _pair(builder, gloss, definition, examples, etymology)
+            console.advance()
     translator.report()
     log(f"[decker] {len(builder.cards)} cards", kind="head")
     return builder.cards

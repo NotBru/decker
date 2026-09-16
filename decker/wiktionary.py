@@ -191,6 +191,11 @@ def _parse_titles(
             for done, (title, tree) in enumerate(
                 _parse_chunked(nlp, missing), start=1
             ):
+                if console.skipping():
+                    #: Every title parsed so far is already in the cache file,
+                    #: so stopping costs the ones not reached and nothing else:
+                    #: the index simply knows fewer phrases this run.
+                    break
                 cached[title] = tree
                 cache_file.write(
                     json.dumps(

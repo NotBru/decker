@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -58,6 +59,8 @@ class Console:
     total: int = 0
     done: int = 0
     _drawn: bool = False
+    _skip: bool = False
+    _previous_handler: object = None
 
     @property
     def interactive(self) -> bool:
@@ -83,23 +86,62 @@ class Console:
         self._draw()
 
     @contextmanager
-    def phase(self, name: str, total: int = 0):
+    def phase(self, name: str, total: int = 0, skippable: bool = True):
         """Name what the run is doing, and how much of it there is to do.
 
         The bar's units are the phase's own -- a phase over a text counts the
         text, a phase over titles counts titles -- and the bar shows neither,
         only the share done, because a number whose unit changes between phases
         explains nothing to the person reading it.
+
+        A skippable phase catches `Ctrl+C` and stops *itself*, not the run: the
+        loop inside asks :meth:`skipping` and breaks, and what the phase had
+        done by then stands. A run is a long thing made of stages that each
+        degrade gracefully -- glossing fewer words, parsing fewer titles -- and
+        being unable to say "enough of this one" without losing the hour behind
+        it is what makes a long run unusable. A second `Ctrl+C` stops the run,
+        because the first must not take that away.
         """
         previous = (self.phase_name, self.total, self.done)
         self.phase_name, self.total, self.done = name, total, 0
+        self._skip = False
+        if skippable:
+            try:
+                self._previous_handler = signal.signal(signal.SIGINT, self._interrupt)
+            except ValueError:
+                #: Not the main thread; there is nothing to install and the
+                #: phase simply is not skippable.
+                self._previous_handler = None
         self._draw()
         try:
             yield self
         finally:
+            if skippable and self._previous_handler is not None:
+                signal.signal(signal.SIGINT, self._previous_handler)
+                self._previous_handler = None
             self._erase()
+            if self._skip:
+                self.log(f"[decker] {name} stopped early, carrying on with what it "
+                         "had", kind="warn")
+            self._skip = False
             self.phase_name, self.total, self.done = previous
             self._draw()
+
+    def skipping(self) -> bool:
+        """Whether the phase running now has been asked to stop."""
+        return self._skip
+
+    def _interrupt(self, signum: int, frame: object) -> None:
+        """First `Ctrl+C` ends the phase; the second ends the run."""
+        if self._skip:
+            signal.signal(signal.SIGINT, self._previous_handler
+                          or signal.default_int_handler)
+            raise KeyboardInterrupt
+        self._skip = True
+        self.log(
+            f"[decker] skipping {self.phase_name} -- Ctrl+C again to stop the run",
+            level=QUIET, kind="warn",
+        )
 
     def advance(self, amount: int = 1) -> None:
         """Another `amount` of the phase is behind us."""
