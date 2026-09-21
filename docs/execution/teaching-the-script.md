@@ -59,6 +59,74 @@ Latin. Unicode has already done the work; there is nothing here to keep current 
   untaught — produce cards that look fine. The bar for an entry is `languages.py`'s bar for its
   tables: a run that was seen to need it.
 
+## Asking for it, when the text is written in one
+
+The flag went out off by default and stayed off, which is what a default-off flag does: the only
+person who passes it is the one who already knows it is there, and the run that needs it most — a
+Japanese volume for a reader of English — is exactly the run whose owner has not read the README
+yet. Bru's todo of 2026-09-21 is the fix: *prompt for "teach script" when the target and mother
+scripts are detected as different.* So with neither flag given, a run that can see it is about to
+build a deck in a script the reader cannot read asks, once, before it starts.
+
+- **The text decides, not the language pair.** The obvious implementation is a table from language
+  code to script, and it is the wrong one twice over: a language is not one script — Japanese is
+  three at once, Serbian is two — and a source can be written in a script the language does not
+  usually take, which is what romaji, pinyin and a transliterated Russian subtitle file are. The
+  source text is the thing that is actually true, it is already in hand, and it costs one pass.
+  `script.unreadable` is that pass, over the same table the stage itself runs on
+  (`script.scripts_of`, `script.script_of`): the shares of the writing that stand in scripts the
+  mother tongue does not read.
+
+- **A tenth of the writing, and the writing only.** Spaces, digits and punctuation are not counted,
+  so a subtitle file that is half timing codes is still measured on its words. The question is *is
+  this text written in another script*, not *does another script appear in it*: a Spanish sentence
+  quoting `極楽街` is 3 characters of Han in 60 of Latin and asks nothing. `UNREADABLE_ENOUGH` is
+  0.1 and is not a measurement — it is well above what a quotation or a handful of foreign names
+  comes to and well below what a text in another script does. What was checked, against the scripts
+  a reader of English reads:
+
+  ```
+  極楽街の朝は早い。ゴクラクガイへようこそ。      -> Hiragana, Katakana and Han
+  Привет, как дела? Это русский текст.            -> Cyrillic
+  El perro ladra en la casa, y el gato duerme.    -> nothing
+  A Spanish sentence quoting 極楽街 once, ...      -> nothing
+  ```
+
+  The decision is taken on the whole share the reader cannot read; which scripts the question
+  *names* is a separate and lower bar (`_WORTH_NAMING`, a hundredth), so the katakana in a mostly
+  hiragana-and-kanji text is named and the one Greek letter in a maths sentence is not. Characters
+  are counted distinct-first — a megabyte of Japanese is a few thousand distinct characters, and
+  the Unicode database is read once for each.
+
+- **Before the screen, and before the work.** The source is read in `cli._main` now, ahead of
+  `console.watching()`, and handed to the subcommand. Under the screen the question would be a
+  modal drawn over a dashboard by a module that draws no modals, and after the first stage it would
+  be a question about work already done. The cost is that the two lines it takes — the source being
+  read, the scripts it is in — print above the screen rather than inside it; they are still in the
+  terminal's scrollback afterwards, where the screen replays its own log.
+
+- **Silence is no.** A run with no terminal, a source arriving on standard input (the descriptor
+  the answer would have come from), `-q`, or a `--mother-lang` whose scripts decker does not know
+  is never asked and never taught. A run that could not be asked gets the finding as one warning
+  line instead, so a pipeline's log says which flag it was missing rather than saying nothing:
+
+  ```
+  [decker] this text is written in Hiragana, Katakana and Han, which a reader of English does not
+  read; --teach-script would teach those characters themselves, a pair of cards each, ahead of the
+  words that use them
+  ```
+
+- **`--no-teach-script` is the answer given in advance.** A flag that is asked about needs a way to
+  say no once and for all, or the next scripted run stalls on a prompt it cannot see; `--teach-script`
+  is the same answer the other way. Neither is ever second-guessed: the question is only asked when
+  the command line said nothing. The flag is tri-state internally (`None` until the text is seen)
+  and `bool()` at the pipeline's edge, so every stage below still takes the plain on-or-off it took
+  before.
+
+- **`timeline` is not asked**, although it carries the same flag. Its flags have to be the ones the
+  deck was built with — it re-runs extraction and definition to recover the gloss keys — so a
+  question there would be an invitation to measure a deck against a run it does not match.
+
 ## Where a symbol card's text comes from
 
 Wiktionary first, as everywhere else in the pipeline. The character is a page title, and the page is

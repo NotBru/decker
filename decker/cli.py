@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 
 from decker import (
-    anki, console, languages, manga, markdown, pages, pipeline, shuffling,
-    subtitles, timeline,
+    anki, console, languages, manga, markdown, pages, pipeline, script,
+    shuffling, subtitles, timeline,
 )
 from decker.wiktionary import USER_AGENT
 from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
@@ -256,6 +256,18 @@ def _main(argv: list[str] | None = None) -> int:
     console.console.headline = _headline(arguments)
     if getattr(arguments, "wiktionary_host", None):
         pages.HOST = arguments.wiktionary_host
+    #: Before the screen, and so before any of the work: the source is what
+    #: says whether the reader can read it, and a question is asked of a
+    #: terminal decker still has -- under the screen it would be a modal
+    #: drawn over a dashboard, and an hour into the run it would be a
+    #: question about work already done. The two lines it costs above the
+    #: screen are the reading of the source, which is where they belong.
+    text = None
+    if arguments.command in ("extract", "define", "deck"):
+        text = _source_text(arguments.source)
+        if arguments.command in ("define", "deck"):
+            arguments.teach_script = _script_taught(arguments, text)
+
     #: The whole run happens under the screen, including the part that writes
     #: the output: what a subcommand prints to stdout is held until the screen
     #: is down and let go afterwards, so `--format text` on a terminal reads
@@ -264,12 +276,12 @@ def _main(argv: list[str] | None = None) -> int:
         if arguments.command == "index":
             return _run_index(arguments)
         if arguments.command == "define":
-            return _run_define(arguments)
+            return _run_define(arguments, text)
         if arguments.command == "deck":
-            return _run_deck(arguments)
+            return _run_deck(arguments, text)
         if arguments.command == "timeline":
             return _run_timeline(arguments)
-        return _run_extract(arguments)
+        return _run_extract(arguments, text)
 
 
 def _headline(arguments: argparse.Namespace) -> str:
@@ -426,11 +438,24 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--teach-script",
         action="store_true",
+        #: Neither on nor off until the run has seen the text: with no flag
+        #: at all, a source written in a script the reader cannot read asks
+        #: (:func:`_script_taught`). Saying no to that question is a thing a
+        #: run has to be able to say in advance, which is `--no-teach-script`.
+        default=None,
         help=(
             "teach the writing system as well: every character a card displays "
             "that the mother tongue does not use -- letters, punctuation, IPA "
-            "symbols -- gets a card of its own, ahead of the cards that show it"
+            "symbols -- gets a card of its own, ahead of the cards that show it "
+            "(asked about, on a terminal, when the source turns out to be "
+            "written in one)"
         ),
+    )
+    parser.add_argument(
+        "--no-teach-script",
+        dest="teach_script",
+        action="store_false",
+        help="do not teach the writing system, and do not ask about it",
     )
     parser.add_argument(
         "--no-rules",
@@ -481,12 +506,100 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         concepts=not arguments.no_concepts,
         components=not arguments.no_components,
         rules=not arguments.no_rules,
-        teach_script=arguments.teach_script,
+        teach_script=bool(arguments.teach_script),
+        limit_glosses=arguments.limit_glosses,
         unknowns=arguments.unknowns,
         refresh_pages=arguments.refresh_pages,
         refresh_answers=arguments.refresh_answers,
         known=_taught(arguments.previous),
     )
+
+
+def _script_taught(arguments: argparse.Namespace, text: str) -> bool:
+    """Whether to teach the writing system, asking where the flag is silent.
+
+    `--teach-script` is off by default and always has been, and a default-off
+    flag is only ever used by someone who already knows it exists. The one
+    run that needs it is also the one run that announces itself: a source
+    written in a script the reader cannot read is visible in the text before
+    a word of it has been looked up. So with neither flag given, the reader's
+    scripts known and the text mostly standing in others, the question is put
+    once -- and `--no-teach-script` is there for the run that wants it never
+    asked. Bru's todo of 2026-09-21.
+
+    Answered no wherever it cannot be asked: no terminal, `-q`, or the source
+    arriving on standard input, which is the descriptor the answer would have
+    to come from. A run that cannot be asked is told instead, in one line, so
+    a pipeline's log says which flag it was missing.
+
+    Nothing here overrides a flag: `--teach-script` and `--no-teach-script`
+    are answers given in advance, and a run that gave one is never asked.
+    """
+    if arguments.teach_script is not None:
+        return arguments.teach_script
+    mother = getattr(arguments, "mother_lang", SOURCE_LANG)
+    reads = script.scripts_of(mother)
+    #: The same unknown the stage itself stands down on: decker knows which
+    #: scripts a reader of English reads and no more, and a question it
+    #: cannot ask honestly is not asked.
+    if reads is None:
+        return False
+    unreadable = script.unreadable(text, reads)
+    if not unreadable:
+        return False
+    written = _listed([script.name_of(one) for one in unreadable])
+    said = (
+        f"[decker] this text is written in {written}, which a reader of "
+        f"{languages.name_of(mother)} does not read"
+    )
+    if not _may_ask(arguments):
+        console.log(
+            f"{said}; --teach-script would teach those characters themselves, "
+            "a pair of cards each, ahead of the words that use them",
+            kind="warn",
+        )
+        return False
+    console.log(said, kind="head")
+    return _yes(
+        "[decker] teach those characters themselves, a pair of cards each? [y/N] "
+    )
+
+
+def _may_ask(arguments: argparse.Namespace) -> bool:
+    """Whether this run has a person on the other end of it to ask.
+
+    A terminal at both ends, and standard input still being a terminal rather
+    than the document: `decker - < episode.txt` has already spent the
+    descriptor an answer would come from.
+    """
+    sources = arguments.source
+    if "-" in ([sources] if isinstance(sources, str) else sources):
+        return False
+    if not (sys.stdin and sys.stdin.isatty()):
+        return False
+    return console.console.interactive and console.console.level > console.QUIET
+
+
+def _yes(question: str) -> bool:
+    """Ask, and take anything but a plain yes as no.
+
+    An interrupted or closed prompt is a no as well: the flag adds cards, and
+    a run that was never answered should build the deck it would have built
+    without the question.
+    """
+    try:
+        answer = input(question)
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return answer.strip().casefold() in ("y", "yes")
+
+
+def _listed(names: list[str]) -> str:
+    """`Hiragana, Han and Katakana`: a list as a line of prose says it."""
+    if len(names) < 3:
+        return " and ".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def _taught(previous: str | None) -> frozenset[str]:
@@ -615,9 +728,9 @@ def _manga_text(source: str, path: Path) -> str:
     return text
 
 
-def _run_extract(arguments: argparse.Namespace) -> int:
+def _run_extract(arguments: argparse.Namespace, text: str) -> int:
     sentences = pipeline.run(
-        _source_text(arguments.source),
+        text,
         target_lang=arguments.target_lang,
         edition=arguments.edition,
         whole_index=arguments.whole_index,
@@ -642,9 +755,9 @@ def _run_extract(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _run_define(arguments: argparse.Namespace) -> int:
+def _run_define(arguments: argparse.Namespace, text: str) -> int:
     glosses = pipeline.define(
-        _source_text(arguments.source),
+        text,
         target_lang=arguments.target_lang,
         **_definition_arguments(arguments),
     )
@@ -674,12 +787,12 @@ def _run_define(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _run_deck(arguments: argparse.Namespace) -> int:
+def _run_deck(arguments: argparse.Namespace, text: str) -> int:
     #: Read before the pipeline, not at the write: a deck decker cannot read
     #: is worth saying so about now rather than after an hour of fetching.
     keeping = _identities(getattr(arguments, "update", None))
     cards = pipeline.deck(
-        _source_text(arguments.source),
+        text,
         target_lang=arguments.target_lang,
         mother_lang=arguments.mother_lang,
         translate=not arguments.no_translate,

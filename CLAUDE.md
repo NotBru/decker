@@ -106,12 +106,21 @@ The terminology a definition is written in — dative, diminutive, colloquial �
 own, one per `Appendix:Glossary` entry it links to, titled `Concept:` and carrying no production
 pair. `--no-concepts` turns the stage off.
 
-`--teach-script`, off by default, adds the writing system itself: every character **of a term**
+`--teach-script`, off unless asked for, adds the writing system itself: every character **of a term**
 written in a script the mother tongue does not use becomes a `Symbol:` card, with a production pair
 like a word's, ahead of every term that contains it. The term only — not the definition, the
 examples or the readings — and scripts, not alphabets, so `ñ` and `ç` are Latin and cost nothing
-while kana, kanji and Cyrillic each cost a pair of cards. Which scripts a reader reads is known for English only; another
-`--mother-lang` turns the stage off with a line saying so.
+while kana, kanji and Cyrillic each cost a pair of cards. A character whose language reads it
+several ways carries the `Readings` list Wiktionary gives it instead of a pronunciation, and a
+character the text also teaches as a word of its own is one card and not two — the word's, which
+also replaces a shape glossed from Translingual.
+
+`--limit-glosses N` stops glossing at N and builds the deck from what stands, which is Ctrl+C's
+ending reached on a count; the check is between terms, so the count overshoots by the last term. Which scripts a reader reads is known for English only; another
+`--mother-lang` turns the stage off with a line saying so. With neither flag given, a run whose
+source is mostly written in a script the reader cannot read asks once before it starts, where there
+is a terminal to ask on and the source did not come in on it; `--no-teach-script` answers in
+advance, and a run that cannot be asked gets the same finding as a warning line.
 
 Where an etymology states a sum of terms **in the language being taught** — `des- +‎ cargar`,
 `veneno +‎ -oso` by surface analysis — each of those terms becomes a card of its own, ahead of the

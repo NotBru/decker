@@ -117,8 +117,16 @@ word card replaces that too. A character card carries the readings Wiktionary li
 `Kun: きまる (kimaru)` — where the language gives a character no single pronunciation, which is what
 Japanese does; and a character the text also teaches as a word of its own gets one card, not two. Which
 scripts a reader already reads is known for English only; under any other `--mother-lang` the flag
-says so and stays off. See
+says so and stays off. With neither flag given, a run that finds its source mostly written in a
+script the reader cannot read asks once, before it starts — on a terminal, with the source in a
+file rather than on standard input; elsewhere it says in a line which flag would have taught them.
+`--no-teach-script` is that answer given in advance. See
 [docs/execution/teaching-the-script.md](docs/execution/teaching-the-script.md).
+
+`--limit-glosses N` stops the glossing stage once N glosses stand and builds the deck from them,
+which is what Ctrl+C does on a key. It is checked between terms, so the count overshoots by
+whatever the last term brought, and the run says where it stopped and how much of the source it
+read.
 
 `--unknowns` decides what happens to a word Wiktionary has no entry for: `off` drops it, as decker
 always did; `fix` (the default) looks the word up again when it is a misspelling, and teaches a

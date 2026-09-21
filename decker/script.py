@@ -22,6 +22,7 @@ answer into glosses.
 from __future__ import annotations
 
 import unicodedata
+from collections import Counter
 
 #: The scripts decker can name, spelled as the Unicode character database
 #: spells them inside a character's name -- `CYRILLIC SMALL LETTER ZHE`,
@@ -223,3 +224,85 @@ def _named(character: str) -> str:
         if word in SCRIPTS:
             return word
     return ""
+
+
+#: How much of a text has to stand in scripts the reader does not read before
+#: decker brings `--teach-script` up without being asked. A tenth, which is
+#: not a measurement of anything: a Spanish text quoting a Japanese title, or
+#: a Russian one with a brand name in it, is a text whose writing system the
+#: reader already reads, and a tenth is well above what a quotation or a
+#: handful of names comes to and well below what a text actually written in
+#: another script does -- a page of Japanese is ninety-odd percent kana and
+#: kanji, and a Russian subtitle file is Cyrillic all through.
+UNREADABLE_ENOUGH = 0.1
+
+#: A script has to come to this much of the text before the question names
+#: it. Under it, it is in the text but is not what the text is written in --
+#: the one Greek letter in a maths sentence -- and naming it would make the
+#: question about the wrong thing. The decision is taken on the share above,
+#: which is the whole of what the reader cannot read; this only chooses the
+#: words.
+_WORTH_NAMING = 0.01
+
+#: What a script is called, where the word Unicode puts in a character's name
+#: is not what a person calls the writing system. `CJK` and `KANGXI` are both
+#: the Han characters, and a question that said "CJK" would be asking about an
+#: encoding committee rather than about the characters on the page.
+_CALLED = {
+    "CJK": "Han",
+    "KANGXI": "Han",
+    "NKO": "N'Ko",
+    "CANADIAN": "Canadian syllabics",
+}
+
+
+def name_of(one: str) -> str:
+    """What to call a script on a line a person reads."""
+    return _CALLED.get(one, one.title())
+
+
+def counted(text: str) -> dict[str, int]:
+    """How many characters of ``text`` stand in each script.
+
+    Scriptless characters -- the spaces, the digits, the punctuation -- are
+    not counted at all rather than counted as a script of their own, so the
+    shares this feeds are shares of the writing and not of the page: a
+    subtitle file that is half timing codes is still written in one script.
+
+    Counted per *distinct* character, because the question is asked of a whole
+    document and :func:`script_of` reads the Unicode database once per call. A
+    megabyte of Japanese is a few thousand distinct characters.
+    """
+    found: dict[str, int] = {}
+    for character, many in Counter(text).items():
+        one = script_of(character)
+        if one:
+            found[one] = found.get(one, 0) + many
+    return found
+
+
+def unreadable(text: str, reads: tuple[str, ...]) -> tuple[str, ...]:
+    """The scripts ``text`` is written in that a reader of ``reads`` cannot.
+
+    Empty unless they come to :data:`UNREADABLE_ENOUGH` of the writing
+    between them -- so this answers *is this text written in another script*
+    and not *does another script appear in it* -- and then commonest first,
+    naming only the ones that carry :data:`_WORTH_NAMING` of it.
+
+    The same table `--teach-script` runs on, asked one stage earlier and of
+    the source rather than of a term: what the flag is worth is a question
+    about the text as a whole, and it has to be answerable before the run
+    starts.
+    """
+    found = counted(text)
+    written = sum(found.values())
+    if not written:
+        return ()
+    cannot = {one: many for one, many in found.items() if one not in reads}
+    if sum(cannot.values()) < UNREADABLE_ENOUGH * written:
+        return ()
+    return tuple(
+        one
+        for one, many in sorted(cannot.items(), key=lambda pair: -pair[1])
+        if many >= _WORTH_NAMING * written
+    )
