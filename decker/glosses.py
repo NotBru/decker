@@ -1066,6 +1066,7 @@ def build(
     known: frozenset[str] = frozenset(),
     teach_script: bool = False,
     mother_lang: str = "en",
+    limit: int = 0,
 ) -> list[Gloss]:
     """Turn term extraction's output into the design's list of glosses.
 
@@ -1130,7 +1131,7 @@ def build(
         items=len(sentences),
     ):
         for position, sentence in enumerate(sentences):
-            if console.skipping():
+            if console.skipping() or _enough(builder, limit):
                 #: What is glossed is glossed; the deck is built from it and
                 #: the run carries on to the cards.
                 break
@@ -1139,7 +1140,20 @@ def build(
             log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
             for term in sentence.terms:
                 _gloss_term(builder, term, sentence.text, around)
+                if _enough(builder, limit):
+                    break
             console.advance(len(sentence.text))
+    if _enough(builder, limit):
+        #: Said where a reader will see it and not only in the help: a deck
+        #: built from part of a text looks exactly like a deck built from all
+        #: of it, and the difference is the whole point of the flag.
+        read = min(builder.position + 1, len(sentences))
+        log(
+            f"[decker] stopped at {len(builder.glosses)} glosses "
+            f"(--limit-glosses {limit}); the deck is built from these, "
+            f"{read} of the source's {len(sentences)} sentences read",
+            kind="warn",
+        )
     if audio and builder.glosses and not builder.offered:
         #: A source that carries no media at all is not the same as a word
         #: that happens to have no recording, and the two look identical on
@@ -1253,6 +1267,11 @@ CONTEXT_WORDS = 20
 #: default needs it -- and if it is ever in the way, this is the note that says
 #: dropping it costs three cards in Hebrew and nothing anywhere measured.
 CONTEXT_FOR = frozenset({"NOUN", "PROPN", "VERB", "ADJ", "ADV", "INTJ"})
+
+
+def _enough(builder: _Builder, limit: int) -> bool:
+    """Whether `--limit-glosses` has been reached."""
+    return bool(limit) and len(builder.glosses) >= limit
 
 
 def _around(sentences: list["SentenceTerms"], position: int) -> tuple[str, str]:

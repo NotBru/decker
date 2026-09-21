@@ -474,6 +474,16 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--limit-glosses",
+        type=int,
+        default=0,
+        metavar="GLOSSES",
+        help=(
+            "stop glossing once this many stand and build the deck from them, "
+            "instead of reading the source to the end (default: no limit)"
+        ),
+    )
+    parser.add_argument(
         "--refresh-answers",
         action="store_true",
         help="ask the model again instead of reusing answers it already gave",

@@ -147,6 +147,7 @@ def define(
     known: frozenset[str] = frozenset(),
     teach_script: bool = False,
     mother_lang: str = SOURCE_LANG,
+    limit_glosses: int = 0,
 ) -> list[Gloss]:
     """Run the v1 pipeline the whole way, from text to glosses."""
     return glossed(
@@ -168,6 +169,7 @@ def define(
         known=known,
         teach_script=teach_script,
         mother_lang=mother_lang,
+        limit_glosses=limit_glosses,
     )[1]
 
 
@@ -191,6 +193,7 @@ def glossed(
     known: frozenset[str] = frozenset(),
     teach_script: bool = False,
     mother_lang: str = SOURCE_LANG,
+    limit_glosses: int = 0,
 ) -> tuple[list[SentenceTerms], list[Gloss]]:
     """The same run, keeping the sentences the glosses were made from.
 
@@ -225,6 +228,11 @@ def glossed(
         #: earlier than deck construction.
         teach_script=teach_script,
         mother_lang=mother_lang,
+        #: The stage stops itself rather than the walk being cut short here:
+        #: a term's glosses are made together -- its senses, the characters it
+        #: is written in, the terms it is composed of -- and a list cut at an
+        #: exact number would be cut inside one of those.
+        limit=limit_glosses,
     )
     pages.report()
     return sentences, glosses

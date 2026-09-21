@@ -276,6 +276,39 @@ made so far and builds the deck from them. Interrupting `cards` turns the transl
 rest of the run rather than stopping it — a card that keeps the edition's language is what a run
 without a model produces anyway, and the translator's report says how many did.
 
+## `--limit-glosses`, which is Ctrl+C on a count
+
+Bru asked for it on 2026-09-21: a way to stop the glossing stage early without sitting over the
+run. It is the same ending `Ctrl+C` reaches — the walk over the sentences breaks, what is glossed is
+glossed, and the run carries on to build a full deck from it — reached on a number rather than on a
+key. Everything after it is the ordinary pipeline: the cards are built, the deck is shuffled, the
+package is written, and the deck is a real deck of the opening of the text.
+
+- **Checked between terms, not between glosses.** A term's glosses are made together: its senses,
+  the characters it is written in, the terms its etymology decomposes it into. Cutting at an exact
+  count would cut inside one of those, so the count is asked after each term and the list
+  overshoots — 18 glosses for `--limit-glosses 10` on a Japanese sentence with disambiguation off,
+  where one term brought eight senses. The flag is a floor, and the run says where it actually
+  stopped:
+
+  ```
+  [decker] stopped at 18 glosses (--limit-glosses 10); the deck is built from these,
+           1 of the source's 2 sentences read
+  ```
+
+  At `warn`, because a deck built from part of a text looks exactly like a deck built from all of
+  it and the difference is the whole point of the flag.
+
+- **It is the glossing stage's limit and no other's.** Extraction still reads the whole source and
+  the title index is still built for it: those are the cheap stages, and stopping them early would
+  make the run's own numbers — how many terms the text has — a lie about the text.
+
+What it is for is the same thing the interrupt is for: seeing what a deck of this source is going to
+look like before paying for the whole of it. `--preview-after`, which would have written a deck
+mid-run and carried on, was considered and dropped on the same day; this is the cheaper half of it,
+and the run that wants a full deck afterwards simply runs again without the flag — the pages, the
+model's answers and the audio are all cached by then.
+
 ## The silences that are left
 
 Three stretches used to print nothing at all, and each now says what it is doing and how long it
