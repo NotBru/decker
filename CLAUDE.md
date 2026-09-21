@@ -65,6 +65,12 @@ the code changes.
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.
 
+## Committing
+
+Commit when a piece of work is finished, not when asked: Claude's changes go in their own commit
+with the co-author trailer, and a stage that is built and written up is committed before the
+session ends.
+
 ## Running it
 
 ```
