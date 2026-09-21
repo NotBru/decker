@@ -86,6 +86,10 @@ def _gloss(gloss: Gloss, *, edition: str, by_index: dict[int, Gloss]) -> list[st
         facts.append("**entry** none: Wiktionary has no entry for this")
     if gloss.ipa:
         facts.append("**IPA** " + " ".join(f"`{reading}`" for reading in gloss.ipa))
+    if gloss.readings:
+        #: What a character has instead of a pronunciation, and as many lines
+        #: as the page gives: `Kan-on: けつ (ketsu, Jōyō)`.
+        facts.append("**readings** " + "; ".join(gloss.readings))
     if gloss.audio_urls:
         facts.append(
             "**audio** "

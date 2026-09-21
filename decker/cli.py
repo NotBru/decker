@@ -868,6 +868,7 @@ def _side(side) -> list[str]:
     pieces += list(side.renderings)
     if side.ipa:
         pieces.append(" ".join(side.ipa))
+    pieces += list(side.readings)
     if side.etymology:
         pieces.append(side.etymology)
     pieces += [Path(audio).name for audio in side.audios]
@@ -934,6 +935,7 @@ def _format_gloss(gloss) -> str:
     lines = [heading]
     if gloss.ipa:
         lines.append(f"    {' '.join(gloss.ipa)}")
+    lines += [f"    {reading}" for reading in gloss.readings]
     lines.append(f"    - {gloss.definition}")
     lines += [f"      · {example}" for example in gloss.examples]
     if gloss.etymology:

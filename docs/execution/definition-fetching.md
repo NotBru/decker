@@ -455,6 +455,45 @@ design wins and the code is wrong.
   `мир`, `perro` and 狗 — one block apiece — are unchanged, 狗 keeping its four Mandarin readings.
   The lect slice runs *inside* the Pronunciation section now, which is where it always belonged.
 
+- **What a character has instead of a pronunciation: its readings.** A Japanese `Kanji` block has
+  no Pronunciation section, because a kanji is not pronounced — the words written with it are, and
+  differently: 決 is *ketsu* in 解決 and *ki-* in 決める. What the block has is a **Readings** list,
+  naming each reading and which kind it is, and that list is the whole of what a card about the
+  character can honestly say. Bru asked for it on 2026-09-21, having found a `決` card that said
+  nothing at all about how the character is read.
+
+  `_character_readings` cuts from the `Readings` heading to the next heading of any level — the
+  same cut `_pronunciation` makes — and takes each list item as the page wrote it:
+
+  ```
+  Go-on: けち (kechi)
+  Kan-on: けつ (ketsu, Jōyō)
+  Kun: きまる (kimaru, 決まる, Jōyō)、きめる (kimeru, 決める, Jōyō)、さくる (sakuru, 決る)…
+  Nanori: あき (aki)、あきら (akira)、うけ (uke)…          [食, which also has three on'yomi pairs]
+  ```
+
+  The page's own wording, kept: which class a reading belongs to is half of what the line teaches —
+  an on'yomi is what the character takes in a compound, a kun'yomi what it takes alone — and decker
+  has nothing truer to say about it than the entry does. The one thing dropped is the chain of
+  historical forms a reading is written back through (`けち (kechi) ← けち (keti, historical) ←
+  くゑち (kweti, ancient)`): philology, and three times the length of the answer on a card.
+
+  It hangs off `Entry.readings` for the block that documents the character, and off `Page.readings`
+  for the section, which is the one that does the work: 下, 人 and 超 head a `Kanji` block that is
+  readings and *no numbered sense*, so there is no entry to hang them on, and 人's shape is glossed
+  from Translingual — *Kangxi radical #9* — while the readings the learner needs are two headings
+  above it in the Japanese section. A gloss takes them when its term is a single character, whether
+  it is a `Symbol:` card or the word card that character also has.
+
+  **Which languages need it.** Measured over the 10,889 pages this machine had cached: 426 Japanese
+  blocks carry a `Readings` heading, 89 Ryukyuan ones do — Okinawan, Miyako, Kunigami, Yonaguni,
+  Yaeyama, Yoron, Amami, Okinoerabu, Tokunoshima, which the English Wiktionary formats the same way
+  — and one Vietnamese one does. Nothing else, and nothing else needs anything: Korean hanja and
+  Vietnamese Han tự state their reading in the headword line, which every card already shows
+  (`決: Hán Nôm readings: quyết`), and Chinese writes a Pronunciation section per variety, which the
+  IPA reader already takes. So the parse is not gated on a language — it reads whatever section it
+  was asked for — and Japanese is simply where it fires.
+
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
   the design says to fetch all that is available, and taking the first drops the rest silently.

@@ -225,6 +225,13 @@ class Gloss:
     #: own answer. Empty for a definition that does not name its word, which
     #: is nearly all of them.
     quoted: tuple[str, ...] = ()
+    #: The readings of the character this gloss teaches, as Wiktionary lists
+    #: them -- `Kan-on: けつ (ketsu, Jōyō)`. Only ever on a gloss whose term
+    #: is one character, and only where the page writes them: a kanji has no
+    #: pronunciation of its own to put in `ipa` (:func:`decker.script.speaks`)
+    #: and this list is what it has instead. Bru asked for it on 2026-09-21,
+    #: on finding a `決` card with nothing to say about how it is read.
+    readings: tuple[str, ...] = ()
     #: The part of that title which is decker's prose rather than a word of
     #: the language: a concept's name, a rule's feature bundle. Deck
     #: construction translates it and leaves the rest of `surface` alone --
@@ -300,6 +307,14 @@ class _Builder:
     symbols: dict[str, int | None] = field(default_factory=dict)
     #: How many of the glosses are symbols.
     symbol_count: int = 0
+    #: How many symbol glosses turned out to be the word gloss that followed
+    #: them and were folded into it: see :meth:`_folds_into`.
+    folded: int = 0
+    #: The term whose own dependencies are being gathered right now. A term's
+    #: own character is not a card the term depends on -- it *is* this card --
+    #: and the rule that says so cannot read `by_surface`, which does not know
+    #: about a gloss that is still being built.
+    glossing: str = ""
     #: Every gloss by the form it teaches, for the one question `seen` cannot
     #: answer: whether *this character* has a card already, whatever sense it
     #: was taught in. A Chinese text teaches 水 as a word the first time it
@@ -396,6 +411,7 @@ class _Builder:
         #: exactly what a dependency says. The characters of the term go in
         #: front of both: a card the reader cannot read is not improved by
         #: their knowing what dative means.
+        self.glossing = surface
         depends_on = _merge(
             depends_on,
             #: With the term's own reading, which is what tells a character
@@ -404,8 +420,13 @@ class _Builder:
             self.symbols_in(surface, page.ipa_of(sense)),
             self.concepts_of(sense),
         )
-        index = len(self.glosses)
-        self.glosses.append(
+        self.glossing = ""
+        #: A `Symbol:` card made earlier for this very character, saying what
+        #: this gloss is about to say, is this card: the word takes its place
+        #: in the list rather than standing beside it.
+        folded = self._folds_into(page, surface, sense)
+        index = len(self.glosses) if folded is None else folded
+        gloss = (
             Gloss(
                 index=index,
                 first_sentence=self.position,
@@ -427,16 +448,99 @@ class _Builder:
                 #: was carrying all three -- `[v] [vʲ] [f] [vɛ] [v] [f] [və]
                 #: [volʲt]` -- and all three recordings with them.
                 ipa=page.ipa_of(sense),
+                #: The character's readings where the term *is* a character.
+                #: A word is read as a word and has its own pronunciation;
+                #: this list is what a page says instead when there is no
+                #: such thing to say.
+                readings=page.readings_of(sense) if len(surface) == 1 else (),
                 audio_urls=(recordings := page.audio_of(sense)),
                 audios=self._audios(page, recordings),
                 depends_on=depends_on,
                 key=gloss_key(surface, sense.definition),
             )
         )
+        if folded is None:
+            self.glosses.append(gloss)
+        else:
+            self.glosses[folded] = self._folded(gloss, self.glosses[folded])
         self.seen[key] = index
         self.by_surface.setdefault(surface, index)
         count("gloss.word")
         return index
+
+    def _folds_into(self, page: Page, surface: str, sense: Sense) -> int | None:
+        """The `Symbol:` gloss this word is the same card as, if there is one.
+
+        A character can reach the deck twice: once as a character, because a
+        word the text used is written with it, and again as a word, because
+        the text went on to use the character by itself -- or because an
+        etymology decomposed a compound into it. When the two say the same
+        thing they are one card wearing two hats, and Bru's call of
+        2026-09-21 is that the bare one is the card to keep: `決` teaches the
+        character whether or not decker labels it.
+
+        The same thing means the same definition, and the readings are left
+        out of the comparison -- they are what the symbol card has and the
+        word card may not, which is exactly what :meth:`_folded` carries
+        across.
+
+        **Or the symbol card is not this language's own statement about the
+        character.** When the target language's section heads no block about
+        the shape, the shape is glossed from Translingual, from one of
+        :data:`HAN_SOURCES`, or from the Unicode tables -- and `Symbol: 人 --
+        Kangxi radical #9, ⼈` standing beside the Japanese word 人 is not two
+        senses, it is decker saying in two cards what one card says, in the
+        wrong language for the second of them. Bru's call, 2026-09-21: drop
+        the Translingual one. The word card is kept whole, as everywhere else
+        here, so what is lost is a gloss written about the script rather than
+        about this language.
+
+        What survives the widening is the case it was drawn around: two
+        blocks of the *same* section saying different things. 決's `Kanji`
+        block glosses three senses, and *to burst* and *to decide* are two
+        cards whichever of them the symbol card took.
+
+        `--teach-script` off is `self.symbols` empty, so this never fires.
+        """
+        if len(surface) != 1:
+            return None
+        index = self.symbols.get(surface)
+        if index is None:
+            return None
+        standing = self.glosses[index]
+        if standing.title_prefix != SYMBOL_PREFIX:
+            return None
+        if standing.definition == sense.definition:
+            return index
+        #: `entry` is empty where the card fell back to the Unicode name,
+        #: which is not a language's statement about anything.
+        return index if standing.language != page.language or not standing.entry else None
+
+    def _folded(self, gloss: Gloss, was: Gloss) -> Gloss:
+        """The word's gloss, standing where the symbol's stood.
+
+        The symbol's *place* is kept, and with it every dependency already
+        pointing at it: the cards that were to come after the character still
+        come after it, and nothing has to be renumbered. `first_sentence` is
+        the symbol's for the same reason -- the deck teaches this card where
+        the character was first needed, which is what the timeline measures.
+
+        What the symbol card knew and the word's block does not is carried
+        across: the readings of the character, and its pronunciation and
+        recording where the word's own block states none. Nothing is lost by
+        the fold, which is what makes it a fold and not a deletion.
+        """
+        self.symbol_count -= 1
+        self.folded += 1
+        count("gloss.folded")
+        return dataclasses.replace(
+            gloss,
+            first_sentence=was.first_sentence,
+            ipa=gloss.ipa or was.ipa,
+            audio_urls=gloss.audio_urls or was.audio_urls,
+            audios=gloss.audios or was.audios,
+            readings=gloss.readings or was.readings,
+        )
 
     def symbols_in(
         self, term: str, readings: tuple[str, ...] = ()
@@ -474,6 +578,8 @@ class _Builder:
         `Symbol: 決` a card ahead of an identical `決`. A term is not taught
         before itself, so there is nothing to depend on and nothing to teach.
         """
+        if character == self.glossing:
+            return None
         if character in self.symbols:
             return self.symbols[character]
         if (word := self.by_surface.get(character)) is not None:
@@ -529,6 +635,24 @@ class _Builder:
         recordings = entry[1].audio_urls if entry and speaks else ()
         if page is not None and speaks and not recordings:
             recordings = page.audio_urls
+        #: And where the language has no single reading to give, what it gives
+        #: instead: the Readings list, which names each reading and says which
+        #: kind it is. Not gated on `speaks` -- the whole point of the list is
+        #: that a kanji is read several ways, so it is the card's answer
+        #: exactly where a pronunciation would have been a claim. It is a fact
+        #: about the character, so it comes off the character's own page and
+        #: not off a word that happens to be written with it.
+        spoken = entry[1].readings if entry else ()
+        if page is not None and not spoken:
+            spoken = page.readings
+        if not spoken and (own := self.page(character)) is not None:
+            #: And failing both, the language's own section, whatever section
+            #: the gloss itself came from. 人 heads a Japanese `Kanji` block
+            #: that is readings and no numbered sense, so the shape is read
+            #: from Translingual -- *Kangxi radical #9* -- while the readings
+            #: the learner needs are two lines above it, in the section this
+            #: deck is being built from.
+            spoken = own.readings
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -543,6 +667,7 @@ class _Builder:
                 definition=definition,
                 language=page.language if page is not None else name_of(self.lang),
                 ipa=readings,
+                readings=spoken,
                 audio_urls=recordings,
                 audios=self._audios(page, recordings) if page is not None else (),
                 key=gloss_key(*key),
@@ -1070,6 +1195,15 @@ def build(
         #: an unexpected one often enough to be worth a line.
         log("[decker] every term is written in the mother tongue's own script; "
             "--teach-script added nothing")
+    if builder.folded:
+        #: Worth its own line because what the flag costs is how a reader
+        #: judges it: these are the cards the deck would have carried twice.
+        one = builder.folded == 1
+        log(
+            f"[decker] {builder.folded} symbol card{'' if one else 's'} "
+            f"{'was' if one else 'were'} folded into the word card the text "
+            "teaches the same character with"
+        )
     morphology.report()
     if builder.unknowns is not None:
         for line in builder.unknowns.report():

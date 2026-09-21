@@ -60,6 +60,12 @@ class Side:
     #: so the back does not repeat the sentences the front already shows.
     renderings: tuple[str, ...] = ()
     ipa: tuple[str, ...] = ()
+    #: How the character is read, where the term is a character and the
+    #: language reads it more than one way: `Kan-on: けつ (ketsu, Jōyō)`. It
+    #: sits with the transcription, on the answers of both cards, and for the
+    #: same reason -- it is how the term is said, and a front carrying it
+    #: would be answering the production card it heads.
+    readings: tuple[str, ...] = ()
     etymology: str | None = None
     #: Cached sound files, on the answers of both cards: the recognition
     #: card's back names the pronunciation next to the reading, and the
@@ -519,6 +525,7 @@ def _pair(
             equivalent=equivalent,
             renderings=_renderings(examples),
             ipa=gloss.ipa,
+            readings=gloss.readings,
             etymology=etymology,
             audios=gloss.audios,
             headword=gloss.headword,
@@ -579,6 +586,7 @@ def _pair(
             #: which the question has just said.
             term=answer,
             ipa=gloss.ipa,
+            readings=gloss.readings,
             etymology=etymology,
             audios=gloss.audios,
             headword=gloss.headword,

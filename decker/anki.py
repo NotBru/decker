@@ -64,6 +64,8 @@ CSS = """\
 .definition { font-size: 24px; }
 .equivalent { font-size: 28px; font-weight: 600; margin-bottom: 0.2em; }
 .ipa { font-size: 18px; opacity: 0.75; }
+.readings { font-size: 17px; opacity: 0.85; margin-top: 0.3em; text-align: left;
+  display: inline-block; }
 .headword { font-size: 17px; opacity: 0.8; margin-top: 0.3em; }
 .examples, .etymology { font-size: 17px; opacity: 0.8; margin-top: 0.7em; }
 .examples { font-style: italic; }
@@ -76,11 +78,11 @@ CSS = """\
 #: existing ones renumbered under the notes already in it.
 RECOGNITION_FIELDS = (
     "Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit",
-    "Headword", "Renderings", "Equivalent",
+    "Headword", "Renderings", "Equivalent", "Readings",
 )
 PRODUCTION_FIELDS = (
     "Definition", "Term", "IPA", "Etymology", "Credit", "Headword", "Audio",
-    "Equivalent",
+    "Equivalent", "Readings",
 )
 
 RECOGNITION_FRONT = """\
@@ -96,6 +98,7 @@ RECOGNITION_BACK = """\
 <div class="definition">{{Definition}}</div>
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
+{{#Readings}}<div class="readings">{{Readings}}</div>{{/Readings}}
 {{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
 <div class="credit">{{Credit}}</div>\
@@ -112,6 +115,8 @@ PRODUCTION_BACK = """\
 <div class="term">{{Term}}</div>
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
+{{#Readings}}<div class="readings">{{Readings}}</div>{{/Readings}}
+{{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
 <div class="credit">{{Credit}}</div>\
 """
@@ -383,6 +388,7 @@ def _note(
             card.answer.headword,
             _lines(card.answer.renderings),
             card.answer.equivalent,
+            _lines(card.answer.readings),
         ]
     else:
         fields = [
@@ -394,6 +400,7 @@ def _note(
             card.answer.headword,
             _sounds(card.answer.audios),
             card.challenge.equivalent,
+            _lines(card.answer.readings),
         ]
     return genanki.Note(
         model=model,

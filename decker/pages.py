@@ -178,6 +178,15 @@ class Entry:
     #: has no pronunciation of its own, and :class:`Page` answers instead.
     ipa: tuple[str, ...] = ()
     audio_urls: tuple[str, ...] = ()
+    #: The *Readings* list of a block that documents a character: `Kan-on:
+    #: けつ (ketsu)`, `Kun: きまる (kimaru, 決まる)`, one string per line the
+    #: page writes. It is what a Japanese entry gives a kanji instead of a
+    #: pronunciation, because a kanji has none of its own -- see
+    #: :data:`decker.script._MANY_READINGS` -- and it is the thing a reader
+    #: has to learn about the character. Only on the parts of speech that are
+    #: about a character, :data:`_CHARACTER_PARTS`: the list belongs to the
+    #: shape and not to a word that happens to share the block.
+    readings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -199,6 +208,11 @@ class Page:
     #: The origin this page was rendered by, kept because a cached page
     #: outlives the run that fetched it and only some sources have audio.
     source: str = ""
+    #: The section's character readings, from whichever block documents the
+    #: character. Hoisted here for the same reason :attr:`ipa` is: a page
+    #: numbers its etymologies below the `Kanji` block, so a sense read out
+    #: of a numbered block would otherwise find none.
+    readings: tuple[str, ...] = ()
 
     @property
     def senses(self) -> list[tuple[str, Sense]]:
@@ -267,6 +281,23 @@ class Page:
                 if one is sense:
                     return entry.audio_urls or self.audio_urls
         return self.audio_urls
+
+    def readings_of(self, sense: Sense) -> tuple[str, ...]:
+        """The character readings of the block this sense sits under.
+
+        The section's own where the block has none, exactly as :meth:`ipa_of`
+        falls back: the `Kanji` block sits above `Etymology 1` and takes the
+        readings with it, so the noun under a numbered block would otherwise
+        find nothing where the page in fact says けつ.
+
+        Empty on every page that documents a word rather than a character,
+        which is what makes this safe to ask of any sense.
+        """
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return entry.readings or self.readings
+        return self.readings
 
     def headword_of(self, sense: Sense) -> str:
         """The headword line of the part of speech this sense sits under."""
@@ -377,7 +408,9 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if not entries:
         return None
     language = entries[0].language or language
-    etymology, etymons, ipa, audios = _from_html(payloads.get("parse"), language, lect)
+    etymology, etymons, ipa, audios, readings = _from_html(
+        payloads.get("parse"), language, lect
+    )
     return Page(
         title=title,
         language=language,
@@ -387,6 +420,7 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
         ipa=ipa,
         audio_urls=audios,
         source=payloads.get("source", ""),
+        readings=readings,
     )
 
 
@@ -791,20 +825,26 @@ def _retry_after(error: urllib.error.HTTPError, attempt: int) -> float:
 
 def _from_html(
     parse: dict | None, language: str, lect: str = ""
-) -> tuple[str | None, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Pull etymology, its components, IPA and every recording out of the page.
+) -> tuple[
+    str | None, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]
+]:
+    """Pull etymology, its components, IPA, recordings and readings out of it.
 
     The etymology is the section's; the readings and the recordings are the
-    *lect's* where the entry has lects and the caller named one.
+    *lect's* where the entry has lects and the caller named one. The character
+    readings are the section's and are read here rather than off the entries
+    because the block that carries them need not have produced one: 下 and 超
+    head a `Kanji` block that is readings and no numbered definition, so there
+    is no entry to hang them on and the page would answer nothing.
     """
     if not isinstance(parse, dict):
-        return None, (), (), ()
+        return None, (), (), (), ()
     html = parse.get("parse", {}).get("text")
     if not isinstance(html, str):
-        return None, (), (), ()
+        return None, (), (), (), ()
     section = _language_section(html, language)
     if section is None:
-        return None, (), (), ()
+        return None, (), (), (), ()
 
     spoken = _spoken(_shared(section), lect)
     return (
@@ -812,6 +852,7 @@ def _from_html(
         _etymons(section, language),
         _readings(spoken),
         _audios(spoken),
+        _character_readings(section),
     )
 
 
@@ -915,6 +956,58 @@ def _readings(block: str) -> tuple[str, ...]:
         if (reading := strip_html(raw)).startswith(_IPA_DELIMITERS)
         and "*" not in reading
     )
+
+
+#: The heading a character's readings sit under. Japanese writes it for every
+#: kanji, and the Ryukyuan languages the English Wiktionary documents the same
+#: way write it too -- Okinawan, Miyako, Kunigami, Yonaguni, Yaeyama, Yoron,
+#: Amami, Okinoerabu, Tokunoshima. Measured over the 10,889 pages this
+#: machine had cached: 426 Japanese blocks carry one, 89 Ryukyuan blocks do,
+#: and one Vietnamese block does. No other language needs anything here --
+#: Korean hanja and Vietnamese Han tự state their reading in the headword
+#: line, which a card already shows, and Chinese writes a Pronunciation
+#: section, which :func:`_readings` already reads.
+_READINGS_HEADING = re.compile(r'<h[2-6] id="Readings[^"]*"')
+
+#: What a page calls the parts of speech that are about a character rather
+#: than about a word. A Readings list is a fact about the shape, so it is
+#: attached to these and to nothing else in the same block.
+_CHARACTER_PARTS = frozenset(
+    ("kanji", "hanzi", "hanja", "han character", "character", "letter", "syllable")
+)
+
+#: The historical forms a reading is written back through: `けち (kechi) ←
+#: けち (keti, historical) ← くゑち (kweti, ancient)`. The modern reading is
+#: what a learner is being taught; the chain behind it is philology, and on a
+#: card it is three times the length of the answer.
+_HISTORICAL = "\u2190"
+
+
+def _character_readings(block: str) -> tuple[str, ...]:
+    """The lines of a `Readings` list, one string apiece.
+
+    `Go-on: けち (kechi)`, `Kan-on: けつ (ketsu, Jōyō)`, `Kun: きまる (kimaru,
+    決まる, Jōyō), きめる (kimeru, 決める, Jōyō)`. The page's own wording, kept
+    as the page has it: which class a reading belongs to is half of what the
+    line teaches -- an on'yomi is what a kanji takes in a compound and a
+    kun'yomi is what it takes alone -- and decker has nothing truer to say
+    about it than the entry does.
+
+    From the heading to the next heading of any level, which is the same cut
+    :func:`_pronunciation` makes, and only the list items directly under it.
+    """
+    found = _READINGS_HEADING.search(block)
+    if found is None:
+        return ()
+    following = _ANY_HEADING.search(block, found.end())
+    slice_ = block[found.start() : following.start() if following else len(block)]
+    tree = _parse_tree(slice_)
+    lines = []
+    for item in _find(tree, lambda node: node.get("tag") == "li"):
+        line = _tidy(_text(item).split(_HISTORICAL)[0])
+        if line:
+            lines.append(line)
+    return tuple(lines)
 
 
 def _audios(section: str) -> tuple[str, ...]:
@@ -1335,6 +1428,11 @@ def _entries_from_html(
                 etymons,
                 ipa=_readings(spoken),
                 audio_urls=_audios(spoken),
+                #: The block's, not the section's: a page numbering several
+                #: etymologies writes the Readings list under the character's
+                #: own block, and only that block's parts of speech are about
+                #: the character.
+                readings=_character_readings(block),
             )
         )
     return entries
@@ -1383,6 +1481,7 @@ def _entries_in(
     *,
     ipa: tuple[str, ...] = (),
     audio_urls: tuple[str, ...] = (),
+    readings: tuple[str, ...] = (),
 ) -> list[Entry]:
     """The parts of speech of one slice of a language section.
 
@@ -1432,6 +1531,16 @@ def _entries_in(
                                 headword=state["headword"],
                                 ipa=ipa,
                                 audio_urls=audio_urls,
+                                #: To the character's own part of speech and
+                                #: to no other: `決`'s block heads a Kanji
+                                #: and, further down the same page, words
+                                #: written with it.
+                                readings=(
+                                    readings
+                                    if state["heading"].casefold()
+                                    in _CHARACTER_PARTS
+                                    else ()
+                                ),
                             )
                         )
                     continue

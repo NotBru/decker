@@ -157,6 +157,16 @@ source of truth: where one of these contradicts them, the design wins and the co
   per entry it is handed, so the list the two cards would have produced would pack every recording
   twice.
 
+- **A character's readings ride there too, beside the IPA and under the same rule.** A kanji has no
+  pronunciation of its own, so its card carries the `Readings` list Wiktionary gives it instead —
+  `Kan-on: けつ (ketsu, Jōyō)` — on the answers of both cards and never on a front: it says how the
+  term is read, and a production card whose question showed it would be reading out half its own
+  answer. Only a gloss whose term is one character has one, so nothing appears on a Spanish or
+  Russian deck at all. The field is appended to both note types, for the reason `Audio` and
+  `Renderings` were. Where it comes from is
+  [Definition fetching](definition-fetching.md); what it is for is
+  [Teaching the script](teaching-the-script.md).
+
 ### What a card carries of the source text: the word, and nothing else
 
 Worth stating outright, because it is load-bearing and because nothing enforces it. A `Gloss` holds

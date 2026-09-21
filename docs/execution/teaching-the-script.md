@@ -339,7 +339,51 @@ also have a word card of their own in the same deck, and in 83 of those the two 
 sentence — `Symbol: 者` and `者`, identical but for the prefix. The "a character the text teaches as
 a word is not taught twice" rule below only fires when the word came first: `symbols_in` runs while
 the word's own gloss is still being built, so a character whose first appearance *is* the standalone
-word gets both cards. It is a gap in that rule, older than these two, and it is not fixed here.
+word gets both cards. It is a gap in that rule, older than these two, and it was not fixed there —
+see the section below, which closes it.
+
+## The character that is also a word
+
+Bru found the gap above in a finished deck on 2026-09-21: `Symbol: 決 — to burst` and `決 — to
+burst`, one page, one sentence, four cards. Measured over that whole deck — 516 symbol cards, 231
+one-character word cards — **222 characters carried both, and 120 of those pairs said the same
+thing**, kana (`ぁ あ ぅ う ぇ え`) as much as kanji. The instruction was to dedupe the pairs that
+are equal but for the readings, and to keep the bare card: `決` teaches the character whether or not
+decker labels it.
+
+It is two different collisions and they needed two different answers.
+
+- **The word arrives while its own character is being glossed.** `symbols_in` asks for the
+  characters of a term before that term's gloss is in `by_surface`, so a one-character term asked
+  for itself, found nothing, and made a `Symbol:` card to depend on. The rule was always "a
+  character the text teaches as a word of its own is that word's gloss"; it simply could not see a
+  gloss that did not exist yet. `Builder.glossing` names the term whose dependencies are being
+  gathered, and `symbol()` answers *nothing to depend on* for it. A term is not taught before
+  itself.
+
+- **The symbol card was made first, by a word that contains the character.** 解決 taught 解 and 決
+  as shapes; the text then used 決 as a word. Here the card is already standing, with cards
+  depending on it, so it cannot be dropped — the word gloss is **written into its slot** instead
+  (`_folds_into`, `_folded`). Every dependency that pointed at the character still points at it,
+  nothing is renumbered, and `first_sentence` stays the symbol's, because that is where the deck
+  teaches the card. What the shape knew and the word's own block does not — the readings, and the
+  pronunciation and recording where the word's block states none — is carried across, which is what
+  makes it a fold and not a deletion.
+
+**Where the two say the same thing, and where the symbol card is not this language's.** The first
+test is the definition, with the readings deliberately left out of it — they are exactly what one
+side has and the other may not. The second was added the same day, on Bru's call: when the target
+language's section heads no block about the shape, the shape is glossed from Translingual, from one
+of the `HAN_SOURCES`, or from the Unicode tables, and `Symbol: 人 — Kangxi radical #9, ⼈` standing
+beside the Japanese word 人 is not two senses of a character but one card said twice, the second
+time in the wrong language. Drop the Translingual one: the word card is kept whole — *a person,
+human*, `[çi̥to̞]`, its etymology and its recording — and takes the readings the shape card had.
+
+What survives both tests is the case they were drawn around: two blocks of the **same** section
+saying different things. 決's `Kanji` block glosses *to burst*, *to decide* and *to kill*, and those
+are three cards whichever of them a symbol card took.
+
+`--teach-script` off makes none of this fire: with no symbol glosses there is nothing to fold.
 
 ## What it does not do
 
