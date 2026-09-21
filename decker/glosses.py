@@ -14,7 +14,9 @@ morphological rule, worked out in :mod:`decker.morphology` from the form-of
 line itself; and, under `--teach-script`, a symbol -- one character of a term,
 written in a script the reader does not have. The first two explain the
 machinery a definition uses rather than a word the reader met; the third is
-what a word is spelled with. None of them carries a production pair.
+what a word is spelled with. The first two carry no production pair; a
+symbol does, since producing a character from what it says is a question about
+the writing system and not about decker's titling.
 """
 
 from __future__ import annotations
@@ -28,10 +30,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from decker import pages, script
-from decker.console import DETAIL, VERBOSE, console, log
+from decker.console import DETAIL, VERBOSE, console, count, log
 from decker.disambiguation import Disambiguator
-from decker.languages import name_of
-from decker.morphology import Morphology, Outcome, Rule, label_of
+from decker.languages import name_of, section_of
+from decker.morphology import RULE_PREFIX, Morphology, Outcome, Rule, label_of
 from decker.ollama import default_model
 from decker.pages import Concept, Entry, Example, Page, Sense
 from decker.terms import Term
@@ -113,6 +115,23 @@ SHAPE_PARTS = (
 #: which would be a false card for a term that merely contains the glyph.
 NOTATION_PARTS = ("Symbol",)
 
+#: The languages whose sections write what a Han character *means*, asked in
+#: this order and asked last: after the target language has been asked about
+#: the character and about the words written with it alone, and before the
+#: Unicode name. Chinese is where the English Wiktionary writes a character's
+#: meaning out, under `Definitions`; Korean and Vietnamese answer for a few it
+#: has dropped.
+#:
+#: Last, and not first, because a Han character's meaning is *not* the same in
+#: every language that took it, which is the thing this stage got wrong on
+#: 2026-09-19 and a run caught the same hour: 娘 is *mother* in Chinese and
+#: *daughter* in Japanese, 靴 is a boot there and a shoe here. A borrowed
+#: character carries a borrowed meaning, and the meaning drifted. So the
+#: target language answers about its own writing wherever it says anything at
+#: all, and this is for the character it has no section for. And only for Han,
+#: which is the one script decker teaches whose characters mean anything.
+HAN_SOURCES = ("zh", "ko", "vi")
+
 #: The section a character's own entry lives under when no language claims it:
 #: the IPA symbols, the punctuation and the Han characters are all written
 #: here, and it is a heading like any other as far as :mod:`decker.pages` is
@@ -164,14 +183,21 @@ class Gloss:
     depends_on: tuple[int, ...] = ()
     #: :func:`gloss_key` of this gloss, carried so a deck can record it.
     key: str = ""
+    #: Index of the sentence this gloss was first made for. A gloss is made
+    #: once, at its first occurrence, so this is where the reader first meets
+    #: it -- and for a concept or a rule, the first sentence that needed it.
+    #: -1 for a gloss made outside the walk over the sentences.
+    first_sentence: int = -1
     #: For a concept read from `Appendix:Glossary`, where on that page it
     #: lives. Empty for an ordinary gloss, whose entry is a word and whose
     #: link goes to its language section instead.
     anchor: str = ""
     #: Whether deck construction makes the production card as well. The design
-    #: gives the pair to word definitions only: asking for `Concept: dative
-    #: case` or for a rule's title, given its explanation, is a question about
-    #: decker's own titling and not about the language.
+    #: withholds the pair from the glosses whose title decker writes: asking
+    #: for `Concept: dative case` or for a rule's title, given its explanation,
+    #: is a question about decker's own titling and not about the language. A
+    #: symbol is the exception among the three -- its title is a character the
+    #: reader has to be able to write -- and keeps the pair.
     production: bool = True
     #: Where this gloss's prose comes from, when it is not Wiktionary's. Only
     #: a rule has one: its text is the model's, written from an entry rather
@@ -184,6 +210,29 @@ class Gloss:
     #: nothing -- an inflected form of the text still gets its own card.
     #: Empty for a concept, a rule, and for a form that announces only itself.
     headword: str = ""
+    #: The prefix decker puts on this gloss's title, when it writes one --
+    #: `Symbol: `, `Concept: `, `Rule: `, and nothing for a word, whose title
+    #: is Wiktionary's. It is part of `surface`, and named separately because
+    #: the production card has to take it off the answer and put it on the
+    #: question: what the learner writes is the character alone, and what the
+    #: question has to say is that a character is what it wants.
+    title_prefix: str = ""
+    #: The spellings of this word that its own definition quotes, as
+    #: Wiktionary's self-link markup names them -- see
+    #: :func:`decker.pages._quoted_in`. Read for the production card, whose
+    #: question is the definition and whose answer is the word: `(auxiliary,
+    #: with an infinitive → “müssen” replaces the past participle)` prints its
+    #: own answer. Empty for a definition that does not name its word, which
+    #: is nearly all of them.
+    quoted: tuple[str, ...] = ()
+    #: The part of that title which is decker's prose rather than a word of
+    #: the language: a concept's name, a rule's feature bundle. Deck
+    #: construction translates it and leaves the rest of `surface` alone --
+    #: a symbol's character, a rule's representative word -- so this is empty
+    #: for a symbol and for a word, whose titles are nothing but the language.
+    #: `surface` itself keeps the English, because `gloss_key`, `--previous`
+    #: and the rule book are all written against it.
+    title_prose: str = ""
 
 
 @dataclass
@@ -199,6 +248,11 @@ class _Builder:
     glosses: list[Gloss] = field(default_factory=list)
     #: Inflected form and sense, the design's identity for a gloss.
     seen: dict[tuple[str, str], int] = field(default_factory=dict)
+    #: Which sentence is being glossed, so every gloss made while it is --
+    #: the word itself, a concept its definition names, the rule behind its
+    #: form -- records where the reader first meets it. Set by :func:`build`
+    #: as it walks the sentences, because only the walk knows.
+    position: int = -1
     #: Pages already looked up this run, misses included.
     fetched: dict[str, Page | None] = field(default_factory=dict)
     #: Per page, which of its definitions describe it in terms of what.
@@ -216,6 +270,13 @@ class _Builder:
     skipped: int = 0
     #: Whether the terminology inside a definition becomes cards of its own.
     concepts: bool = True
+    #: Whether the terms an etymology decomposes a word into become cards of
+    #: their own, recursively, the way a form-of's target does.
+    components: bool = True
+    #: The titles glossed because an etymology named them as a component,
+    #: counted for the run's tally. Distinct titles, and only those that had
+    #: no card under that spelling already.
+    composed: set[str] = field(default_factory=set)
     #: `Appendix:Glossary`, by every anchor that reaches an entry of it. One
     #: page, read on first use, so a run that glosses nothing never asks for it.
     _glossary: dict[str, Concept] | None = None
@@ -248,6 +309,9 @@ class _Builder:
     #: language, kept apart from `fetched` because they are the same titles
     #: cut to a different section.
     translingual: dict[str, Page | None] = field(default_factory=dict)
+    #: And pages read under one of :data:`HAN_SOURCES`, by title and language,
+    #: for the same reason: the same title cut to a third section again.
+    borrowed: dict[tuple[str, str], Page | None] = field(default_factory=dict)
 
     def glossary(self) -> dict[str, Concept]:
         if self._glossary is None:
@@ -261,7 +325,7 @@ class _Builder:
 
     def page(self, title: str) -> Page | None:
         if title not in self.fetched:
-            log(f"[decker]   fetching {title}", level=DETAIL, kind="detail")
+            log("fetching", word=title, level=DETAIL, kind="detail")
             self.fetched[title] = pages.fetch(
                 title, edition=self.edition, lang=self.lang, refresh=self.refresh
             )
@@ -271,14 +335,14 @@ class _Builder:
             #: seeing. The fetch itself is one level further down.
             page = self.fetched[title]
             if page is None:
-                log(f"[decker]   {title}: no {name_of(self.lang)} section",
+                log(f"no {name_of(self.lang)} section", word=title,
                     level=VERBOSE, kind="missing")
             else:
                 log(
-                    f"[decker]   {title}: {len(page.senses)} sense"
+                    f"{len(page.senses)} sense"
                     f"{'' if len(page.senses) == 1 else 's'}"
                     f"{' from ' + page.source if page.source else ''}",
-                    level=VERBOSE, kind="found",
+                    word=title, level=VERBOSE, kind="found",
                 )
         return self.fetched[title]
 
@@ -324,6 +388,7 @@ class _Builder:
             return self.seen[key]
         if gloss_key(surface, sense.definition) in self.known:
             self.skipped += 1
+            count("gloss.known")
             return None
         #: Before the gloss itself, so a concept it names is already standing
         #: and carries the lower index: the terminology inside a definition is
@@ -332,12 +397,18 @@ class _Builder:
         #: front of both: a card the reader cannot read is not improved by
         #: their knowing what dative means.
         depends_on = _merge(
-            depends_on, self.symbols_in(surface), self.concepts_of(sense)
+            depends_on,
+            #: With the term's own reading, which is what tells a character
+            #: met in 靴下 from the same character met in 地下: see
+            #: `_as_read`.
+            self.symbols_in(surface, page.ipa_of(sense)),
+            self.concepts_of(sense),
         )
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
                 index=index,
+                first_sentence=self.position,
                 surface=surface,
                 lemma=lemma,
                 entry=page.title,
@@ -348,6 +419,7 @@ class _Builder:
                 #: section's only where the page numbers just one.
                 etymology=page.etymology_of(sense),
                 headword=page.headword_of(sense),
+                quoted=sense.quoted,
                 #: And the pronunciation of that same block, for the same
                 #: reason: Russian `в` is a letter, a preposition and an
                 #: abbreviation of `вольт` under three numbered etymologies,
@@ -363,9 +435,12 @@ class _Builder:
         )
         self.seen[key] = index
         self.by_surface.setdefault(surface, index)
+        count("gloss.word")
         return index
 
-    def symbols_in(self, term: str) -> tuple[int, ...]:
+    def symbols_in(
+        self, term: str, readings: tuple[str, ...] = ()
+    ) -> tuple[int, ...]:
         """Gloss every character of ``term`` written in a script new to them.
 
         **The term, and nothing else on the card.** Bru's call of 2026-09-16,
@@ -378,29 +453,39 @@ class _Builder:
         if not self.teach_script:
             return ()
         found = [
-            self.symbol(character)
+            self.symbol(character, readings)
             for character in script.foreign(term, self.reads)
         ]
         return tuple(index for index in found if index is not None)
 
-    def symbol(self, character: str) -> int | None:
+    def symbol(
+        self, character: str, readings: tuple[str, ...] = ()
+    ) -> int | None:
         """The gloss that teaches one character, making it if there is none.
 
         A character the text already teaches as a word of its own is that
         word's gloss: the reader has met the shape, which is all a dependency
         here asserts. It is what keeps a Chinese deck from carrying a symbol
         card behind every word card.
+
+        Including the word being glossed at this moment, which is the half
+        the rule was missing: `決` asked for its own character while its own
+        gloss was still being built, found nothing in `by_surface` and made
+        `Symbol: 決` a card ahead of an identical `決`. A term is not taught
+        before itself, so there is nothing to depend on and nothing to teach.
         """
         if character in self.symbols:
             return self.symbols[character]
         if (word := self.by_surface.get(character)) is not None:
             self.symbols[character] = word
             return word
-        index = self._teach(character)
+        index = self._teach(character, readings)
         self.symbols[character] = index
         return index
 
-    def _teach(self, character: str) -> int | None:
+    def _teach(
+        self, character: str, readings: tuple[str, ...] = ()
+    ) -> int | None:
         """Append the gloss for one character.
 
         Wiktionary first, as everything else here is: the target language's
@@ -412,7 +497,7 @@ class _Builder:
         the shape, and the word that happens to be spelled with it is a
         different card that the text will ask for itself if it uses it.
         """
-        entry, sense = self._symbol_entry(character)
+        entry, sense, speaks = self._symbol_entry(character, readings)
         shown = script.displayed(character)
         surface = f"{SYMBOL_PREFIX}{shown}"
         definition = sense.definition if sense else script.unicode_name(character)
@@ -423,16 +508,32 @@ class _Builder:
             self.skipped += 1
             return None
         page = entry[0] if entry else None
-        readings = entry[1].ipa if entry else ()
-        if page is not None and not readings:
+        #: A reading only where the block that answered is the character's
+        #: own. Where it is not, the card carries none and is right to: a
+        #: kanji has no pronunciation, only the words written with it do, and
+        #: 下 is *shita*, *shimo*, *moto*, *ge* and *ka* by turns. Putting one
+        #: of them on the character's card asserts a fact the language does
+        #: not have, where silence leaves the reading to be learned where it
+        #: is true -- on the word's card, which carries it already. The
+        #: section-level fallback is the shape's too: `ん` keeps its [ɴ] there
+        #: while `食` has nothing above its etymologies to take.
+        #: And not where the language reads the character several ways: 務's
+        #: page numbers one etymology, so its `Kanji` block inherits the
+        #: reading of the single word つとむ written with it and looks like
+        #: the character's own. It is not. `script.speaks` is the rule, and
+        #: Japanese is the language it is about.
+        speaks = speaks and script.speaks(character, self.lang)
+        readings = entry[1].ipa if entry and speaks else ()
+        if page is not None and speaks and not readings:
             readings = page.ipa
-        recordings = entry[1].audio_urls if entry else ()
-        if page is not None and not recordings:
+        recordings = entry[1].audio_urls if entry and speaks else ()
+        if page is not None and speaks and not recordings:
             recordings = page.audio_urls
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
                 index=index,
+                first_sentence=self.position,
                 surface=surface,
                 #: Its own title, as a concept's and a rule's are.
                 lemma=surface,
@@ -445,31 +546,48 @@ class _Builder:
                 audio_urls=recordings,
                 audios=self._audios(page, recordings) if page is not None else (),
                 key=gloss_key(*key),
-                #: No production pair, by the design's rule: only a word
-                #: definition gets one. The direction of a script that is
-                #: worth drilling the other way -- writing あ when asked for
-                #: the syllable *a* -- is handwriting, which is not something
-                #: a deck can mark.
-                production=False,
+                #: A production pair, unlike the other two glosses decker
+                #: titles itself. Writing あ when asked for the syllable *a*
+                #: is the direction a reader of a new script is weakest in,
+                #: and the answer is a character rather than a name decker
+                #: made up, so the question is about the writing system. That
+                #: Anki cannot see the stroke the learner draws is true of
+                #: every production card -- the learner marks it -- and is not
+                #: a reason to withhold the card. Bru's call, 2026-09-18.
+                production=True,
+                title_prefix=SYMBOL_PREFIX,
                 attribution="" if sense else SYMBOL_ATTRIBUTION,
             )
         )
         self.seen[key] = index
         self.symbol_count += 1
-        log(f"[decker]   script: {shown} ({definition[:60]})",
+        count("gloss.symbol")
+        log(f"script: {definition[:60]}", word=shown,
             level=DETAIL, kind="detail")
         return index
 
     def _symbol_entry(
-        self, character: str
-    ) -> tuple[tuple[Page, Entry] | None, Sense | None]:
+        self, character: str, readings: tuple[str, ...] = ()
+    ) -> tuple[tuple[Page, Entry] | None, Sense | None, bool]:
         """The entry and sense that talk about the character itself.
 
         The language's own section first, that being the section written about
         this language's writing, and the Translingual one after it for the
-        characters no language claims -- the Han characters above all. What
-        each is allowed to answer with differs, and :data:`NOTATION_PARTS`
-        says why.
+        characters no language claims. What each is allowed to answer with
+        differs, and :data:`NOTATION_PARTS` says why. Failing both, a Han
+        character is asked of the words its own language writes with it, and
+        only then -- the character having no section here at all -- of
+        :data:`HAN_SOURCES`.
+
+        ``readings`` is the pronunciation of the term that asked for this
+        card, and it is what picks between the words when there are several:
+        see :meth:`_as_read`.
+
+        The third answer is whether the block that spoke is the character's
+        own, which is what decides whether the card carries a reading. True
+        for the two sections above, false for everything below them: a
+        Mandarin reading is not a fact about a kanji, and neither is the
+        reading of one word that happens to be written with it.
         """
         own = self.page(character)
         asked = (
@@ -482,20 +600,71 @@ class _Builder:
             for part in parts:
                 for entry in page.entries:
                     if entry.part_of_speech == part and entry.senses:
-                        return (page, entry), entry.senses[0]
-        if own is not None and script.script_of(character) == script.HAN:
-            #: A Han character is a morpheme before it is anything else, so
-            #: where its page heads no Kanji and no Han character -- 辺 heads
-            #: Nouns and Suffixes and has no Translingual section -- the
-            #: entry's own first sense is what the character means, and
-            #: `CJK UNIFIED IDEOGRAPH-8FBA` is what the alternative says.
-            #: Only here: in an alphabet the letter and the word that is
-            #: spelled with it are different things, and Russian `я` would
-            #: come back as the pronoun.
-            for entry in own.entries:
-                if entry.senses:
-                    return (own, entry), entry.senses[0]
-        return None, None
+                        return (page, entry), entry.senses[0], True
+        if script.script_of(character) != script.HAN:
+            return None, None, False
+        #: A Han character is a morpheme before it is anything else, so where
+        #: its page heads no Kanji and no Han character -- 下 heads a Kanji
+        #: block that is readings and no gloss, 辺 heads Nouns and Suffixes --
+        #: the word written with the character alone is what the character
+        #: means, and `CJK UNIFIED IDEOGRAPH-8FBA` is what the alternative
+        #: says. Only here: in an alphabet the letter and the word spelled
+        #: with it are different things, and Russian `я` would come back as
+        #: the pronoun.
+        if own is not None:
+            entry = self._as_read(own, readings)
+            if entry is not None:
+                return (own, entry), entry.senses[0], False
+        #: And only now the other languages that write this character: the
+        #: target language has said nothing about it, under any heading.
+        for source in HAN_SOURCES:
+            if section_of(source) == section_of(self.lang):
+                #: A Chinese run has already asked its own section; asking it
+                #: again under another of its codes is the same parse twice.
+                continue
+            borrowed = self.foreign_page(character, source)
+            if borrowed is None:
+                continue
+            for part in SHAPE_PARTS:
+                for entry in borrowed.entries:
+                    if entry.part_of_speech == part and entry.senses:
+                        return (borrowed, entry), entry.senses[0], False
+        return None, None, False
+
+    def _as_read(self, page: Page, readings: tuple[str, ...]) -> Entry | None:
+        """The block of ``page`` that the term asking for this card reads with.
+
+        A kanji page numbers one etymology per word written with the
+        character, and they are unrelated words: 下 is した, しも, もと, げ and
+        か, five blocks whose senses have nothing to do with each other.
+        Taking the first was taking the top of the page, and the top of the
+        page is alphabetical accident.
+
+        The text decides instead, as it decides everything else here. 靴下 is
+        read *kutsushita*, so the block whose own reading is inside the
+        term's -- した, *the underneath* -- is the sense of 下 this deck met,
+        and 地下 would have taken か, *down; below; beneath*. Where nothing
+        matches, and where the page numbers only one word anyway, the first
+        block stands as before.
+
+        A rough test, and knowingly: rendaku and the sound changes of
+        compounding mean a reading is not always inside the term's unchanged,
+        and a character met first in 今日 is in a word no character is read in
+        at all. It costs nothing when it fails -- the answer is the first
+        block, which is what there was before it -- and it is right whenever
+        it fires.
+        """
+        blocks = [entry for entry in page.entries if entry.senses]
+        if not blocks:
+            return None
+        sounds = {_bare(reading) for reading in readings}
+        if sounds:
+            for entry in blocks:
+                for reading in entry.ipa:
+                    bare = _bare(reading)
+                    if bare and any(bare in sound for sound in sounds):
+                        return entry
+        return blocks[0]
 
     def translingual_page(self, character: str) -> Page | None:
         """The character's page, cut to the section no language claims."""
@@ -505,6 +674,18 @@ class _Builder:
                 refresh=self.refresh,
             )
         return self.translingual[character]
+
+    def foreign_page(self, character: str, lang: str) -> Page | None:
+        """The character's page, cut to a section that is not this run's.
+
+        The page itself is already cached by title, so a Han character asked
+        of Chinese after Japanese costs a parse and no fetch at all.
+        """
+        if (character, lang) not in self.borrowed:
+            self.borrowed[(character, lang)] = pages.fetch(
+                character, edition=self.edition, lang=lang, refresh=self.refresh
+            )
+        return self.borrowed[(character, lang)]
 
     def concepts_of(self, sense: Sense) -> tuple[int, ...]:
         """Gloss the terminology ``sense`` explains its word with.
@@ -554,16 +735,20 @@ class _Builder:
             return self.seen[key]
         if gloss_key(*key) in self.known:
             self.skipped += 1
+            count("gloss.known")
             return None
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
                 index=index,
+                first_sentence=self.position,
                 surface=surface,
                 #: Its own title: a concept has no inflected and lemmatized
                 #: form to tell apart, and printing one under the other would
                 #: only say the same thing twice.
                 lemma=surface,
+                title_prefix=CONCEPT_PREFIX,
+                title_prose=concept.name,
                 entry=pages.GLOSSARY_PAGE,
                 definition=concept.description,
                 #: What the text is *about* is grammar, not a language, but
@@ -579,6 +764,7 @@ class _Builder:
         )
         self.seen[key] = index
         self.concept_count += 1
+        count("gloss.concept")
         return index
 
     def add_unknown(self, surface: str, explanation: str, model: str) -> int | None:
@@ -594,6 +780,7 @@ class _Builder:
             return self.seen[key]
         if gloss_key(*key) in self.known:
             self.skipped += 1
+            count("gloss.known")
             return None
         #: The word is the one thing on this card that is not the model's
         #: prose, and it is the half in a script the reader may not have: a
@@ -604,6 +791,7 @@ class _Builder:
         self.glosses.append(
             Gloss(
                 index=index,
+                first_sentence=self.position,
                 surface=surface,
                 lemma=surface,
                 entry="",
@@ -618,6 +806,7 @@ class _Builder:
         self.seen[key] = index
         self.by_surface.setdefault(surface, index)
         self.foreign_count += 1
+        count("gloss.foreign")
         return index
 
     def bundle_of(self, sense: Sense) -> tuple[str, ...]:
@@ -659,6 +848,7 @@ class _Builder:
             return self.seen[key]
         if gloss_key(*key) in self.known:
             self.skipped += 1
+            count("gloss.known")
             return None
         #: The title carries the representative word, which is a word of the
         #: language and written in its script.
@@ -667,10 +857,15 @@ class _Builder:
         self.glosses.append(
             Gloss(
                 index=index,
+                first_sentence=self.position,
                 surface=surface,
                 #: Its own title, as a concept's is: a rule has no inflected
                 #: form and no lemma of its own.
                 lemma=surface,
+                title_prefix=RULE_PREFIX,
+                #: The bundle alone: the representative beside it in the title
+                #: is a word of the language and stays in it.
+                title_prose=rule.label,
                 #: The page its representative was glossed from, which is what
                 #: a reader following the card would want to see -- the rule
                 #: itself is not on any page.
@@ -685,6 +880,7 @@ class _Builder:
         )
         self.seen[key] = index
         self.rule_count += 1
+        count("gloss.rule")
         return index
 
     def _audios(self, page: Page, urls: tuple[str, ...]) -> tuple[str, ...]:
@@ -702,6 +898,19 @@ class _Builder:
         self.offered += len(urls)
         paths = (pages.audio_path(url) for url in urls)
         return tuple(str(path) for path in paths if path)
+
+
+def _bare(reading: str) -> str:
+    """A transcription stripped to the sounds, for comparing one with another.
+
+    Wiktionary brackets a phonetic reading and slashes a phonemic one, and a
+    block may carry several separated by commas. Only enough is taken off to
+    let one reading be looked for inside another: the delimiters, the
+    whitespace and the stress and length marks, which compounding moves
+    around. The symbols themselves are left exactly as they are, since it is
+    the sounds that have to match.
+    """
+    return reading.strip("[]/ ").replace("ˈ", "").replace("ˌ", "").replace(" ", "")
 
 
 def _merge(*groups: tuple[int, ...]) -> tuple[int, ...]:
@@ -724,6 +933,7 @@ def build(
     disambiguate: bool = True,
     audio: bool = True,
     concepts: bool = True,
+    components: bool = True,
     rules: bool = True,
     unknowns: str = "fix",
     refresh: bool = False,
@@ -732,7 +942,14 @@ def build(
     teach_script: bool = False,
     mother_lang: str = "en",
 ) -> list[Gloss]:
-    """Turn term extraction's output into the design's list of glosses."""
+    """Turn term extraction's output into the design's list of glosses.
+
+    ``limit`` stops the walk once that many glosses stand, and the run carries
+    on to the cards with what it has -- the same end Ctrl+C reaches, reached
+    on a count instead of on a key. It is checked between terms, so the last
+    term's senses, symbols and components are all made and the list overshoots
+    a little rather than cutting a word in half.
+    """
     reads = script.scripts_of(mother_lang) if teach_script else ()
     if teach_script and reads is None:
         #: The stage stands down rather than guessing: decker would be saying
@@ -775,17 +992,24 @@ def build(
         ),
         audio=audio,
         concepts=concepts,
+        components=components,
         refresh=refresh,
         known=known,
         teach_script=teach_script,
         reads=reads,
     )
-    with console.phase("glossing", sum(len(one.text) for one in sentences)):
+    with console.phase(
+        "glossing",
+        sum(len(one.text) for one in sentences),
+        unit="characters",
+        items=len(sentences),
+    ):
         for position, sentence in enumerate(sentences):
             if console.skipping():
                 #: What is glossed is glossed; the deck is built from it and
                 #: the run carries on to the cards.
                 break
+            builder.position = position
             around = _around(sentences, position)
             log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
             for term in sentence.terms:
@@ -828,6 +1052,12 @@ def build(
         log(
             f"[decker] {builder.concept_count} of them are concepts "
             f"({pages.GLOSSARY_PAGE})"
+        )
+    if builder.composed:
+        log(
+            f"[decker] {len(builder.composed)} of them are the terms an "
+            "etymology decomposes a word into (des- + cargar), taught before "
+            "the word that is made of them"
         )
     if builder.symbol_count:
         log(
@@ -968,8 +1198,9 @@ def _gloss_term(
         #: own: what a form-of definition points at is glossed either way. The
         #: design's culling drops the instance and keeps the base word, which
         #: is only a sentence away from being the opposite by accident.
-        depends_on = _referenced(
-            builder, page, sense, marked, frozenset({page.title})
+        depends_on = _dependencies(
+            builder, page, sense, surface, term.lemma, marked,
+            frozenset({page.title}),
         )
         if (surface, sense.definition) in builder.seen:
             #: The same form in the same sense, met again. It is one card
@@ -997,10 +1228,10 @@ def _gloss_term(
 
     added = len(builder.glosses) - before
     if added:
-        log(f"[decker] {term.surface!r}: {added} gloss"
-            f"{'' if added == 1 else 'es'}", level=VERBOSE, kind="found")
+        log(f"{added} gloss{'' if added == 1 else 'es'}",
+            word=term.surface, level=VERBOSE, kind="found")
     else:
-        log(f"[decker] {term.surface!r}: nothing new to teach",
+        log("nothing new to teach", word=term.surface,
             level=VERBOSE, kind="dropped")
 
 
@@ -1018,9 +1249,8 @@ def _no_entry(
     unknowns = builder.unknowns
     if unknowns is None or not unknowns.enabled:
         log(
-            f"[decker] no {builder.lang} entry for {term.surface!r} "
-            f"({', '.join(term.entries)})",
-            level=VERBOSE, kind="missing",
+            f"no {builder.lang} entry ({', '.join(term.entries)})",
+            word=term.surface, level=VERBOSE, kind="missing",
         )
         return
 
@@ -1029,9 +1259,8 @@ def _no_entry(
     verdict = unknowns.verdict(term.surface, passage, name_of(builder.lang))
     if verdict is None:
         log(
-            f"[decker] no {builder.lang} entry for {term.surface!r}; the model "
-            "would not say what it is",
-            level=VERBOSE, kind="missing",
+            f"no {builder.lang} entry; the model would not say what it is",
+            word=term.surface, level=VERBOSE, kind="missing",
         )
         return
 
@@ -1039,14 +1268,13 @@ def _no_entry(
         page = builder.page(verdict.correction)
         if page is None or not page.senses:
             log(
-                f"[decker] {term.surface!r} looks like {verdict.correction!r}, "
-                "which has no entry either",
-                level=VERBOSE, kind="missing",
+                f"looks like {verdict.correction!r}, which has no entry either",
+                word=term.surface, level=VERBOSE, kind="missing",
             )
             return
         log(
-            f"[decker] {term.surface!r} -> {verdict.correction!r} (spelling)",
-            level=VERBOSE, kind="fixed",
+            f"-> {verdict.correction!r} (spelling)",
+            word=term.surface, level=VERBOSE, kind="fixed",
         )
         #: Glossed as the word that was meant, and fronted with it: the text's
         #: spelling is a mistake in the text, and a card teaching it would
@@ -1061,17 +1289,17 @@ def _no_entry(
         index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
         if index is not None:
             log(
-                f"[decker] {term.surface!r} is a {name_of(builder.lang)} word "
-                "Wiktionary lacks; explained by the model",
-                level=VERBOSE, kind="fixed",
+                f"a {name_of(builder.lang)} word Wiktionary lacks; explained "
+                "by the model",
+                word=term.surface, level=VERBOSE, kind="fixed",
             )
         return
 
     if verdict.kind == "foreign":
         if verdict.widely_known and not unknowns.teaches_known_foreign():
             log(
-                f"[decker] {term.surface!r} is foreign and widely known; no card",
-                level=VERBOSE, kind="dropped",
+                "foreign and widely known; no card",
+                word=term.surface, level=VERBOSE, kind="dropped",
             )
             return
         if not verdict.explanation:
@@ -1079,14 +1307,14 @@ def _no_entry(
         index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
         if index is not None:
             log(
-                f"[decker] {term.surface!r} taught as a foreign word",
-                level=VERBOSE, kind="detail",
+                "taught as a foreign word",
+                word=term.surface, level=VERBOSE, kind="fixed",
             )
         return
 
     log(
-        f"[decker] {term.surface!r} is nothing recognizable; dropped",
-        level=VERBOSE, kind="dropped",
+        "nothing recognizable; dropped",
+        word=term.surface, level=VERBOSE, kind="dropped",
     )
 
 
@@ -1131,39 +1359,212 @@ def _referenced(
     titles already being resolved keeps a pair that defines each other in terms
     of the other from looping.
     """
+    return tuple(
+        index
+        for title in builder.references_of(page).get(sense.definition, ())
+        if title not in chain
+        and (index := _dependency(builder, title, marked, chain)) is not None
+    )
+
+
+def _composed(
+    builder: _Builder,
+    page: Page,
+    sense: Sense,
+    marked: str,
+    chain: frozenset[str],
+) -> tuple[int, ...]:
+    """Gloss the terms this sense's etymology decomposes its word into.
+
+    The other half of what a word depends on, and it is a different half: a
+    form-of points at the word this one is an inflection *of*, an etymology
+    names the words this one is *made of*. `descargar` is `des-` and `cargar`,
+    and a reader who has neither has been handed a card that says its own
+    answer in words they have not met. Recursively, because a component is a
+    word like any other and may be a sum itself -- `cargar` is `carga` and
+    `-ar` -- and the chain of titles being resolved is what stops a pair that
+    name each other from looping.
+
+    Only the components of *this* sense's etymology block, and only those in
+    the language being taught: the Latin, the Arabic and the Quechua an
+    etymology walks back through get no cards, which is Bru's call of
+    2026-09-14 and still holds. What changed on 2026-09-20 is the sum: a
+    component of the same language is a word of the text's own language, and
+    the reader meets it in the word in front of them.
+    """
+    if not builder.components:
+        return ()
     dependencies = []
-    for title in builder.references_of(page).get(sense.definition, ()):
+    for title in page.etymons_of(sense):
         if title in chain:
             continue
-        target = builder.page(title)
-        if target is None:
+        fresh = title not in builder.by_surface
+        index = _dependency(builder, title, marked, chain)
+        if index is None:
             continue
-        labelled = target.senses
-        kept = builder.disambiguator.keep(
-            tuple(one for _, one in labelled),
-            sentence=marked,
-            surface=title,
-            title=f'"{title}"',
-            language=target.language,
-            parts_of_speech=tuple(part for part, _ in labelled),
-            single=True,
-        )
-        if not kept:
-            continue
-        #: A dependency the previous deck already teaches comes back as
-        #: nothing, and is simply not depended upon: the learner has met it.
-        dependencies.append(
-            builder.add(
-                target,
-                surface=title,
-                lemma=title,
-                sense=kept[0],
-                depends_on=_referenced(
-                    builder, target, kept[0], marked, chain | {title}
-                ),
-            )
-        )
-    return tuple(index for index in dependencies if index is not None)
+        if fresh:
+            builder.composed.add(title)
+            log(f"a component of {page.title!r}", word=title,
+                level=VERBOSE, kind="found")
+        dependencies.append(index)
+    return tuple(dependencies)
+
+
+def _dependency(
+    builder: _Builder,
+    title: str,
+    marked: str,
+    chain: frozenset[str],
+) -> int | None:
+    """Gloss one word another gloss leans on, in the one sense it leans on.
+
+    Shared by both kinds of dependency -- the word a definition points at and
+    the terms an etymology sums -- because what has to happen to either is the
+    same: the page, one sense of it chosen against the passage the dependent
+    word was met in, and whatever *that* sense depends on in turn.
+
+    ``None`` where there is no page, no sense the model will stand behind, or
+    a previously built deck already teaches it: such a dependency is simply
+    not depended upon, the learner having met it.
+    """
+    target = builder.page(title)
+    if target is None:
+        return None
+    labelled = target.senses
+    kept = builder.disambiguator.keep(
+        tuple(one for _, one in labelled),
+        sentence=marked,
+        surface=title,
+        title=f'"{title}"',
+        language=target.language,
+        parts_of_speech=tuple(part for part, _ in labelled),
+        single=True,
+    )
+    if not kept:
+        return None
+    return builder.add(
+        target,
+        surface=title,
+        lemma=title,
+        sense=kept[0],
+        depends_on=_dependencies(
+            builder, target, kept[0], title, title, marked, chain | {title}
+        ),
+    )
+
+
+def _dependencies(
+    builder: _Builder,
+    page: Page,
+    sense: Sense,
+    surface: str,
+    lemma: str,
+    marked: str,
+    chain: frozenset[str],
+) -> tuple[int, ...]:
+    """Everything one gloss has to be met after, in the order it wants them.
+
+    Three questions asked of the same sense: the plain reading a figure of
+    speech stands on, the word a form-of points at, and the terms an etymology
+    sums it out of.
+    """
+    return (
+        _plainly(builder, page, sense, surface, lemma, marked, chain)
+        + _referenced(builder, page, sense, marked, chain)
+        + _composed(builder, page, sense, marked, chain)
+    )
+
+
+#: Labels that make a sense a *figure* of the word rather than the word: the
+#: reading is real, and it is built on a plain sense the learner has to have
+#: first. `мрак` in a Stigmata lyric was glossed `(poetic) despair` -- which is
+#: defensible in the line and is the whole of what the deck then taught about
+#: the word, a metaphor with nothing under it. Bru's call, 2026-09-17: when one
+#: of these is chosen, ask again with the labelled senses taken out, and hang
+#: the marked card off the plain one the way a form-of card hangs off its base
+#: word.
+#:
+#: Not every parenthetical: `(anatomy)`, `(with dative)`, `(impersonal)` say
+#: which *use* of the word this is and depend on nothing. These are the ones
+#: that say the sense is a figure, a register or an age -- a reading a learner
+#: cannot arrive at from the word alone.
+_MARKED = frozenset({
+    "archaic", "colloquial", "colloquially", "dated", "euphemistic",
+    "figurative", "figuratively", "humorous", "ironic", "literary", "obsolete",
+    "poetic", "poetically", "slang",
+})
+
+#: A definition's leading qualifier, which is where Wiktionary writes them:
+#: `(figuratively, poetic) to die`.
+_QUALIFIER = re.compile(r"^\(([^)]*)\)")
+
+
+def is_marked(definition: str) -> bool:
+    """Whether ``definition`` is labelled as a figure of its word."""
+    return any(
+        part.strip().casefold() in _MARKED
+        for part in leading_qualifier(definition).strip("()").split(",")
+    )
+
+
+def leading_qualifier(definition: str) -> str:
+    """The label a definition opens with, parentheses included, or nothing."""
+    found = _QUALIFIER.match(definition.strip())
+    return found.group(0) if found else ""
+
+
+def _plainly(
+    builder: _Builder,
+    page: Page,
+    sense: Sense,
+    surface: str,
+    lemma: str,
+    marked: str,
+    chain: frozenset[str],
+) -> tuple[int, ...]:
+    """The plain sense a marked one stands on, glossed first, or nothing.
+
+    One more call, and only for the senses that carry a label: the same page,
+    its labelled senses removed, asked for the one the passage would otherwise
+    have taken. The card it makes is an ordinary gloss of the same spelling, so
+    a deck that already teaches it depends on what it has rather than saying it
+    twice, and the marked sense's card is ordered after it.
+
+    A page whose every sense is labelled gets nothing -- there is no plain
+    reading to teach -- and neither does a page with one sense, which never
+    reaches the model at all.
+    """
+    if not is_marked(sense.definition):
+        return ()
+    plain = [(part, one) for part, one in page.senses if not is_marked(one.definition)]
+    if not plain:
+        return ()
+    kept = builder.disambiguator.keep(
+        tuple(one for _, one in plain),
+        sentence=marked,
+        surface=surface,
+        title=f'"{page.title}"',
+        language=page.language,
+        parts_of_speech=tuple(part for part, _ in plain),
+        sources=tuple(page.title for _ in plain),
+        single=True,
+    )
+    if not kept:
+        return ()
+    log(
+        f"{sense.definition[:40]!r} is a figure; teaching "
+        f"{kept[0].definition[:40]!r} first",
+        word=surface, level=VERBOSE, kind="found",
+    )
+    index = builder.add(
+        page,
+        surface=surface,
+        lemma=lemma,
+        sense=kept[0],
+        depends_on=_referenced(builder, page, kept[0], marked, chain)
+        + _composed(builder, page, kept[0], marked, chain),
+    )
+    return () if index is None else (index,)
 
 
 #: Words that mark a definition as describing its word in terms of another,
@@ -1250,6 +1651,37 @@ def mark_occurrence(sentence: str, spans: tuple[tuple[int, int], ...]) -> str:
     return "".join(out)
 
 
+def _capital_is_the_lines(term: Term, candidates: list[Page]) -> bool:
+    """Whether the parse read a capital that belongs to the position.
+
+    `PROPN` on a word whose capital is the position's is the one tag the
+    capital itself fabricates. Stanza reads `Надежда казалась мне солью` as a
+    proper noun and `надежда казалась мне солью` as a noun -- one letter, and
+    with it the lemma -- and the prompt then tells the model to *prefer a sense
+    listed under that part of speech*, which is the given name. Term extraction
+    has already said the capital is suspect by offering the lower-case spelling
+    as well; handing the tag it produced to the model as evidence takes that
+    back, and outvoted the `надежда` entry sitting in the same list. Bru found
+    the card in the Stigmata deck, 2026-09-16.
+
+    Only where the lower-case spelling reached a page, so the hint is kept
+    everywhere it costs nothing -- a sentence really beginning with a name has
+    nothing else in the listing to be steered away from -- and the hint stays
+    whole for every other tag, which is what it was written for: `ADP` against
+    the name of a Hebrew letter is not a guess the capital made.
+    """
+    if term.upos != "PROPN" or not term.positional_capital:
+        return False
+    if not any(page.title[:1].islower() for page in candidates):
+        return False
+    log(
+        "the parse reads it as a proper noun, which its line-initial capital "
+        "may be the whole of; telling the model so instead",
+        word=term.surface, level=VERBOSE, kind="detail",
+    )
+    return True
+
+
 def _pooled_senses(
     builder: _Builder, candidates: list[Page], term: Term, sentence: str
 ) -> tuple[Page, tuple[Sense, ...]]:
@@ -1267,6 +1699,9 @@ def _pooled_senses(
     ]
     if not labelled:
         return candidates[0], ()
+    #: One predicate, two uses: the tag the capital made is not passed on,
+    #: and the reason it is not is what goes in its place.
+    positional_capital = _capital_is_the_lines(term, candidates)
     kept = builder.disambiguator.keep(
         tuple(sense for _, _, sense in labelled),
         sentence=sentence,
@@ -1275,7 +1710,8 @@ def _pooled_senses(
         language=candidates[0].language,
         parts_of_speech=tuple(part for _, part, _ in labelled),
         sources=tuple(page.title for page, _, _ in labelled),
-        upos=term.upos,
+        upos="" if positional_capital else term.upos,
+        positional_capital=positional_capital,
     )
     surviving = {id(sense) for sense in kept}
     chosen = [(page, sense) for page, _, sense in labelled if id(sense) in surviving]

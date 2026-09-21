@@ -106,7 +106,7 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
         #: the server says how many there are. Not skippable: half a dump is
         #: not a dump, and the run has nothing to do without it.
         size = int(response.headers.get("Content-Length") or 0)
-        with console.phase("dump", size, skippable=False):
+        with console.phase("dump", size, skippable=False, unit="bytes"):
             while chunk := response.read(1 << 20):
                 out.write(chunk)
                 console.advance(len(chunk))
@@ -151,7 +151,9 @@ def build_index(
     log(f"[decker] scanning {path.name} for titles this text could use",
         kind="head")
     read = 0
-    with console.phase("index", path.stat().st_size, skippable=False):
+    with console.phase(
+        "index", path.stat().st_size, skippable=False, unit="compressed bytes"
+    ):
         for read, title in enumerate(iter_titles(path), start=1):
             if " " in title:
                 if vocabulary is None or _reachable(title, vocabulary):
@@ -218,7 +220,7 @@ def _parse_titles(
         nlp = pipeline(lang)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with cache_path.open("a", encoding="utf-8") as cache_file, console.phase(
-            "titles", len(missing)
+            "titles", len(missing), unit="titles"
         ):
             for done, (title, tree) in enumerate(
                 _parse_chunked(nlp, missing), start=1

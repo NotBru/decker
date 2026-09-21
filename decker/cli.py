@@ -8,19 +8,28 @@ import json
 import sys
 from pathlib import Path
 
-from decker import anki, console, languages, markdown, pages, pipeline, shuffling, subtitles
+from decker import (
+    anki, console, languages, manga, markdown, pages, pipeline, shuffling,
+    subtitles, timeline,
+)
 from decker.wiktionary import USER_AGENT
 from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
 from decker.translation import SOURCE_LANG
 
 #: Every stage runs in one go; the subcommands below stop the pipeline early.
 DEFAULT_COMMAND = "deck"
-COMMANDS = ("extract", "define", "deck", "index")
+COMMANDS = ("extract", "define", "deck", "index", "timeline")
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
         return _main(argv)
+    except anki.Unreadable as unreadable:
+        #: Before anything was built, since both flags that read a deck read
+        #: it first: the run has cost nothing yet and the message is the
+        #: whole of what the user needs.
+        console.log(f"[decker] {unreadable}", level=console.QUIET, kind="error")
+        return 2
     except pages.Refused as refusal:
         #: Loudly, and with a non-zero status: every later fetch would be
         #: refused the same way, and a run that carried on would finish
@@ -46,7 +55,8 @@ def _main(argv: list[str] | None = None) -> int:
         description=(
             "Build language-learning material from a text. With no subcommand the "
             "whole pipeline runs, which is what `deck` does; `extract`, `define` and "
-            "`index` stop it early."
+            "`index` stop it early, and `timeline` reads a deck back against the "
+            "subtitle file it was built from."
         ),
         #: Every flag belongs to a subcommand, so this help has none to show --
         #: which reads as decker having none at all, `--target-lang` included,
@@ -141,6 +151,16 @@ def _main(argv: list[str] | None = None) -> int:
         help="leave the cards in the edition's language whatever --mother-lang says",
     )
     deck.add_argument(
+        "--update",
+        metavar="DECK.apkg",
+        help=(
+            "a deck already imported into Anki: the cards it holds keep the "
+            "identity they have there, so importing this one corrects them in "
+            "place -- their scheduling included -- instead of adding a second "
+            "copy beside each"
+        ),
+    )
+    deck.add_argument(
         "--seed",
         type=int,
         help="seed for the shuffle, so a deck can be built the same way twice",
@@ -155,6 +175,72 @@ def _main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    timing = subcommands.add_parser(
+        "timeline",
+        help=(
+            "say how far into a deck a viewer must be to have met every word "
+            "said up to each timestamp of a subtitle file"
+        ),
+    )
+    timing.add_argument(
+        "source",
+        nargs="?",
+        default="-",
+        help="a subtitle file -- .srt or .vtt -- or - for standard input",
+    )
+    timing.add_argument(
+        "--deck",
+        required=True,
+        metavar="DECK.apkg",
+        help=(
+            "the deck to measure against: one built from this file, or exported "
+            "from Anki after studying it, which also counts what is behind you"
+        ),
+    )
+    timing.add_argument(
+        "--every",
+        type=int,
+        default=timeline.EVERY,
+        metavar="SECONDS",
+        help=f"how much of the file one row covers (default: {timeline.EVERY})",
+    )
+    timing.add_argument(
+        "--rate",
+        type=int,
+        default=timeline.RATE,
+        metavar="CARDS",
+        help=(
+            "new cards a day, for turning a position in the deck into days "
+            f"(default: {timeline.RATE}, which is Anki's own)"
+        ),
+    )
+    timing.add_argument(
+        "--cover",
+        type=float,
+        default=timeline.COVER,
+        metavar="SHARE",
+        help=(
+            "the share of a stretch's words the headline figure teaches "
+            f"(default: {timeline.COVER}; 1 asks for all of them, which the "
+            "furthest column reports anyway)"
+        ),
+    )
+    timing.add_argument(
+        "--format", choices=("text", "csv", "json"), default="text",
+        help="output format",
+    )
+    timing.add_argument(
+        "--out", help="write the output to this file instead of standard output"
+    )
+    _add_console_arguments(timing)
+    _add_language_arguments(timing)
+    timing.add_argument(
+        "--whole-index",
+        action="store_true",
+        help="parse every Wiktionary title, instead of only those the text could use",
+    )
+    _add_definition_arguments(timing)
+
     index = subcommands.add_parser(
         "index", help="build the whole title index ahead of time"
     )
@@ -162,16 +248,46 @@ def _main(argv: list[str] | None = None) -> int:
     _add_language_arguments(index)
 
     arguments = parser.parse_args(argv)
-    console.configure(getattr(arguments, "verbose", 0), getattr(arguments, "quiet", False))
+    console.configure(
+        getattr(arguments, "verbose", 0),
+        getattr(arguments, "quiet", False),
+        screen=not getattr(arguments, "no_screen", False),
+    )
+    console.console.headline = _headline(arguments)
     if getattr(arguments, "wiktionary_host", None):
         pages.HOST = arguments.wiktionary_host
-    if arguments.command == "index":
-        return _run_index(arguments)
-    if arguments.command == "define":
-        return _run_define(arguments)
-    if arguments.command == "deck":
-        return _run_deck(arguments)
-    return _run_extract(arguments)
+    #: The whole run happens under the screen, including the part that writes
+    #: the output: what a subcommand prints to stdout is held until the screen
+    #: is down and let go afterwards, so `--format text` on a terminal reads
+    #: the same as it always did.
+    with console.console.watching():
+        if arguments.command == "index":
+            return _run_index(arguments)
+        if arguments.command == "define":
+            return _run_define(arguments)
+        if arguments.command == "deck":
+            return _run_deck(arguments)
+        if arguments.command == "timeline":
+            return _run_timeline(arguments)
+        return _run_extract(arguments)
+
+
+def _headline(arguments: argparse.Namespace) -> str:
+    """What this run is, in a line, for the top of the screen.
+
+    The three things that decide what comes out and are not visible from the
+    log: which languages, which model, and which source. A screenshot of a run
+    is otherwise a screenshot of any run.
+    """
+    parts = []
+    if getattr(arguments, "target_lang", None):
+        parts.append(f"{arguments.target_lang} → "
+                     f"{getattr(arguments, 'mother_lang', SOURCE_LANG)}")
+    if getattr(arguments, "model", None) or getattr(arguments, "source", None):
+        parts.append(getattr(arguments, "model", None) or default_model())
+    if getattr(arguments, "source", None):
+        parts.append(_document_title(arguments.source))
+    return " · ".join(parts)
 
 
 def _language_code(value: str) -> str:
@@ -212,6 +328,12 @@ def _add_console_arguments(parser: argparse.ArgumentParser) -> None:
         "--quiet",
         action="store_true",
         help="print only what stops the run",
+    )
+    parser.add_argument(
+        "--no-screen",
+        action="store_true",
+        help="plain lines and a one-line bar, instead of the log-and-tally "
+        "screen a terminal otherwise gets",
     )
 
 
@@ -284,6 +406,14 @@ def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--no-components",
+        action="store_true",
+        help=(
+            "do not make cards for the terms an etymology decomposes a word "
+            "into (des- + cargar, veneno + -oso), recursively"
+        ),
+    )
+    parser.add_argument(
         "--unknowns",
         choices=("off", "fix", "all"),
         default="fix",
@@ -349,6 +479,7 @@ def _definition_arguments(arguments: argparse.Namespace) -> dict:
         disambiguate=not arguments.no_disambiguate,
         audio=not arguments.no_audio,
         concepts=not arguments.no_concepts,
+        components=not arguments.no_components,
         rules=not arguments.no_rules,
         teach_script=arguments.teach_script,
         unknowns=arguments.unknowns,
@@ -371,6 +502,44 @@ def _taught(previous: str | None) -> frozenset[str]:
             kind="warn",
         )
     return keys
+
+
+def _queued_after(previous: str | None) -> int:
+    """Where a deck's cards start, given the deck they are being added to.
+
+    Only with `--previous`, which is what says this deck is an addition
+    rather than a rebuild: its cards are the ones that deck does not teach,
+    so they belong behind whatever it has left to show. A rebuild is numbered
+    from 1, since every card of it is in the list and the list is the order.
+    """
+    if not previous:
+        return 0
+    last = anki.last_position(previous)
+    if last:
+        console.log(
+            f"[decker] numbering these cards from {last + 1}, after the "
+            f"{last} {Path(previous).name} has not shown yet"
+        )
+    return last
+
+
+def _identities(update: str | None) -> dict[tuple[str, str], str]:
+    """The note ids a deck already in Anki gave the cards it holds."""
+    if not update:
+        return {}
+    found = anki.identities(update)
+    console.log(
+        f"[decker] {len(found)} notes of {Path(update).name} keep their "
+        "identity, so importing this deck corrects them in place"
+    )
+    if not found:
+        console.log(
+            "[decker] that deck records no gloss keys -- decks built before "
+            "decker recorded them carry none, and nothing can be matched to "
+            "them; its cards will be added again rather than corrected",
+            kind="warn",
+        )
+    return found
 
 
 #: What goes between two sources. A blank line, because that is what the
@@ -405,10 +574,12 @@ def _one_source(source: str) -> str:
     """One source as running text.
 
     The extension decides: `.srt` and `.vtt` are cue files and are folded back
-    into prose by :mod:`decker.subtitles` before anything else sees them.
-    Standard input has no extension to go by, so it is sniffed instead -- a
-    timing line is unmistakable -- which also catches a cue file saved under
-    the wrong name.
+    into prose by :mod:`decker.subtitles`, `.mbz` and `.mbz.zip` are OCR'd
+    manga volumes and are folded by :mod:`decker.manga`, before anything else
+    sees them. Standard input has no extension to go by, so it is sniffed
+    instead -- a timing line is unmistakable -- which also catches a cue file
+    saved under the wrong name. A manga archive is a zip and cannot arrive
+    that way, so nothing sniffs for one.
     """
     if source == "-":
         console.log("[decker] reading standard input", level=console.VERBOSE)
@@ -416,6 +587,8 @@ def _one_source(source: str) -> str:
         return subtitles.text_of(raw) if subtitles.looks_like(raw) else raw
     path = Path(source)
     console.log(f"[decker] reading {path.name}", level=console.VERBOSE)
+    if manga.looks_like(source):
+        return _manga_text(source, path)
     raw = path.read_text(encoding="utf-8")
     if path.suffix.lower() not in subtitles.SUFFIXES:
         return raw
@@ -423,6 +596,21 @@ def _one_source(source: str) -> str:
     console.log(
         f"[decker] {path.name}: {len(raw.splitlines())} lines of cues -> "
         f"{len(text)} characters"
+    )
+    return text
+
+
+def _manga_text(source: str, path: Path) -> str:
+    """A mokuro volume as prose, and the line that says how much of it there was.
+
+    The count is of *bubbles*, not of pages: a page of a comic can be silent,
+    and a run that says how many pages it read would claim more text than it
+    has. What reaches the pipeline is one paragraph per bubble.
+    """
+    text = manga.text_of(source)
+    bubbles = text.count("\n\n") + 1 if text else 0
+    console.log(
+        f"[decker] {path.name}: {bubbles} speech bubbles -> {len(text)} characters"
     )
     return text
 
@@ -487,6 +675,9 @@ def _run_define(arguments: argparse.Namespace) -> int:
 
 
 def _run_deck(arguments: argparse.Namespace) -> int:
+    #: Read before the pipeline, not at the write: a deck decker cannot read
+    #: is worth saying so about now rather than after an hour of fetching.
+    keeping = _identities(getattr(arguments, "update", None))
     cards = pipeline.deck(
         _source_text(arguments.source),
         target_lang=arguments.target_lang,
@@ -507,6 +698,11 @@ def _run_deck(arguments: argparse.Namespace) -> int:
             source=_document_title(arguments.source),
             description=arguments.description,
             edition=arguments.edition or pipeline.MOTHER_EDITION,
+            #: A deck built to be *added* to one being studied is numbered
+            #: after it; a deck built to *replace* one is numbered as itself,
+            #: because its own order is the order the whole deck wants.
+            after=_queued_after(arguments.previous),
+            keeping=keeping,
         )
         console.log(f"[decker] wrote {out}", kind="head")
         return 0
@@ -549,6 +745,8 @@ def _side(side) -> list[str]:
     pieces = []
     if side.term:
         pieces.append(side.term)
+    if side.equivalent:
+        pieces.append(side.equivalent)
     if side.definition:
         pieces.append(side.definition)
     if side.headword:
@@ -572,15 +770,38 @@ def _document_stem(sources: list[str] | str) -> str:
     deck built from the first, and `--out` overwrites without asking.
     """
     sources = [sources] if isinstance(sources, str) else sources
-    first = "deck" if sources[0] == "-" else Path(sources[0]).stem
+    first = "deck" if sources[0] == "-" else _stem(Path(sources[0]))
     return first if len(sources) == 1 else f"{first}+{len(sources) - 1}"
+
+
+def _stem(path: Path) -> str:
+    """The file's name without what says which format it is in.
+
+    `Path.stem` takes one suffix off, which is right for `ep01.srt` and wrong
+    for `0001.mbz.zip`: that leaves `0001.mbz`, and the deck is written to
+    `0001.mbz.apkg`. A double extension is the archive's own convention -- the
+    zip of a `.mbz` -- so both come off.
+    """
+    stem = path.stem
+    return Path(stem).stem if Path(stem).suffix.lower() in manga.SUFFIXES else stem
 
 
 def _document_title(sources: list[str] | str) -> str:
     """What the deck is called inside Anki, and what a document credits."""
     sources = [sources] if isinstance(sources, str) else sources
     def named(source: str) -> str:
-        return "Standard input" if source == "-" else Path(source).stem
+        """The source's own name for itself, falling back to the file's.
+
+        A manga archive is named after its volume number and nothing else --
+        `0001.mbz.zip` -- so a deck named after the file is called `0001` in a
+        collection that will hold next month's `0001` too. The archive's
+        metadata knows the series; the *filename* still comes from the file,
+        that being where the user said to put it.
+        """
+        if source == "-":
+            return "Standard input"
+        own = manga.title_of(source) if manga.looks_like(source) else ""
+        return own or _stem(Path(source))
 
     if len(sources) == 1:
         return named(sources[0])
@@ -606,6 +827,119 @@ def _format_gloss(gloss) -> str:
         lines.append(f"    etymology: {gloss.etymology}")
     lines += [f"    audio: {audio}" for audio in gloss.audios]
     return "\n".join(lines) + "\n\n"
+
+
+def _run_timeline(arguments: argparse.Namespace) -> int:
+    """Measure one cue file against a deck built from it."""
+    source = arguments.source
+    raw = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+    if not subtitles.looks_like(raw):
+        #: By its contents and not by its name: the point of the command is
+        #: the clock, and a file without one has nothing to measure. Said
+        #: plainly, because the obvious mistake is passing the `.txt` the deck
+        #: was also built from.
+        console.log(
+            f"[decker] {'standard input' if source == '-' else source} carries no "
+            "cue timings, so there is nothing to place on a clock; a timeline "
+            "needs the .srt or .vtt itself",
+            level=console.QUIET, kind="error",
+        )
+        return 2
+    cues = subtitles.timed(raw)
+    text = subtitles.text_of(raw)
+    if not cues:
+        #: A header and timing lines but nothing said under them: a file
+        #: decker can read and has nothing to place. Same exit as the file
+        #: with no clock at all, since neither can be measured.
+        console.log(
+            f"[decker] {'standard input' if source == '-' else source} has cue "
+            "timings but no words under them, so there is nothing to place",
+            level=console.QUIET, kind="error",
+        )
+        return 2
+    console.log(
+        f"[decker] {len(cues)} cues -> {len(text)} characters, "
+        f"{timeline.clock(max(placed.cue.end for placed in cues))} of subtitles",
+        kind="head",
+    )
+    sentences, glosses = pipeline.glossed(
+        text, target_lang=arguments.target_lang, **_definition_arguments(arguments)
+    )
+    deck = anki.placed(arguments.deck)
+    rows = timeline.measure(
+        glosses,
+        sentences,
+        cues,
+        deck,
+        every=arguments.every,
+        rate=arguments.rate,
+        cover=arguments.cover,
+    )
+    timeline.report(rows, glosses, deck)
+
+    if arguments.format == "json":
+        rendered = (
+            json.dumps(
+                [dataclasses.asdict(row) for row in rows], ensure_ascii=False, indent=2
+            )
+            + "\n"
+        )
+    elif arguments.format == "csv":
+        rendered = "".join(
+            [
+                "time,seconds,cues,glosses,untaught,cards,days,furthest,"
+                "furthest_days\n",
+                *(
+                    f"{timeline.clock(row.at)},{row.at:.1f},{row.cues},"
+                    f"{row.glosses},{row.untaught},"
+                    f"{'' if row.cards is None else row.cards},"
+                    f"{'' if row.days is None else format(row.days, '.1f')},"
+                    f"{row.furthest},{row.furthest_days:.1f}\n"
+                    for row in rows
+                ),
+            ]
+        )
+    else:
+        rendered = _format_timeline(
+            rows, rate=arguments.rate, cover=arguments.cover
+        )
+
+    if arguments.out:
+        Path(arguments.out).write_text(rendered, encoding="utf-8")
+        console.log(f"[decker] wrote {arguments.out}", kind="head")
+    else:
+        sys.stdout.write(rendered)
+    return 0
+
+
+def _format_timeline(rows: list, *, rate: int, cover: float) -> str:
+    """The rows as a table, one line per stretch of the file.
+
+    Read across: by this timestamp the file has said this many words, of
+    which this many are in no card of the deck; to have been taught the share
+    asked for you must be this far into the deck, which is this many days at
+    your rate; and the last of that stretch's words sits this much further in.
+    """
+    share = f"{cover:.0%}"
+    lines = [
+        f"    up to    cues   words  no card  {share:>5} by   days      all by   days",
+        "-" * 72,
+    ]
+    for row in rows:
+        cards = "     --" if row.cards is None else f"{row.cards:>7}"
+        days = "     --" if row.days is None else f"{row.days:>7.1f}"
+        lines.append(
+            f" {timeline.clock(row.at):>8}  {row.cues:>6}  {row.glosses:>6}  "
+            f"{row.untaught:>7}  {cards}  {days}  {row.furthest:>10}  "
+            f"{row.furthest_days:>7.1f}"
+        )
+    if rows and any(row.cards is None for row in rows):
+        lines += [
+            "",
+            f"-- means the deck teaches too little of that stretch for {share} "
+            "of it to be reachable at all.",
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def _run_index(arguments: argparse.Namespace) -> int:

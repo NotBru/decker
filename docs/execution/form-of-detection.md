@@ -68,7 +68,7 @@ carrying them would be speculation.
 Sixteen new dependency glosses, no new false positives. Not yet done — it is a small change and the
 next section may make it moot.
 
-## Etymology targets get no cards
+## Etymology targets: the foreign ones get no cards, a sum does
 
 `carga`'s card says "Deverbal from cargar." and there is no card for `cargar`, because the detector
 only ever sees `sense.definition`. Raised, and **decided against by Bru on 2026-09-14: an
@@ -76,6 +76,14 @@ etymology's targets are not glossed.** An etymology names Latin, Arabic and Quec
 learner of Spanish should be handed a card for, and the relation it states is historical rather
 than something the reader needs in order to read the sentence in front of them. The prose stays on
 the card; the words in it stay uncarded.
+
+**Narrowed by Bru on 2026-09-20**, and the half that changed is the half where the etymology names
+words *of the language being taught*: where it states a sum — `des- +‎ cargar`, `veneno +‎ -oso`, a
+surface analysis — those terms are glossed, recursively, exactly as a form-of's target is. The
+foreign ancestors are untouched and still stay prose. Which links count, what the plus buys, and
+what the recursion costs are in
+[The terms a word is made of](etymological-components.md); `carga` itself is unaffected, a deverbal
+being a derivation rather than a sum.
 
 ## Wiktionary's own markup, which is what it now reads
 

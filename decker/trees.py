@@ -13,7 +13,7 @@ particle (``siehst ... aus`` also answers to ``aussehen``).
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,8 +58,19 @@ class Node:
             yield from edge.child.walk()
 
 
-def sentence_tree(sentence: Any, *, join_particles: bool = False) -> list[Node]:
-    """Build the token-node trees of a parsed Stanza sentence (usually one)."""
+def sentence_tree(
+    sentence: Any,
+    *,
+    join_particles: bool = False,
+    respell: Callable[[str], tuple[str, ...]] | None = None,
+) -> list[Node]:
+    """Build the token-node trees of a parsed Stanza sentence (usually one).
+
+    ``respell`` offers each label the dictionary's other spellings of it --
+    the diacritic a Russian text leaves off -- and is given only for a source
+    sentence. A title tree is built without one: the dictionary's spelling is
+    what a title already is.
+    """
     words = list(sentence.words)
     children: dict[int, list[Any]] = {word.id: [] for word in words}
     roots: list[Any] = []
@@ -78,6 +89,10 @@ def sentence_tree(sentence: Any, *, join_particles: bool = False) -> list[Node]:
         labels = {word.text, word.lemma or word.text}
         if word.id in lowerable:
             labels |= {label.lower() for label in labels}
+        if respell is not None:
+            labels |= {
+                spelling for label in tuple(labels) for spelling in respell(label)
+            }
         label_tokens = []
         for child in children[word.id] if join_particles else ():
             if child.deprel != PARTICLE_DEPREL:

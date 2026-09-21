@@ -28,7 +28,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from decker.languages import lect_of, section_of
-from decker.console import DETAIL, NORMAL, VERBOSE, log
+from decker.console import DETAIL, NORMAL, VERBOSE, count, log
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -114,6 +114,16 @@ class Sense:
     #: rather than through a template, and :func:`decker.glosses._targets`
     #: reads the prose instead.
     targets: tuple[str, ...] = ()
+    #: The page's own word, where this definition quotes it: German `müssen`
+    #: is defined *(auxiliary, with an infinitive -> “müssen” replaces the past
+    #: participle) to have to...*. MediaWiki renders a link to the page's own
+    #: title as `mw-selflink`, which is the wiki saying *this text is this
+    #: entry's word* -- the one thing a substring match cannot tell, since a
+    #: definition written in English is full of English words and one of them
+    #: may be spelled like the word being defined. Read for
+    #: :func:`decker.cards._unspelled`, which has to take the answer out of
+    #: the question.
+    quoted: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -147,6 +157,15 @@ class Entry:
     #: third. ``None`` where the section numbers no etymologies, and
     #: :attr:`Page.etymology` answers for the whole section as before.
     etymology: str | None = None
+    #: The terms of this same language that etymology decomposes the word
+    #: into: `des-` and `cargar` for `descargar`, `veneno` and `-oso` for
+    #: `venenoso`. A sum the page states, not a history -- the Latin an
+    #: etymology walks back through is named here too and is not in this
+    #: tuple, because a learner of Spanish is not owed a card for `carricare`.
+    #: Per block for the same reason the etymology is: Spanish `para` is a
+    #: preposition under one etymology and a clipping of `paramilitar` under
+    #: another.
+    etymons: tuple[str, ...] = ()
     #: Wiktionary's headword line for this part of speech, minus the headword
     #: itself: `f (plural servilletas)`. The gender and the paradigm, as the
     #: page announces them. Empty where the line carries nothing but the word.
@@ -169,6 +188,9 @@ class Page:
     language: str
     entries: tuple[Entry, ...] = ()
     etymology: str | None = None
+    #: The section's own components, by the same rule, for a sense this page
+    #: does not hold. :attr:`Entry.etymons` is what answers for one it does.
+    etymons: tuple[str, ...] = ()
     ipa: tuple[str, ...] = ()
     #: Every recording the language section offers, in the order it lists
     #: them. A page can carry several -- `el` has one for Spain and one for
@@ -206,6 +228,24 @@ class Page:
                 if one is sense:
                     return entry.etymology
         return self.etymology
+
+    def etymons_of(self, sense: Sense) -> tuple[str, ...]:
+        """The terms this sense's own etymology decomposes the word into.
+
+        By identity, and the entry's answer is the whole answer, exactly as
+        :meth:`etymology_of`: an inflected form carries no etymology of its
+        own, and handing it the first block's components would decompose a
+        word it is not.
+
+        The page's own title is never one of them. A word whose etymology
+        names it -- an entry that lists its own spelling among a run -- would
+        otherwise depend on itself.
+        """
+        for entry in self.entries:
+            for one in entry.senses:
+                if one is sense:
+                    return tuple(t for t in entry.etymons if t != self.title)
+        return tuple(t for t in self.etymons if t != self.title)
 
     def ipa_of(self, sense: Sense) -> tuple[str, ...]:
         """The readings of the block this sense sits under.
@@ -322,6 +362,13 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if not entries and _is_split(payloads):
         payloads, entries = _from_split(title, payloads, edition=edition, lang=lang, refresh=refresh)
     if not entries:
+        redirected = _redirects_to(payloads, title)
+        if redirected is not None:
+            payloads, entries, title = _from_redirect(
+                redirected, payloads, title, language, edition=edition,
+                refresh=refresh, lect=lect,
+            )
+    if not entries:
         pointed_at = _points_at(payloads, language, title)
         if pointed_at is not None:
             payloads, entries = _from_pointer(
@@ -330,12 +377,13 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
     if not entries:
         return None
     language = entries[0].language or language
-    etymology, ipa, audios = _from_html(payloads.get("parse"), language, lect)
+    etymology, etymons, ipa, audios = _from_html(payloads.get("parse"), language, lect)
     return Page(
         title=title,
         language=language,
         entries=tuple(entries),
         etymology=etymology,
+        etymons=etymons,
         ipa=ipa,
         audio_urls=audios,
         source=payloads.get("source", ""),
@@ -350,15 +398,53 @@ def fetch(title: str, *, edition: str, lang: str, refresh: bool = False) -> Page
 #: this way: 82 % coverage in `docs/execution/language-survey.md` was a mixed-
 #: script sample, and a wholly simplified text would lose most of itself.
 #:
+#: Japanese is written this way at least as heavily, and it cost a manga deck
+#: 89 of its words on 2026-09-18 -- 飲む, 分かる, 出来る, ください, 無い --
+#: every one of which has an entry, under the other spelling.
+#:
 #: The box is a table whose class names the language's own see-template --
-#: `zh-see` -- and the spelling it points at is the first link after the word
-#: "see". Two regexes, as narrow as the form-of pair in `glosses.py` and for
-#: the same reason: a page that merely *mentions* another is not this.
-_SEE_BOX = re.compile(
-    r'<table[^>]*\bclass="[^"]*\b[a-z]{2,4}-see\b[^"]*"[^>]*>(.*?)</table>',
-    re.DOTALL,
-)
+#: `zh-see`, `ja-see` -- and the two editions word it differently, which is
+#: why there are two target patterns and not one:
+#:
+#: * Chinese puts the spelling straight after the word: *see 人類*.
+#: * Japanese names no spelling in the sentence -- *see the following entry*
+#:   -- and sets the target below it in a 【 】 block, beside the definitions
+#:   themselves.
+#:
+#: Narrow, as narrow as the form-of pair in `glosses.py` and for the same
+#: reason: a page that merely *mentions* another is not this.
+_SEE_OPENS = re.compile(r'<table[^>]*\bclass="[^"]*\b[a-z]{2,4}-see\b[^"]*"[^>]*>')
+_SEE_TABLE = re.compile(r"</?table\b")
 _SEE_TARGET = re.compile(r'\bsee\b\s*(?:<[^>]+>\s*)*<a href="/wiki/([^"#]+)')
+#: The 【 】 block's own link. Japanese's box holds one per entry pointed at,
+#: and a kana spelling can point at a great many -- いん at nineteen kanji
+#: words, みる at both ミル and 見る. :func:`_points_at` follows the box only
+#: when it names one, on Bru's call of 2026-09-18: the several are homophone
+#: lists rather than spellings of one word, mostly reached from a fragment
+#: Stanza cut rather than from a word the text used, and "the first of them"
+#: is the answer decker refuses to give anywhere else.
+_SEE_ENTRY = re.compile(r'【\s*(?:<[^>]+>\s*)*<a href="/wiki/([^"#]+)')
+
+
+def _see_box(section: str) -> str | None:
+    """The see-box whole, nested tables and all.
+
+    Written as a scan rather than as one more regex because the box *has* a
+    table inside it -- the entries it points at are laid out in one -- and a
+    non-greedy `(.*?)</table>` ends at that inner table's close, which is
+    after the first entry and before every other. Reading a box for a single
+    target that way answers `みる` with `ミル` and looks entirely correct
+    while doing it.
+    """
+    opened = _SEE_OPENS.search(section)
+    if opened is None:
+        return None
+    depth = 1
+    for tag in _SEE_TABLE.finditer(section, opened.end()):
+        depth += 1 if tag.group(0) == "<table" else -1
+        if depth == 0:
+            return section[opened.end():tag.start()]
+    return section[opened.end():]
 
 
 def _points_at(payloads: dict, language: str, title: str) -> str | None:
@@ -377,13 +463,27 @@ def _points_at(payloads: dict, language: str, title: str) -> str | None:
     section = _language_section(html, language)
     if section is None:
         return None
-    box = _SEE_BOX.search(section)
+    box = _see_box(section)
     if box is None:
         return None
-    pointed = _SEE_TARGET.search(box.group(1))
-    if pointed is None:
-        return None
-    target = urllib.parse.unquote(pointed.group(1)).replace("_", " ")
+    named = _SEE_TARGET.search(box)
+    if named is not None:
+        return _spelling(named.group(1), title)
+    #: No spelling in the sentence, so the 【 】 blocks are the targets, and
+    #: one of them is a pointer while several are a homophone list. `dict`
+    #: rather than `set` because a box can name the same spelling twice and
+    #: that is still one target.
+    targets = {
+        found: None
+        for raw in _SEE_ENTRY.findall(box)
+        if (found := _spelling(raw, title)) is not None
+    }
+    return next(iter(targets)) if len(targets) == 1 else None
+
+
+def _spelling(href: str, title: str) -> str | None:
+    """A `/wiki/` target as a title, or ``None`` if it is this page's own."""
+    target = urllib.parse.unquote(href).replace("_", " ")
     return target if target and target != title else None
 
 
@@ -409,6 +509,64 @@ def _from_pointer(
         return payloads, []
     entries = _entries_from_html(found.get("parse"), language, lect)
     return (found, entries) if entries else (payloads, [])
+
+
+#: A spelling the wiki keeps no page for at all: `греза` is a hard redirect to
+#: `грёза`, the way every Russian word whose `ё` a text prints as `е` is, and
+#: `East coast` to `East Coast`. The render of such a page is the redirect
+#: notice and nothing else -- no language section, no senses -- so the word
+#: reached the definer with nothing and was dropped, or, once there was a
+#: stage for it, handed to a model that called `грез` a Polish word. Bru found
+#: that one, 2026-09-16; 37 of the 8,870 pages in a warm cache are these, and
+#: seven of them are the Russian `ё`.
+#:
+#: One regex, matching the list the notice is written as, which both parsers
+#: emit: Parsoid marks the redirect with a `<link rel="mw:PageProp/redirect">`
+#: as well, and the mirror's legacy parser does not.
+_REDIRECT = re.compile(r'class="redirectText">\s*<li>\s*<a href="/wiki/([^"#]+)"')
+
+
+def _redirects_to(payloads: dict, title: str) -> str | None:
+    """The spelling this page is a hard redirect to, if it is one."""
+    parse = payloads.get("parse")
+    if not isinstance(parse, dict):
+        return None
+    html = parse.get("parse", {}).get("text")
+    if not isinstance(html, str):
+        return None
+    found = _REDIRECT.search(html)
+    if found is None:
+        return None
+    target = urllib.parse.unquote(found.group(1)).replace("_", " ")
+    return target if target and target != title else None
+
+
+def _from_redirect(
+    target: str,
+    payloads: dict,
+    title: str,
+    language: str,
+    *,
+    edition: str,
+    refresh: bool,
+    lect: str = "",
+) -> tuple[dict, list, str]:
+    """Read the page this one redirects to, and take its title with it.
+
+    One hop -- a wiki does not follow a double redirect either -- and unlike
+    the see-box above, **the title changes**. A see-box is a real section at a
+    real spelling that keeps its definitions elsewhere, so the card stays
+    fronted with the spelling the text used. A redirect is the dictionary
+    saying this spelling is not an entry, and for the `ё` that is the whole
+    point: `грёза` is the word, and the diaeresis the text dropped is where
+    the stress falls. A card fronted `греза` would teach the spelling the
+    reader could already read.
+    """
+    found = _payloads(target, edition=edition, refresh=refresh)
+    if found is None:
+        return payloads, [], title
+    entries = _entries_from_html(found.get("parse"), language, lect)
+    return (found, entries, target) if entries else (payloads, [], title)
 
 
 #: Wiktionary moves the language sections of an oversized page onto subpages
@@ -460,6 +618,7 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
     path = page_cache_path(title, edition)
     if path.exists() and not refresh:
         with gzip.open(path, "rt", encoding="utf-8") as cached:
+            count("page.cached")
             return json.load(cached)
 
     quoted = urllib.parse.quote(title, safe="")
@@ -468,8 +627,10 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
     #: readings and audio are all read out of this one payload, so it decides
     #: whether the title exists at all. A failed render is not written, so the
     #: next run has a chance at the page rather than a cached nothing.
+    count("page.fetched")
     parse = _get_json(base + PARSE_PATH.format(title=quoted))
     if parse is None:
+        count("page.failed")
         return None
     #: Kept with the payload: a page is cached by title alone, so this is the
     #: only thing that later says whether its silence about audio is the word
@@ -630,23 +791,28 @@ def _retry_after(error: urllib.error.HTTPError, attempt: int) -> float:
 
 def _from_html(
     parse: dict | None, language: str, lect: str = ""
-) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
-    """Pull etymology, IPA and every recording out of the rendered page.
+) -> tuple[str | None, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Pull etymology, its components, IPA and every recording out of the page.
 
     The etymology is the section's; the readings and the recordings are the
     *lect's* where the entry has lects and the caller named one.
     """
     if not isinstance(parse, dict):
-        return None, (), ()
+        return None, (), (), ()
     html = parse.get("parse", {}).get("text")
     if not isinstance(html, str):
-        return None, (), ()
+        return None, (), (), ()
     section = _language_section(html, language)
     if section is None:
-        return None, (), ()
+        return None, (), (), ()
 
     spoken = _spoken(_shared(section), lect)
-    return _etymology(section), _readings(spoken), _audios(spoken)
+    return (
+        _etymology(section),
+        _etymons(section, language),
+        _readings(spoken),
+        _audios(spoken),
+    )
 
 
 #: The varieties the English Wiktionary gives a Chinese entry a pronunciation
@@ -949,6 +1115,70 @@ def _form_of_targets(node, *, skip=()) -> tuple[str, ...]:
     return tuple(found)
 
 
+#: MediaWiki's classes for a link whose target is the page it is already on.
+#: A bare one is the page -- rendered either as `<a class="mw-selflink
+#: selflink">` or, where the link is the whole of what it marks, as
+#: `<strong class="selflink">`, so the class they share is the one to test.
+#: The `-fragment` one carries the section it points into, which on a
+#: Wiktionary page is a *language*. All of them are the wiki's own markup and
+#: not a template's, so they are on every self-quotation a definition links,
+#: however that definition was written.
+_SELF_LINK = "selflink"
+_SELF_LINK_SECTION = "mw-selflink-fragment"
+
+
+def _quoted_in(node, language: str, *, skip=()) -> tuple[str, ...]:
+    """The spellings of its own word that this definition quotes.
+
+    A definition quoting the word it defines is the one thing that cannot be
+    taken out of a production card's question by looking at the letters: the
+    question is written in the mother tongue, and the answer may be spelled
+    like one of the mother tongue's own words. German `in` is defined
+    *in, into*; blanking the letters leaves `■, into`, which is the reason
+    :func:`decker.cards._unspelled` masks nothing in a shared script.
+
+    So the wiki is asked instead of the letters, and it answers exactly:
+
+    - `<a class="mw-selflink selflink">müssen</a>`, `<strong class=
+      "selflink">der</strong>` -- a link to this page, so this is the entry's
+      own word, quoted inside its own definition.
+    - `<a class="mw-selflink-fragment" href="#German">der</a>` -- a link to
+      *this language's* section of this page. Also the entry's own word.
+    - `<a class="mw-selflink-fragment" href="#English">nice</a>`, in the
+      German entry of `nice` defined *good, nice* -- a link to the **English**
+      section. That is the mother tongue's word that happens to be spelled
+      like the German one, and it is the whole of what must not be masked.
+    - plain text -- prose. The `in` of *in, into* is this.
+
+    The text as the page shows it, so a quotation spelled differently from
+    the title -- a capital opening a sentence, an inflected display text --
+    comes back as it stands and the caller compares.
+    """
+    anchor = language.replace(" ", "_")
+    found: list[str] = []
+
+    def walk(child) -> None:
+        if isinstance(child, str) or child.get("tag") in skip:
+            return
+        classes = _classes(child)
+        if _SELF_LINK in classes or _SELF_LINK_SECTION in classes:
+            fragment = (child["attrs"].get("href") or "").lstrip("#")
+            #: A bare self-link names the page and so the section it is
+            #: written in; a fragment names one section, and only this
+            #: language's is this word.
+            if not fragment or fragment == anchor:
+                quoted = _tidy(_text(child))
+                if quoted and quoted not in found:
+                    found.append(quoted)
+            return
+        for grandchild in child["children"]:
+            walk(grandchild)
+
+    for child in node["children"]:
+        walk(child)
+    return tuple(found)
+
+
 def _concepts_in(node, *, skip=()) -> tuple[str, ...]:
     """The glossary anchors linked under a node, in order, without repeats.
 
@@ -990,7 +1220,7 @@ _ERROR_DEFINITION = re.compile(r"\b(?:lua error|script error)\b", re.I)
 ERRORED_SENSES: Counter[str] = Counter()
 
 
-def _senses_of(items: list) -> list[Sense]:
+def _senses_of(items: list, language: str) -> list[Sense]:
     """One sense per list item, with a nested list read as what it nests under.
 
     An item whose own text ends in a colon is a header and not a meaning --
@@ -1021,6 +1251,7 @@ def _senses_of(items: list) -> list[Sense]:
         #: sense is credited with is the terminology its own definition names.
         own_concepts = _concepts_in(item, skip=("dl", "ol", "ul"))
         own_targets = _form_of_targets(item, skip=("dl", "ol", "ul"))
+        own_quoted = _quoted_in(item, language, skip=("dl", "ol", "ul"))
         if own and _ERROR_DEFINITION.search(own):
             #: Before the header test: an error can land anywhere a definition
             #: can, and one that happens to end in a colon is not a header
@@ -1034,6 +1265,7 @@ def _senses_of(items: list) -> list[Sense]:
                     examples=tuple(_html_examples(item)),
                     concepts=own_concepts,
                     targets=own_targets,
+                    quoted=own_quoted,
                 )
             )
         for child in nested:
@@ -1042,6 +1274,7 @@ def _senses_of(items: list) -> list[Sense]:
                 continue
             inner_concepts = _concepts_in(child, skip=("dl", "ol", "ul"))
             inner_targets = _form_of_targets(child, skip=("dl", "ol", "ul"))
+            inner_quoted = _quoted_in(child, language, skip=("dl", "ol", "ul"))
             senses.append(
                 Sense(
                     definition=f"{own}: {inner}".strip() if header and own else inner,
@@ -1054,6 +1287,9 @@ def _senses_of(items: list) -> list[Sense]:
                     #: where the link sits, and the lines under it are the
                     #: inflections *of* it.
                     targets=_merge(own_targets if header else (), inner_targets),
+                    #: A header's text is prefixed to the line, so a word it
+                    #: quotes is quoted in the definition the card shows.
+                    quoted=_merge(own_quoted if header else (), inner_quoted),
                 )
             )
     return senses
@@ -1086,7 +1322,7 @@ def _entries_from_html(
     if section is None:
         return []
     entries = []
-    for etymology, block in _etymology_blocks(section):
+    for etymology, etymons, block in _etymology_blocks(section, language):
         #: The block's own, not the section's. Empty above the first numbered
         #: etymology and on a block that carries no Pronunciation of its own,
         #: which is when :class:`Page` answers with the shared one instead.
@@ -1096,6 +1332,7 @@ def _entries_from_html(
                 block,
                 language,
                 etymology,
+                etymons,
                 ipa=_readings(spoken),
                 audio_urls=_audios(spoken),
             )
@@ -1103,7 +1340,9 @@ def _entries_from_html(
     return entries
 
 
-def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
+def _etymology_blocks(
+    section: str, language: str
+) -> list[tuple[str | None, tuple[str, ...], str]]:
     """The section cut at its Etymology headings, each block with its own text.
 
     Wiktionary numbers the etymologies of a language and hangs the parts of
@@ -1119,12 +1358,12 @@ def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
     headings = list(_ETYMOLOGY_HEADING.finditer(section))
     if not headings:
         #: Nothing numbered: one block, and whatever the section says once.
-        return [(_etymology(section), section)]
-    blocks: list[tuple[str | None, str]] = []
+        return [(_etymology(section), _etymons(section, language), section)]
+    blocks: list[tuple[str | None, tuple[str, ...], str]] = []
     #: Whatever precedes the first Etymology heading -- a Pronunciation the
     #: whole section shares, usually -- belongs to no etymology in particular.
     if headings[0].start() > 0:
-        blocks.append((None, section[: headings[0].start()]))
+        blocks.append((None, (), section[: headings[0].start()]))
     for position, heading in enumerate(headings):
         end = (
             headings[position + 1].start()
@@ -1132,7 +1371,7 @@ def _etymology_blocks(section: str) -> list[tuple[str | None, str]]:
             else len(section)
         )
         block = section[heading.start() : end]
-        blocks.append((_etymology(block), block))
+        blocks.append((_etymology(block), _etymons(block, language), block))
     return blocks
 
 
@@ -1140,6 +1379,7 @@ def _entries_in(
     section: str,
     language: str,
     etymology: str | None,
+    etymons: tuple[str, ...] = (),
     *,
     ipa: tuple[str, ...] = (),
     audio_urls: tuple[str, ...] = (),
@@ -1180,7 +1420,7 @@ def _entries_in(
                         for item in child["children"]
                         if not isinstance(item, str) and item.get("tag") == "li"
                     ]
-                    senses = _senses_of(items)
+                    senses = _senses_of(items, language)
                     if senses:
                         entries.append(
                             Entry(
@@ -1188,6 +1428,7 @@ def _entries_in(
                                 part_of_speech=state["heading"],
                                 senses=tuple(senses),
                                 etymology=etymology,
+                                etymons=etymons,
                                 headword=state["headword"],
                                 ipa=ipa,
                                 audio_urls=audio_urls,
@@ -1212,14 +1453,19 @@ def _language_section(html: str, language: str) -> str | None:
     return None
 
 
-def _etymology(section: str) -> str | None:
-    """The first paragraph under the section's first Etymology heading.
+def _etymology_paragraph(section: str) -> str | None:
+    """The first paragraph under the section's first Etymology heading, as HTML.
 
     Bounded by the next heading of any level, because a numbered etymology is
     allowed to have no prose at all: `carga`'s second is a bare heading
     followed straight by its Verb, and an unbounded search walked past it and
     came back with the headword line -- "Deverbal from cargar." for the noun
     and "carga" for the verb form.
+
+    The markup is kept because two things are read out of this one paragraph
+    and they have to be the same paragraph: the prose the card shows, and the
+    terms the word decomposes into. A component named in a paragraph the card
+    does not show would be a card whose reason for existing is invisible.
     """
     heading = _ETYMOLOGY_HEADING.search(section)
     if heading is None:
@@ -1227,11 +1473,82 @@ def _etymology(section: str) -> str | None:
     following = _ANY_HEADING.search(section, heading.end())
     end = following.start() if following else len(section)
     for paragraph in _PARAGRAPH.finditer(section, heading.end(), end):
-        text = strip_html(paragraph.group(1))
-        if text:
-            return text
+        if strip_html(paragraph.group(1)):
+            return paragraph.group(1)
     return None
-    return None
+
+
+def _etymology(section: str) -> str | None:
+    """That paragraph as prose, which is what a card shows."""
+    paragraph = _etymology_paragraph(section)
+    return strip_html(paragraph) if paragraph is not None else None
+
+
+#: A mention inside an etymology, and the language section it points into.
+#: Every term an etymology template renders is a link carrying the section's
+#: own anchor in its fragment -- `/wiki/cargar#Spanish`, `/wiki/carrus#Latin`
+#: -- which is what tells a component of the language from the Latin it came
+#: out of. The gloss inside a mention -- `largo (“long”)` -- links the English
+#: word with no fragment at all, so demanding one keeps the glosses out of the
+#: reading. Namespaced titles are excluded for the same reason: `Appendix:
+#: Glossary#inherited` hangs off the word *Inherited* and
+#: `Reconstruction:Proto-Slavic/*` is not a page anyone can be taught.
+_ETYMON_LINK = re.compile(r'<a\s[^>]*href="/wiki/([^":#]+)#([^"]+)"[^>]*>')
+
+#: What a decomposition is written with: mentions joined by a plus, which is
+#: what `{{affix}}`, `{{compound}}`, `{{univerbation}}`, `{{blend}}` and the
+#: `By surface analysis` line all render -- `des- +‎ cargar`, `veneno +‎ -oso`.
+#: The plus is the whole test, and it is the reason a doublet, a cognate and a
+#: `Compare` list are not components: they are same-language mentions too, and
+#: only a decomposition puts a plus between them.
+_JOINER = "+"
+
+
+def _etymons(section: str, language: str) -> tuple[str, ...]:
+    """The terms of ``language`` this etymology decomposes the word into.
+
+    A sum, in other words, and only a sum: the mentions of one plus-joined run
+    that point into this language's own section. Measured over the warm cache
+    -- 560 Spanish etymologies, 3,764 Russian, 1,355 Japanese -- and written
+    up in `docs/execution/etymological-components.md`.
+
+    A run may be mixed: `mamma +‎ -fero` is Latin and Spanish, and only the
+    Spanish half is something to teach. A run of one is not a sum at all, so
+    `Doublet of volear` and `Compare Portuguese voar` name nothing here.
+    """
+    paragraph = _etymology_paragraph(section)
+    if paragraph is None:
+        return ()
+    anchor = language.replace(" ", "_")
+    runs: list[list[tuple[str, str]]] = []
+    end = 0
+    for match in _ETYMON_LINK.finditer(paragraph):
+        member = (_entry_title(match.group(1)), match.group(2))
+        if runs and _JOINER in strip_html(paragraph[end : match.start()]):
+            runs[-1].append(member)
+        else:
+            runs.append([member])
+        end = match.end()
+    found: list[str] = []
+    for run in runs:
+        if len(run) < 2:
+            continue
+        for title, fragment in run:
+            if fragment == anchor and title not in found:
+                found.append(title)
+    return tuple(found)
+
+
+def _entry_title(path: str) -> str:
+    """The entry a `/wiki/` path names.
+
+    A page too long for one document is split by language, and an etymology
+    links the split rather than the entry: `además` is `a/languages M to Z`
+    +‎ `demás`. The card is for the word it names.
+    """
+    title = urllib.parse.unquote(path).replace("_", " ")
+    head, _, rest = title.partition("/")
+    return head if rest.startswith("languages ") else title
 
 
 def audio_path(url: str, *, download: bool = True) -> Path | None:

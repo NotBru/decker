@@ -25,6 +25,20 @@ def pipeline(lang: str) -> stanza.Pipeline:
     """
     log(f"[decker] loading the {name_of(lang)} parser ({PROCESSORS})", kind="head")
     started = time.monotonic()
-    loaded = stanza.Pipeline(lang, processors=PROCESSORS, logging_level="WARN")
+    #: The models are on disk after the first run; the *index* of them is what
+    #: Stanza re-downloads on every `Pipeline`, so an ordinary run reaches
+    #: `raw.githubusercontent.com` (or `$STANZA_RESOURCES_URL`) before it
+    #: parses a word it already knows how to parse -- and dies there when the
+    #: name does not resolve, which took three runs down on 2026-09-17 with
+    #: every model it needed sitting in the cache. `REUSE_RESOURCES` keeps the
+    #: index that is already there and still downloads a model that is
+    #: missing, so a first run for a language is unchanged and every run after
+    #: it is offline.
+    loaded = stanza.Pipeline(
+        lang,
+        processors=PROCESSORS,
+        logging_level="WARN",
+        download_method=stanza.DownloadMethod.REUSE_RESOURCES,
+    )
     log(f"[decker] parser ready in {time.monotonic() - started:.1f}s", kind="detail")
     return loaded

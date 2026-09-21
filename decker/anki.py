@@ -17,6 +17,8 @@ import sqlite3
 import tempfile
 import zipfile
 from collections.abc import Iterable
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import genanki
@@ -60,6 +62,7 @@ CSS = """\
 .nightMode.card { color: #f0efec; background: #1c1c1a; }
 .term { font-size: 34px; font-weight: 600; }
 .definition { font-size: 24px; }
+.equivalent { font-size: 28px; font-weight: 600; margin-bottom: 0.2em; }
 .ipa { font-size: 18px; opacity: 0.75; }
 .headword { font-size: 17px; opacity: 0.8; margin-top: 0.3em; }
 .examples, .etymology { font-size: 17px; opacity: 0.8; margin-top: 0.7em; }
@@ -73,9 +76,12 @@ CSS = """\
 #: existing ones renumbered under the notes already in it.
 RECOGNITION_FIELDS = (
     "Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit",
-    "Headword", "Renderings",
+    "Headword", "Renderings", "Equivalent",
 )
-PRODUCTION_FIELDS = ("Definition", "Term", "IPA", "Etymology", "Credit", "Headword")
+PRODUCTION_FIELDS = (
+    "Definition", "Term", "IPA", "Etymology", "Credit", "Headword", "Audio",
+    "Equivalent",
+)
 
 RECOGNITION_FRONT = """\
 <div class="term">{{Term}}</div>
@@ -86,6 +92,7 @@ RECOGNITION_BACK = """\
 {{FrontSide}}
 <hr id="answer">
 {{#Renderings}}<div class="examples">{{Renderings}}</div>{{/Renderings}}
+{{#Equivalent}}<div class="equivalent">{{Equivalent}}</div>{{/Equivalent}}
 <div class="definition">{{Definition}}</div>
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
@@ -95,6 +102,7 @@ RECOGNITION_BACK = """\
 """
 
 PRODUCTION_FRONT = """\
+{{#Equivalent}}<div class="equivalent">{{Equivalent}}</div>{{/Equivalent}}
 <div class="definition">{{Definition}}</div>\
 """
 
@@ -117,9 +125,22 @@ def write(
     source: str = "a text",
     description: str | None = None,
     edition: str = "en",
+    after: int = 0,
+    keeping: dict[tuple[str, str], str] | None = None,
 ) -> Path:
-    """Write ``cards``, in the order given, as an Anki package at ``path``."""
+    """Write ``cards``, in the order given, as an Anki package at ``path``.
+
+    ``after`` shifts every card's position, so a deck built to be added to one
+    already being studied queues behind what that deck has left rather than
+    interleaving with it: see :func:`last_position`.
+
+    ``keeping`` is the identities a deck already in Anki gave its notes, by
+    :func:`identities`. A card whose gloss that deck already teaches is
+    written under the note id it has there, so importing corrects the note
+    Anki holds instead of adding a second one beside it.
+    """
     cards = list(cards)
+    keeping = keeping or {}
     deck = genanki.Deck(
         _stable_id(f"deck:{name}"),
         name,
@@ -134,15 +155,182 @@ def write(
         ),
     )
     models = {RECOGNITION: _recognition_model(), PRODUCTION: _production_model()}
-    media = []
+    #: A dict rather than a list: both cards of a gloss name the same
+    #: recording, and genanki writes a media file once per entry it is given,
+    #: so a list would put every sound in the package twice.
+    media: dict[str, None] = {}
     for position, card in enumerate(cards, start=1):
-        media.extend(card.answer.audios)
-        deck.add_note(_note(card, models[card.kind], due=position, edition=edition))
+        media.update(dict.fromkeys(card.answer.audios))
+        deck.add_note(
+            _note(
+                card,
+                models[card.kind],
+                due=position + after,
+                edition=edition,
+                guid=keeping.get((card.kind, card.key)),
+            )
+        )
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    genanki.Package(deck, media_files=media).write_to_file(path)
+    genanki.Package(deck, media_files=list(media)).write_to_file(path)
     return path
+
+
+@dataclass(frozen=True)
+class Placed:
+    """One card of a built deck, as something outside Anki can see it.
+
+    What a deck records of its own order, read back: which gloss the card
+    teaches, which side it is, and how far into the studying it arrives.
+    """
+
+    key: str
+    #: ``RECOGNITION`` or ``PRODUCTION``, off the note's tags.
+    kind: str
+    #: How many cards must be studied before this one is done, this one
+    #: included: its rank among the deck's unstudied cards, from 1. Zero when
+    #: the card has been studied already, which is what a deck exported from
+    #: a collection mid-way through says about the cards behind the reader.
+    position: int
+    studied: bool
+
+
+def placed(path: str | Path) -> list[Placed]:
+    """Every card of a deck, in the order it is to be studied.
+
+    A deck decker wrote is entirely unstudied and its cards' due numbers are
+    the positions deck building gave them. A deck exported from Anki after
+    some study is the more useful input and the more awkward one: a card that
+    has been seen carries a due number that is a day, not a position, so the
+    two kinds cannot share one scale. They do not have to -- a studied card
+    costs its reader nothing further -- so the studied are marked and the
+    rest are ranked among themselves.
+    """
+    with _collection(path) as connection:
+        rows = connection.execute(
+            "select notes.tags, cards.due, cards.type, cards.id "
+            "from cards join notes on cards.nid = notes.id"
+        ).fetchall()
+    read = [
+        (_tagged(tags, GLOSS_TAG), _kind(tags), due, type_ != 0, identity)
+        for tags, due, type_, identity in rows
+    ]
+    order = sorted(
+        (row for row in read if not row[3]), key=lambda row: (row[2], row[4])
+    )
+    ranks = {row[4]: rank for rank, row in enumerate(order, start=1)}
+    return [
+        Placed(
+            key=key,
+            kind=kind,
+            position=0 if studied else ranks[identity],
+            studied=studied,
+        )
+        for key, kind, _due, studied, identity in read
+    ]
+
+
+def _kind(tags: str | None) -> str:
+    """Which side of its gloss a note is, as its tags say."""
+    marks = (tags or "").split()
+    return next((mark for mark in marks if mark in (RECOGNITION, PRODUCTION)), "")
+
+
+def _tagged(tags: str | None, prefix: str) -> str:
+    """The one tag with this prefix, without it, or the empty string."""
+    return next(
+        (tag[len(prefix):] for tag in (tags or "").split() if tag.startswith(prefix)),
+        "",
+    )
+
+
+#: What Anki 2.1.50 and later name the collection inside a package: the same
+#: SQLite database, compressed with zstd.
+_MODERN = "collection.anki21b"
+
+
+class Unreadable(ValueError):
+    """A file handed to `--previous` or `--update` that is not a deck decker
+    can read. Its own class so the CLI can say so and stop, rather than
+    ending a run that was going to be given a deck with a traceback."""
+
+
+@contextmanager
+def _collection(path: str | Path):
+    """The collection database inside an Anki package, open for reading."""
+    with zipfile.ZipFile(path) as package:
+        names = package.namelist()
+        inner = next(
+            (name for name in ("collection.anki21", "collection.anki2") if name in names),
+            None,
+        )
+        if inner is None and _MODERN in names:
+            #: Anki 2.1.50 and after write the collection zstd-compressed, and
+            #: there is no zstd in this Python (3.14 is the first with one) and
+            #: no decoder among decker's dependencies. The export dialog has a
+            #: checkbox that writes the old format, so the way out is one the
+            #: user already has; adding a dependency to skip it is Bru's call,
+            #: `pyproject.toml` being his.
+            raise Unreadable(
+                f"{path} was exported by Anki 2.1.50 or later, which "
+                "compresses the collection (collection.anki21b) with zstd -- "
+                "decker cannot read that. Export the deck again with "
+                "\"Support older Anki versions\" ticked."
+            )
+        if inner is None:
+            raise Unreadable(f"{path} does not look like an Anki package")
+        with tempfile.TemporaryDirectory() as directory:
+            package.extract(inner, directory)
+            connection = sqlite3.connect(Path(directory) / inner)
+            try:
+                yield connection
+            finally:
+                connection.close()
+
+
+def identities(path: str | Path) -> dict[tuple[str, str], str]:
+    """The note id a deck already in Anki gave each of its cards.
+
+    Keyed by the card's side and the design's identity for its gloss -- the
+    key the note already carries as a tag -- and *not* by the prose, which is
+    what the id itself is made of. That is the whole point: a card decker now
+    writes differently is the same card, and a deck rebuilt with these ids
+    corrects the note Anki holds rather than adding a second one next to it.
+    The scheduling of a card corrected this way is untouched, since Anki is
+    updating a note it already has.
+
+    A note with no gloss key -- a deck built before decker recorded them, or
+    one the user wrote themselves into the same deck -- has nothing to match
+    on and is left out, which means it is left alone.
+    """
+    with _collection(path) as connection:
+        rows = connection.execute("select guid, tags from notes").fetchall()
+    found: dict[tuple[str, str], str] = {}
+    for guid, tags in rows:
+        key = _tagged(tags, GLOSS_TAG)
+        kind = _kind(tags)
+        if key and kind:
+            found.setdefault((kind, key), guid)
+    return found
+
+
+def last_position(path: str | Path) -> int:
+    """How far the new cards of a deck already in Anki are numbered.
+
+    Anki orders the cards it has not yet shown by their position, and decker
+    numbers a deck's cards from 1, so a second deck built for the same
+    collection starts again at 1 and its cards fall *among* the first deck's
+    rather than after them. This is what the next deck is offset by.
+
+    Only the unstudied cards are read: a card that has been studied carries a
+    due date rather than a position, on a scale that has nothing to do with
+    this one. A deck studied to the end therefore answers 0, which is right
+    -- there is nothing left for a new card to queue behind.
+    """
+    with _collection(path) as connection:
+        rows = connection.execute("select due, type from cards").fetchall()
+    return max((due for due, type_ in rows if type_ == 0), default=0)
 
 
 def taught(path: str | Path) -> frozenset[str]:
@@ -154,30 +342,16 @@ def taught(path: str | Path) -> frozenset[str]:
     Keys ride on the notes as tags, so a deck exported by Anki after the user
     has studied and edited it still answers this question.
     """
-    with zipfile.ZipFile(path) as package:
-        names = package.namelist()
-        inner = next(
-            (name for name in ("collection.anki21", "collection.anki2") if name in names),
-            None,
-        )
-        if inner is None:
-            raise ValueError(f"{path} does not look like an Anki package")
-        with tempfile.TemporaryDirectory() as directory:
-            package.extract(inner, directory)
-            connection = sqlite3.connect(Path(directory) / inner)
-            try:
-                rows = connection.execute("select tags from notes").fetchall()
-            finally:
-                connection.close()
+    with _collection(path) as connection:
+        rows = connection.execute("select tags from notes").fetchall()
     return frozenset(
-        tag[len(GLOSS_TAG):]
-        for (tags,) in rows
-        for tag in (tags or "").split()
-        if tag.startswith(GLOSS_TAG)
+        key for (tags,) in rows if (key := _tagged(tags, GLOSS_TAG))
     )
 
 
-def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
+def _note(
+    card: Card, model, *, due: int, edition: str, guid: str | None = None
+) -> genanki.Note:
     #: A card with no entry quotes nothing of Wiktionary's -- a foreign word is
     #: here precisely because Wiktionary has no entry for it -- so it carries
     #: its own attribution and no credit, rather than a link to a page that
@@ -208,6 +382,7 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             credit,
             card.answer.headword,
             _lines(card.answer.renderings),
+            card.answer.equivalent,
         ]
     else:
         fields = [
@@ -217,13 +392,19 @@ def _note(card: Card, model, *, due: int, edition: str) -> genanki.Note:
             card.answer.etymology or "",
             credit,
             card.answer.headword,
+            _sounds(card.answer.audios),
+            card.challenge.equivalent,
         ]
     return genanki.Note(
         model=model,
         fields=fields,
         #: Identity is the card itself -- which gloss, which side -- so a
-        #: rebuilt deck updates the note it already made for that card.
-        guid=genanki.guid_for(card.kind, card.entry, _identity(card)),
+        #: rebuilt deck updates the note it already made for that card. The
+        #: prose is part of it, so a card whose prose decker has since learned
+        #: to write differently is a *new* note under this rule and lands in
+        #: Anki beside the wrong one it replaces; `--update` is what hands
+        #: the old identity back, keyed on the gloss rather than on the words.
+        guid=guid or genanki.guid_for(card.kind, card.entry, _identity(card)),
         #: The gloss key rides as a tag rather than a field: a field would
         #: change the note type of every deck already built, and a tag is
         #: something Anki carries, exports and imports without being told.

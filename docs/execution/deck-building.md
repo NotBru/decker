@@ -15,16 +15,147 @@ source of truth: where one of these contradicts them, the design wins and the co
   depends on is already behind that recognition card, and the ordering the design asks for is
   transitive, so naming the rest again would only be a second way to say the same thing.
 
+- **Which glosses get the pair.** Word definitions, and — since 2026-09-18, at Bru's instruction —
+  symbol cards, whose answer is a character the reader has to be able to write. Concepts and
+  morphological rules still get the recognition card alone: their title is decker's own prose, so
+  producing it from its explanation is a question about decker's naming. A symbol's production card
+  carries its `Symbol: ` prefix on the *question* — `Symbol: drink` asks for 飲, where a bare *drink*
+  could be asking for 飲む — and drops it from the answer; the marker rides inside the `Definition`
+  field rather than in one of its own, a new field changing the note type of every deck already
+  built. `Gloss.title_prefix` is what the card builder takes off and puts on, so nothing here knows
+  what a symbol is.
+
+- **A production question is masked where it spells its own answer out.** A definition often
+  quotes the term it defines — *the hiragana syllable る (ru)*, *分かる, 解る: to be understandable*,
+  *short for 金玉 (kintama): testicles* — and that definition is the whole of the production card's
+  question, so printed as it stands the card answers itself. In the Gokurakugai deck it did so 177
+  times: 102 of its 487 symbols and 75 of its word cards. The answer is replaced by `■` (U+25A0),
+  the shape a font shows when it has nothing to show. Bru's call, 2026-09-18, symbols first and
+  words the same day.
+
+  **A symbol is masked piece by piece**, `Symbol: The hiragana syllable ■ (ru)…`. *Piece*, because
+  the answer can be more than one code point — a combining mark is shown on its carrier, `◌ָ` — and
+  the definition may quote either the pair or the mark alone; the whole form is replaced first so
+  the pair becomes one square and not two.
+
+  **A word is masked whole, never letter by letter**: one square for the term however long it is,
+  `■, 解る: to be understandable`, `short for 金■ (kintama)`. Blanking the letters of `casa` out of
+  *house* would take the house with it, so it is the term or nothing. *Where* it is masked is two
+  rules, one per script:
+
+  **A term the reader could not have read is masked wherever it stands.** The test is
+  `script.foreign(term, reads)` against `script.scripts_of(--mother-lang)` — the same test and the
+  same one-line table `--teach-script` runs on. One character of another script is enough, since
+  the match then carries that character and cannot land inside the mother tongue's own prose, which
+  is why this half may replace blindly, 玉 inside 金玉 included.
+
+  **The same-script case was tried by guesswork first and cost too much.** Masking a Latin term
+  inside English prose wherever it stood alone as a word — `\w` on neither side — left the
+  Gokurakugai deck with five cards the mask had taken apart: `The hiragana syllable あ (■)` for the
+  romaji card `a`, the same for `no` and `do`, and `(` defined `Used in ■ )`. Standing alone as a
+  word is no protection when the term *is* an English word, and German `in`, defined *in, into*, is
+  `■, into` however the boundary is drawn. Bru's call, 2026-09-18: apply it only where the scripts
+  differ.
+
+  **So it is now asked rather than guessed, and the wiki answers exactly.** Bru's call,
+  2026-09-20, on the card that started it: German `müssen` is defined *(auxiliary, with an
+  infinitive → “müssen” replaces the past participle) to have to…*, and that production card
+  printed its own answer under the 2026-09-18 rule, German and English sharing an alphabet.
+  MediaWiki renders a link to the page one is already on as a **self-link**, and on a Wiktionary
+  page a self-link carries the language section it points into:
+
+  | in the German entry of… | the markup | what it is |
+  |---|---|---|
+  | `müssen`, *“müssen” replaces…* | `<a class="mw-selflink selflink">` | the German word — **mask** |
+  | `der`, *inflection of der* | `<strong class="selflink">` | the German word — **mask** |
+  | `nice`, *good, nice* | `<a class="mw-selflink-fragment" href="#English">` | the **English** word — leave |
+  | `in`, *in, into* | no markup at all: prose | English — leave |
+
+  `pages._quoted_in` reads it into `Sense.quoted`, the gloss carries it, and `_unspelled` masks a
+  same-script term only where the definition quotes it *in the language being taught*. So German
+  `in` keeps *in, into* on three senses and is masked on the fourth, *(dated) contraction of ■ +‎
+  den*, where the wiki says the `in` is the German one. Only where the term stands as a word of its
+  own, for this half — the answer is spelled in the reader's own alphabet here, and a blind
+  replacement turns `e`'s definition, *The name of the Latin script letter E/e*, into
+  `Th■ nam■ of th■ Latin script l■tt■r E/■`.
+
+  A quotation is compared after composing and dropping what will not compose, so Russian `ру́сский`
+  is recognised as `русский` — a mention carries the stress the entry is not titled with. Stripped
+  on the quotation's side only, so Spanish `papá` is not masked by a definition that quotes `papa`.
+
+  Measured over the warm page cache, per sense, for a reader of English:
+
+  | | senses | definition says its own term | **newly masked** | left alone |
+  |---|---|---|---|---|
+  | German | 585 | 44 | **13** | 31 |
+  | Spanish | 2,952 | 86 | **6** | 80 |
+  | Russian | 15,855 | 95 | **5** | 1 |
+  | French | 377 | 55 | 0 | 55 |
+  | Japanese | 5,368 | 170 | 0 | 25 |
+  | Chinese | 4,549 | 29 | 0 | 14 |
+
+  Japanese and Chinese gain nothing because the script rule already had them; Russian's five are
+  the stress-marked quotations the blind replacement missed. **And what is left alone is the point
+  of the whole exercise**: all 31 German and all 80 Spanish are the mother tongue's own word
+  standing in the definition of a word spelled like it — `(colloquial) good, nice`, `wild (of
+  animals, etc.)`, `Seine (a river in France)`, `(zoology) coral`, `medio, half-real (a former
+  coin)`. Every one of them would have been blanked by a substring rule, and none of them is the
+  leak.
+
+  **A term quoted inside a longer term is measured and left.** `ellipsis of golpe de estado`,
+  `only used in acerca de` — the answer stands there as a word, but the wiki links the *phrase*,
+  not the term, so it is not a self-link. Masking inside any `lang`-marked mention would reach
+  them: 6 Spanish senses and 4 German. Four of the ten are wrong — `abbreviation of ■-Dur` for
+  `A`, `Separated form of ■-` for `nach`, `alternative form of ■.` for `Mi` — because a term that
+  is the *beginning* of the term the definition names is not the answer leaking, it is the
+  question. Four genuine cards are not worth four damaged ones, and this is the note that says so.
+
+  Presentation only, on that one side — the gloss, its key, `--previous`, the timeline and the
+  recognition card all keep the prose Wiktionary wrote. A note's identity is its front and its
+  definition together, though, so a production note that gains a square gains a guid: a collection
+  already holding those cards re-introduces them rather than rescheduling them. Nineteen word
+  cards over the whole warm cache, which is the size of the thing being traded for a card that
+  stops printing its answer.
+
 - A gloss's dependency becomes the *recognition* card of the gloss it depends on, not its production
   card. What `patita` needs from `pata` is that the reader have met the word; being able to produce
   `pata` from its meaning is a further skill, and waiting for it would hold `patita` back for no
   reason the definition gives.
 
-- The sound file rides on the recognition card's answer, next to the IPA. This is a small widening
+- **A figure of a word is fronted with its label.** Since a sense marked `(poetic)`,
+  `(figuratively)`, `(colloquial)` and so on now drags its plain sense into the deck with it (see
+  `definition-fetching.md`), a learner meets the same front twice — `мрак` for *shadow, darkness*
+  and `мрак` for *(poetic) despair* — with nothing to say which answer is wanted. So the recognition
+  card of a marked sense is fronted `мрак (poetic)`, `уйти (figuratively, poetic)`, `дни
+  (figuratively)`. Bru's call, 2026-09-17.
+
+  The label narrows the question rather than leaking the answer: it says which register is being
+  asked for, not what the word means there. The production card needs nothing — its front *is* the
+  definition, label included — and its answer stays the bare word, because the label is not part of
+  the spelling.
+
+  It is read off the translated definition, so a deck in another mother tongue shows the label its
+  own back shows, and off Wiktionary's where the translation dropped the parenthesis. Presentation
+  only: `gloss_key`, the rules stage and `--previous` all see the spelling they saw before. The
+  Anki note's guid does change for these cards, since identity is the front and the definition
+  together — a handful of cards per deck, re-introduced rather than rescheduled.
+
+- The sound file rides on the answer of *both* cards, next to the IPA. This is a small widening
   of the design, whose answer list names etymology, IPA and definition: the reading and the
   recording answer the same question, and v1 downloads the file already, so leaving it out of the
   deck would mean fetching audio the learner never hears. If the design meant the list to be
   exhaustive, this is the line to cut.
+
+  The production card had the reading and not the recording until 2026-09-18, when Bru asked for
+  it there too: the answer to a production card *is* the word, and how the word sounds is part of
+  producing it. It costs nothing to carry — the file is downloaded for the recognition card
+  anyway, and both cards name it by the same bare filename, so the package holds one copy. The
+  `Audio` field is appended to the production note type rather than inserted next to `IPA`, so a
+  collection that already holds decker's production notes gains a column instead of having its
+  existing fields renumbered under the notes in it; the templates lay it out where it belongs
+  regardless. Media files are collected into a dict for that reason too — genanki writes one file
+  per entry it is handed, so the list the two cards would have produced would pack every recording
+  twice.
 
 ### What a card carries of the source text: the word, and nothing else
 
@@ -83,8 +214,9 @@ user's own it is a copyright question too, and the ollama default is what keeps 
 - An example is carried as a pair — `pages.Example`, the sentence and the edition's rendering of it
   — and never as one string the translator cuts back up. The halves answer to opposite rules: the
   sentence is the target language and is the very thing the card teaches, the rendering is the
-  prose and is the only half a model may touch. Only the rendering is sent, so no answer can rewrite
-  a sentence. Joining them first and splitting on the em dash looked equivalent and was not: the
+  prose and is the only half a model may touch. The rendering is what is sent, so no answer can
+  rewrite a sentence — and where there is no rendering to send (below, *Examples the edition leaves
+  bare*) what comes back is still only ever used as one. Joining them first and splitting on the em dash looked equivalent and was not: the
   separator occurs *inside* sentences too — eight of the 4,529 examples in a warm cache, among them
   `¿Te das? — Me doy. — Do you surrender? — I surrender.` — and each of those sent Spanish to the
   model and put the answer back on the card. Splitting from either end fails on a different one of
@@ -103,6 +235,87 @@ user's own it is a copyright question too, and the ollama default is what keeps 
 
 - Failure is the same degraded run disambiguation has: warn once, keep what Wiktionary wrote. A deck
   in the wrong language is worth more than no deck.
+
+### The titles decker writes itself
+
+- A card titled `Concept: ditransitive verb` over a Spanish description was asking a Spanish speaker
+  to know English in order to study English. The titles decker writes — a concept's, read out of
+  `Appendix:Glossary`, and a rule's, written from an inflection line — are English because the
+  edition is, and they are not words of the language being taught, so they go through the
+  translator like any other prose: `Concepto: verbo ditransitivo`, `Regla: forma comparativa
+  (older)`. Bru asked for it on 2026-09-19, having found it in an English deck built for Spanish.
+
+- Half a title, not the whole of it. `Gloss.title_prose` is the part that is decker's prose and
+  `title_prefix` the pile it names; the rest of `surface` is the language and stays in it — the
+  `(older)` a rule is named after is the word being taught, and a translated representative would
+  teach the wrong one. The pile's word is one call for the whole run, however many concepts a text
+  needs.
+
+- The gloss itself is never touched. `gloss_key`, `--previous` and the rule book under
+  `~/.cache/decker/rules/` are all written against `surface`, so the translation happens on its way
+  onto the card and nowhere else. A deck that renamed its own cards per mother tongue would stop
+  recognising the decks built before it.
+
+- **The schema's field name is an instruction.** Asked for `{"name": …}` — which is what the field
+  holds — gemma3:4b and gemma4 both answered `present tense` to `present tense`: 33 of gemma4's 47
+  answers came back untouched, several with the prompt's own conditions appended
+  (`transitive verb (noun phrase, no article, no explanation…)`). A key naming the input asks for
+  the input. Renaming it to `translated` and changing nothing else translated all 47. It is worth
+  knowing generally: the keys of a structured answer are read as part of the prompt.
+
+- The card's own description is **not** offered as context, which is the opposite of what it looked
+  like it should be. Measured twice over the 47 glossary names a nine-episode English deck pulled
+  in: with the description beside it the model stopped naming the term and started translating the
+  description — `present tense` and `past tense` both came back `tiempo verbal`, one title over two
+  different cards, and after the field rename whole sentences came back as titles. Without it, 43 of
+  47 are the name a Spanish grammar would use. The ambiguous one-word names the context was meant to
+  rescue — `focus`, `literal` — turned out to have been the field name's doing.
+
+- A title that ends up standing for two cards is refused and both go back to English
+  (`cards._unclashed`). It happened in each of the two sweeps — `archaic` and `obsolete` both became
+  `arcaico` — and two cards with one front and two backs is the single thing the titling exists to
+  prevent. Both of them, not the second: one card reading `Concepto: arcaico` and another
+  `Concept: obsolete` would read as unrelated rather than as the pair they are. The run says how
+  often it caught one.
+
+### What the deck has to ask for when the edition is the language being taught
+
+- Every other deck gets the mother tongue's word for free. `todavía`'s entry in the English
+  Wiktionary *is* `still`, because the edition is written in the direction the learner needs. Turn
+  the pair around — English taught to a Spanish speaker — and the entry for `still` describes the
+  word instead, *up to a given time, as in the preceding time*, and translating that description
+  yields a Spanish paraphrase of an English idea and never the word `todavía`. So it is asked for
+  directly, once per sense, and put **above** the description rather than in place of it: the
+  description is what tells this sense of `still` from the other nine, and the word is what the
+  sense is worth knowing for. Bru's call, 2026-09-19.
+
+- Only where the target language is the edition's own, and only for the glosses that teach a word.
+  A concept and a rule are cards about grammar with no word to be the equivalent of, and a symbol is
+  a character rather than a word; all three are the glosses decker titles itself, which is what
+  `title_prefix` marks.
+
+- It rides on the production card's question as well, above the description there too. That card
+  asks for the word given the meaning, and `todavía` is the meaning said in one word. The one shape
+  that could leak the answer — the model handing `still` back for `still` — is refused where it is
+  asked for, and counted.
+
+- It costs one call per gloss, on top of the one that translates it, and only in this one pairing of
+  languages.
+
+### Examples the edition leaves bare
+
+- Wiktionary renders an example when the example is not in the edition's language. A Spanish
+  sentence under a Spanish entry comes with its English beside it, and that rendering is what the
+  translation stage puts into the mother tongue. An English sentence under an English entry comes
+  alone — correctly, for a reader of English — so an English deck for a Spanish speaker showed
+  `Is it still raining?` with nothing under it at all. Those sentences now get a rendering written
+  for them, in one call per gloss.
+
+- The rule that the sentence is never sent survives it. What comes back is used as the rendering and
+  never as the sentence: the model writes the half it is allowed to write, and the half the card
+  teaches is the one that arrived. An answer that does not line up one for one is refused whole, the
+  way a translated rendering is, and a sentence handed back as its own rendering is dropped rather
+  than printed twice.
 
 ## The shared ollama session
 
@@ -169,6 +382,39 @@ user's own it is a copyright question too, and the ollama default is what keeps 
   it wrote carries 41 media files over 114 notes, six of which hold more than one recording; `el`'s
   card plays both its Spain and its Colombia file.
 
+- The three calls added on 2026-09-19 — the titles, the equivalent, the renderings for bare examples
+  — were run against `gemma3:4b`, in the container and on the CPU, with the tunnel to the GPU box
+  down. `Rule: comparative form` came back `Regla: forma comparativa`, with `(older)` where it was.
+  `still` was asked for twice, once per sense, and answered `hasta ese momento` for *up to a given
+  time* and `tranquilo` for *not moving; calm* — the sense reaches the model, which is the whole
+  point of asking per gloss and not per word. `Is it still raining?` came back `¿Sigue lloviendo?`,
+  and an example that already had a rendering was not sent at all. Two things the same run got
+  wrong, both the model and neither the wiring: `ditransitive verb` became `verbo transitivo de
+  segunda intención` where the GPU box's copy of the same model had said `verbo ditransitivo`, and
+  the second of two sentences sent together came back carrying the first one's question mark.
+
+- End to end, on `Is it still raining?` alone: 14 glosses, 20 cards, a package read back out of its
+  own SQLite. Eight concept cards came out titled in Spanish — `Concepto: modo indicativo`,
+  `Concepto: tiempo presente`, `Concepto: pronombre personal átono` — with one name echoed and the
+  run saying so (`3 fields kept their English: 2 etymology empty, 1 title echoed`). Every example
+  reached the back rendered: `Is it still raining? It was still raining five minutes ago.` under
+  `¿Sigue lloviendo? Llovía hace cinco minutos.` And every word card carried its equivalent above
+  the description — `still` → *hasta ese momento*, `is` → *es*, `it` → *se*, and `be` in its
+  weather sense → *hacer*, which is the word a Spanish speaker actually says for `it is hot`. The
+  model was `qwen3.5:4b` on the container's CPU, and it got one wrong: `raining` → *lluvioso*, an
+  adjective where the form is *lloviendo*.
+
+- The wiring the three calls hang off was checked separately from the model, by answering them from
+  a table instead: five glosses — a word with two unrendered examples, a concept, a rule, and two
+  concepts whose names were deliberately answered with the same Spanish word — through deck
+  construction and into a package read back out of its own SQLite. `Concepto: tiempo pasado` and
+  `Regla: forma comparativa (older)` came out titled, with `(older)` where it was written;
+  `todavía` sat on the recognition card's back and on the production card's question and on neither
+  of the concept cards; the two bare examples reached the back rendered and the front unrendered;
+  and the pair that collided went back to `Concept: archaic` and `Concept: obsolete` with the run
+  saying so. Ten fields on the recognition note and eight on the production one, `Equivalent` last
+  on both, which is what keeps an existing collection's note type from being renumbered.
+
 - Two things the tally cannot do, both worth knowing before trusting the number. It cannot tell a
   lazy echo from a translation that is legitimately the same string — a loanword, a proper noun, a
   definition that is one word shared by both languages — so a count of echoes is an upper bound.
@@ -227,12 +473,57 @@ user's own it is a copyright question too, and the ollama default is what keeps 
   everything else. Decks built before this carry no keys, and `--previous` on one says so rather
   than silently deciding nothing is new.
 
-- **Not done:** new cards still number their `due` from 1, so importing an incremental deck into an
-  existing one interleaves the new cards with the old rather than queueing them after. Fixing it
-  means reading the previous deck's highest `due` and offsetting, which is small, but it changes
-  what shuffling's window means across a join and that deserves its own thought.
+- **An incremental deck is numbered after the deck it is added to.** `--previous` says this build
+  is an addition — its cards are the ones that deck does not teach — so `anki.last_position` reads
+  the highest position among that package's *unstudied* cards and every card here starts above it.
+  A studied card carries a due date rather than a position, on a scale that has nothing to do with
+  this one, so those are not read; a deck studied to the end answers 0, which is right, there being
+  nothing left for a new card to queue behind. Without `--previous` a deck is numbered from 1, as
+  it always was: a rebuild is not an addition, and its own order is the order the whole deck wants.
+
+  The offset is applied to the shuffled list, not inside the shuffle, so `--window` still means
+  what it meant — cards move up to a week's worth of places from where the *source* put them, and
+  the join between two builds is not a place anything shuffles across. An addition cannot reorder
+  the deck it is added to, which is the property that makes this safe rather than the property
+  that makes it ideal: a new card that ought to come before something already queued still comes
+  after it. The design's ordering guarantee is about a deck, and two builds are two decks.
+
+- **`--update DECK.apkg` carries the identities of a deck already in Anki.** A note's id is the
+  card's kind, its entry and its prose (see above), so a card decker has since learned to write
+  *differently* — the masking of 2026-09-20 is the case that raised this — is a new note under that
+  rule, and importing it puts the corrected card in the collection **beside** the wrong one rather
+  than over it. `--update` is the user naming the deck they already study: `anki.identities` reads
+  each note's id and the gloss key it carries as a tag, and a card whose gloss that deck already
+  teaches is written under the id it has there. Anki then updates the note it holds — fields
+  corrected, scheduling untouched — and the cards that are genuinely new arrive as new notes.
+
+  Keyed on the gloss and the side, never on the words, which is the whole point: the words are
+  what changed. A note with no gloss key — a deck built before decker recorded them, a note the
+  user wrote into the same deck themselves — matches nothing and is therefore left alone, and the
+  run says how many notes it matched so a mismatched file is visible rather than silent.
+
+  **The default identity stays the prose.** Making it the gloss key outright would be the cleaner
+  scheme, and it would have made this flag unnecessary — but every note of every deck already
+  built would change its id at once, so the next import would double a collection instead of
+  correcting it. A flag costs a user who wants continuity one argument; a scheme change costs
+  everyone who has studied anything. Bru's ask, 2026-09-20, was for the cards already in Anki to be
+  corrected, and this is the way that does not break them to do it.
+
+- **A deck exported by Anki 2.1.50 or later cannot be read.** That Anki writes
+  `collection.anki21b` — the same SQLite database, zstd-compressed — and there is no zstd in this
+  Python (3.14 is the first with one) or among decker's dependencies. Both flags that read a deck
+  say so by name and stop before the run costs anything, naming the export dialog's *Support older
+  Anki versions* checkbox, which writes the old format. Adding `zstandard` would remove the
+  checkbox from the workflow and is a `pyproject.toml` change, so it is Bru's to make.
 
 ## Known gaps
+
+- **An update cannot renumber the cards Anki already has.** Importing corrects the notes and adds
+  the new ones, and leaves the scheduling of what is there — which is the point — but it means a
+  card that ought to come *before* one already queued arrives after it instead: the old card keeps
+  its old position and the new one is numbered on the rebuild's scale. So a component card added
+  to a deck already being studied can turn up behind the word it explains. Anki's own *Reposition*
+  is the tool for that, on the cards the import added; decker cannot do it from a package.
 
 - Every card lands in one deck with no subdecks, tags beyond `recognition`/`production`, or
   scheduling presets. The design says to dump a deck, and the order is carried by `due`, so anything
@@ -253,3 +544,12 @@ user's own it is a copyright question too, and the ollama default is what keeps 
   it: the model ids are stable, so a collection that already holds decker notes gains a column
   instead of having its existing ones renumbered underneath them. A production card has no examples
   and gains nothing.
+
+- **The headword line is still the edition's English**, on every card that has one:
+  `(not comparable)` under `still`, `(comparative greener, superlative greenest)` under `green`.
+  It is the one piece of prose on a card that the mother tongue never reaches. It is also not one
+  piece: `greener` and `greenest` are forms of the word being taught and have to survive untouched,
+  while `comparative` and `superlative` are the same grammatical vocabulary the concept cards now
+  translate, so it wants the treatment a rule's title gets — the frame translated, the quoted forms
+  left alone — and not a call that hands the whole line to a model. Raised on 2026-09-19 and left,
+  the same day's work going to the three things Bru asked for instead.

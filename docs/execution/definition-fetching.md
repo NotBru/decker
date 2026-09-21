@@ -79,6 +79,15 @@ design wins and the code is wrong.
   recurses, and the chain of titles being resolved is carried down so a pair defined in terms of each
   other cannot loop.
 
+- The other half of a dependency comes from the etymology, not the definition: where an etymology
+  states a sum of terms **in the language being taught** — `descargar` is `des- +‎ cargar`,
+  `venenoso` is `veneno +‎ -oso` by surface analysis — those terms are glossed and depended upon by
+  the same machinery, one sense each, recursively, chain-guarded. Only a sum, so a doublet, a cognate
+  and a `Compare` list name nothing; only that language, so the Latin an etymology walks back through
+  stays prose on the card. `--no-components` turns it off, and
+  [The terms a word is made of](etymological-components.md) has the detection, the precision and the
+  cost.
+
 - A gloss carries one sense, not a page's worth: every sense that survives disambiguation becomes a
   gloss of its own. Identity is then the pair the design names — the inflected form plus that one
   sense — so a sense met twice collapses even when the two occurrences kept different sets around it.
@@ -184,6 +193,48 @@ design wins and the code is wrong.
   Wiktionary's part of speech is not always UD's. Tags that say only what a thing is not — `X`,
   `SYM`, `PUNCT` — produce no line, since a hint the model cannot act on is prompt spent for nothing.
 
+- **…except where the capital is what made the tag.** `PROPN` on a word whose capital belongs to its
+  position is the one tag the hint fabricates. Stanza reads `Надежда казалась мне солью` as a proper
+  noun and `надежда казалась мне солью` as a noun — one letter, and the lemma with it — and the
+  prompt then told the model to prefer the sense listed under that part of speech, which is *a
+  female given name, Nadezhda*. Term extraction had already ruled the capital suspect by offering
+  the lower-case spelling, and `надежда`, *hope*, was sense 2 in the same listing. Bru found the card
+  in the Stigmata deck, 2026-09-16; 39 terms in a 6,165-sentence subtitle run hit the same rule.
+
+  So where the term is `positional_capital`, the tag is `PROPN`, and some candidate page is
+  lower-case, the hint is replaced by what decker actually knows: *the marked occurrence begins its
+  line or its sentence, and a word in that position takes a capital whatever it is … judge it as
+  though it were written in lower case*.
+
+  **Withholding the tag was not enough, and the wording is held together loosely.** With the hint
+  simply gone, `qwen3.5:4b` still answered the given name. It is the last clause that turns the
+  answer over: the same claim without *judge it as though it were written in lower case* loses it
+  again, and so does the same sentence rearranged around an em-dash. `gemma4:latest` and
+  `gpt-oss:20b` answer *hope* under every wording tried, the broken `PROPN` hint included. Read that
+  as a 4B at its ceiling rather than a prompt with a hole in it.
+
+- **A sense labelled as a figure is taught on top of a plain one, not instead of it.** `мрак` in a
+  Stigmata lyric came back `(poetic) despair`, which is defensible in the line — «Потерянный мрак,
+  которым ты жила» — and was the whole of what the deck taught about the word: a metaphor with
+  nothing under it. `уйти`, reached through `ушла`, came back `(figuratively, poetic) to die` where
+  the line says *left*. Bru's call, 2026-09-17: when a chosen sense carries one of these labels —
+  poetic, figurative, colloquial, archaic, dated, obsolete, slang, literary, humorous, ironic,
+  euphemistic — the page is asked again with the labelled senses removed, and the plain sense that
+  comes back is glossed *first*, with the marked card depending on it the way a form-of card depends
+  on its base word.
+
+  Not every parenthetical: `(anatomy)`, `(with dative)`, `(impersonal)` say which use of the word
+  this is and depend on nothing. These are the ones that say the sense is a figure, a register or an
+  age — a reading a learner cannot arrive at from the word alone. A page whose every sense is
+  labelled gets nothing, there being no plain reading to teach. One extra model call per marked
+  sense chosen; six fired over the 41 lines of `stigmata.txt` (`мрак`, `уйти`, `умереть`, `дни`,
+  `так`, and one repeat), so the stage costs about what it teaches.
+
+  It interacts with the benchmark, and the benchmark had to be told: a check that says the senses
+  kept for a surface *must not* say X will now see the plain sense as well as the figure. `beber` in
+  `bebe de la tradición` is the check written for that case — it asks only that *draw from* is
+  there, and lets *to drink* stand beside it.
+
 - **A clitic is looked up under the title Wiktionary gives a bound morpheme.** The hint above was
   not enough, and the measurement said why: the preposition is not on the page at all. `ל` is a page *about the letter* — Lamed, the twelfth letter, and two noun senses — and the
   preposition is at `ל־`, with a maqaf. The model was choosing correctly among what it was shown.
@@ -265,6 +316,56 @@ design wins and the code is wrong.
   dictionary keeps the definitions. On the survey's Chinese sample this took coverage from **82 % to
   99 %** — 240 glosses to 302 — and the four occurrences still without an entry are *Canis lupus*,
   *Cendrillon* and *Cenerentola*, which are not Chinese.
+
+  **Japanese words the same way, from 2026-09-18.** A manga deck reported 116 terms with no Japanese
+  section and **89 of them had one** — 飲む, 分かる, 出来る, ください, 無い, 取る, ダメ, バカ — every
+  one a spelling the dictionary files under another. `ja-see` is the same template family and
+  `_points_at` already matched the box; two things stopped it reading the target:
+
+  - **The two editions word the sentence differently.** Chinese names the spelling in it (*see
+    人類*), so the target is the first link after the word. Japanese does not (*see the following
+    entry*) and sets the target below, in a 【 】 block beside the definitions. `_SEE_ENTRY` is that
+    block's link, and it is tried when the sentence named nothing.
+  - **The box has a table inside it.** The entries pointed at are laid out in one, so the old
+    non-greedy `(.*?)</table>` ended at the *inner* table's close — after the first entry and before
+    every other. `_see_box` counts table depth instead. Reading a box for a single target the old way
+    answers `みる` with `ミル` and looks entirely right doing it.
+
+  **One target is followed and several are not**, which is Bru's call of the same day. 68 of the 89
+  name one spelling; the other 20 are kana strings pointing at a pile of homophones — いん at
+  nineteen kanji words, みる at both ミル and 見る. Those are not spellings of one word, they are a
+  list of the words that sound alike, and mostly reached from a fragment Stanza cut rather than from
+  a word the text used. Taking the first of them is the answer decker refuses to give anywhere else
+  (see [term extraction](term-extraction.md) on entries, and the audio rule in this document), and
+  pooling nineteen entries into a disambiguation prompt is a cost with nothing behind it. So a box
+  naming several targets is left where it was: no section, and `--unknowns` answers for it.
+
+- **A redirect is followed, and takes the title with it.** A hard redirect renders as the redirect
+  notice and nothing else — no language section, no senses — so the word reached the definer with
+  nothing. `грез` in a Russian text lemmatises to `греза`, which the English Wiktionary keeps as a
+  redirect to `грёза`, and the word was dropped; with the unknown-words stage in front of it, it was
+  handed to a model instead, which called it a Polish word. Bru found that one, 2026-09-16. Of the
+  8,870 pages in a warm cache, **37 were redirect stubs** — every one a word decker had thrown away.
+  Seven are exactly this: a Russian word whose `ё` the text prints as `е` (`темный`, `тяжелый`,
+  `приемный`, `влюбленный`, `печенка`, `актерский`, `греза`), which is how Russian is ordinarily
+  printed. The rest are spellings of every other kind — `East coast` → `East Coast`, `Млечный путь` →
+  `Млечный Путь`, `be able` → `be able to`, `как дела?` → `как дела`.
+
+  `_redirects_to` reads the target out of the notice and `_from_redirect` re-reads the page there —
+  one hop, since a wiki does not follow a double redirect either. **Unlike the see-box above, the
+  title changes**: a see-box is a real section at a real spelling that keeps its definitions
+  elsewhere, whereas a redirect is the dictionary saying this spelling is not an entry. For the `ё`
+  that is the whole point — `грёза` is the word, and the diaeresis the text dropped is where the
+  stress falls: the card reads `[ˈɡrʲɵzə]`. A card fronted `греза` would teach the reader the
+  spelling they had just read. One regex, matching the list the notice is written as, which both
+  parsers emit; Parsoid also marks it with a `<link rel="mw:PageProp/redirect">` and the mirror's
+  legacy parser does not, so that is not what is matched.
+
+  This reaches a lemma whose `ё`-less spelling is a redirect, and only that. An inflected form has
+  no redirect of its own — `грёз` is an entry, *genitive plural of грёза*, while `грез` is not a
+  title at all — so the form is reached by restoring the mark before the lookup instead, which is
+  the rule in [Term extraction](term-extraction.md). The two overlap on the lemmas and neither
+  covers the other's words.
 
 - **A stylesheet inlined into a definition is not part of the definition.** MediaWiki puts a
   template's CSS *inside the list item it styles*, so the rendered `<li>` for 男の子 opens with

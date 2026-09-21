@@ -99,6 +99,30 @@ def reading_of(upos: str) -> str:
     return READING.format(reading=named) if named else ""
 
 
+#: Said in place of the reading when the parse's `PROPN` is the capital's
+#: doing. Withholding the tag was tried first and was not enough: with the
+#: hint gone, `qwen3.5:4b` still read `Надежда казалась мне солью` as the name,
+#: the capital in the passage being signal enough on its own. So the thing
+#: decker knows is said outright -- term extraction has already decided the
+#: capital is suspect, and the lower-case entry is in the listing because of
+#: it, which the model has no way to see.
+#:
+#: The last clause is the one that does the work, and this wording is held
+#: together loosely. *Judge it as though it were written in lower case* turns
+#: the answer over; the same claim without it -- "its capital is the line's and
+#: says nothing about the word" -- leaves `Надежда` the given name, and so does
+#: the same sentence rearranged around an em-dash parenthetical. That is a 4B
+#: at the edge of what it can do rather than a prompt with a missing
+#: instruction: `gemma4:latest` and `gpt-oss:20b` answer *hope* under every
+#: wording tried, including the wrong `PROPN` hint this replaced. Measured
+#: 2026-09-17, on the deck Bru was about to study.
+CAPITAL = """
+The marked occurrence begins its line or its sentence, and a word in that
+position takes a capital whatever it is, so its capital says nothing about the
+word: judge it as though it were written in lower case, from what the passage
+means."""
+
+
 #: Asked when the word is not in the text at all, but is referenced by a
 #: definition that describes another word in terms of it. One sense is wanted:
 #: the reader needs the meaning the reference relies on, not the word's range.
@@ -153,6 +177,7 @@ class Disambiguator:
         parts_of_speech: tuple[str, ...] = (),
         sources: tuple[str, ...] = (),
         upos: str = "",
+        positional_capital: bool = False,
         single: bool = False,
     ) -> tuple[Sense, ...]:
         """Return the senses worth glossing, in their original order.
@@ -182,7 +207,7 @@ class Disambiguator:
                 language=language,
                 sentence=sentence,
                 surface=surface,
-                reading=reading_of(upos),
+                reading=CAPITAL if positional_capital else reading_of(upos),
                 title=title,
                 senses=listing,
             )

@@ -16,7 +16,8 @@ cannot tell its subjects apart has stopped being one. Bru's call: more sentences
 
 ## What it is
 
-`tools/benchmark/checks.json`: **24 sentences over four languages**, and 24 checks.
+`tools/benchmark/checks.json`: **24 sentences over four languages**, and **48 checks** — twelve per
+language, doubled from 24 on Bru's instruction, 2026-09-17.
 
 | | why it is in there |
 |---|---|
@@ -35,6 +36,21 @@ constellation, the mincer or the surname; `есть` *to eat* and not the copula
 not *rule; law*. Every one was written against the sense list the page actually carries, read out of
 the mirror first, rather than from memory of what the word means.
 
+**The second twenty-four are checks, not sentences.** The same passages were read again for
+ambiguities the first pass left on the table, which buys discrimination for nothing: no new text, no
+new attribution, no longer run. They lean on the kinds of ambiguity the first set under-covered —
+a taxonomic sense against an everyday one (`отряд` the order, not a military detachment; `género`
+was already there), a word that is a word and a name (`juliana` from *juliano*, not the soup cut),
+an auxiliary against a full verb (`werden` forming the passive, not the future), a form's own page
+against its lemma's (`капель` the genitive plural of `капля`, not the dripping of thawing snow), and
+a sense that the model has to *not* over-read (`durch` as *by means of*, not *through a door*).
+
+`beber` is the one written for a stage rather than a language: `bebe de la tradición juliana` is the
+figurative *draw from*, and since a marked sense now drags its plain sense into the deck with it
+(`definition-fetching.md`), the check asks only that *draw from* is there and lets *to drink* stand
+beside it. A `must_not` written the old way would have failed the pipeline for doing the right
+thing.
+
 **Three outcomes, not two.** A check whose term was never glossed is *absent*, not failed: it says
 nothing about the model, and a great deal about the run. Term extraction quietly ceasing to produce a
 term is exactly the failure a benchmark must be able to name rather than blame on the model — and it
@@ -51,7 +67,35 @@ OLLAMA_HOST=... DECKER_WIKTIONARY_HOST=... \
 Concepts and rules are off, so the glosses are word senses and nothing else. It exits non-zero when
 a check fails, which is the only respect in which it behaves like a test.
 
-## What it says, 2026-09-15
+## What it says, 2026-09-17, on the 48 checks
+
+| model | passed | failed | glosses | notes |
+|---|---|---|---|---|
+| `qwen3.5:latest` (9B) | **43** | 5 | **403** | 6.15 GB at runtime; **3.52 GB of it fits the card** |
+| `qwen3.5:4b` | 42 | 6 | 416 | 3.13 GB, wholly resident |
+| `gemma4:latest` | 40 | 8 | 409 | 9.6 GB on disk, 3.23 GB resident — an E-variant |
+
+**One check, for ten times the wall clock.** The doubled set was meant to decide whether a bigger
+model earns its keep on this hardware, and it says no. The honest timing is the cold pair, each
+model asked every question for the first time: `qwen3.5:4b` **106s**, `qwen3.5:latest` **1045s** — a
+GTX 2060 holds 3.5 GB of the 9B's 6.15 and pages the rest through system RAM. The warm re-runs in
+the table above (259s, 458s, 826s) are parses, index scans and a handful of uncached calls, and are
+not a speed measurement of anything.
+
+Nor is it a clean upgrade. The 9B fixes `описать` (*to describe*, not *to take an inventory*) and
+`年` (it stopped keeping three senses for `二十年`), and breaks `durch`, where *durch eine
+Artenschranke getrennt* comes back *owing to; because of* and the 4B has *by means of*. It does keep
+about 3 % fewer senses, which is 3 % fewer cards for the same text.
+
+`gemma4:latest` is third on checks here as it was on the 24, so the ordering the old measurement
+gave has held. It is the one that reads `Надежда казалась мне солью` as *hope* under every prompt
+tried, which no check in this file asks about — a reminder that 48 checks over four Wikipedia leads
+are not the whole of what a model does to a deck.
+
+**`qwen3.5:4b` stays the default.** Bru, 2026-09-17: the 9B's one extra check is not worth ten times
+the run.
+
+## What it said, 2026-09-15, on the 24
 
 | model | passed | failed | glosses for the 24 sentences | failures |
 |---|---|---|---|---|

@@ -90,6 +90,14 @@ class Cue:
     text: str
 
 
+@dataclass(frozen=True)
+class Placed:
+    """A cue, and where its words ended up in the folded text."""
+
+    offset: int
+    cue: Cue
+
+
 def text_of(raw: str) -> str:
     """The words of a cue file, in order, as one text.
 
@@ -100,24 +108,55 @@ def text_of(raw: str) -> str:
     is a break whether the speaker paused or not. A blank line is how that is
     said to Stanza, which splits on one and not on a bare newline.
     """
-    cues = _cues(raw)
+    return "".join(piece for piece, _ in _folded(_cues(raw)))
+
+
+def timed(raw: str) -> list[Placed]:
+    """The same fold, with each cue's offset into the text it produced.
+
+    What :func:`text_of` throws away, kept for the one caller that needs the
+    clock back: the text is identical, character for character, because it is
+    the same fold -- this returns the pieces and their offsets instead of
+    joining them. A later stage can then take any position in the text, or in
+    a sentence the parser found in it, and say when it was said.
+    """
+    placed: list[Placed] = []
+    offset = 0
+    for piece, cue in _folded(_cues(raw)):
+        if cue is not None:
+            placed.append(Placed(offset=offset, cue=cue))
+        offset += len(piece)
+    return placed
+
+
+def _folded(cues: list[Cue]) -> list[tuple[str, Cue | None]]:
+    """The pieces the fold is made of: each cue's text, and what joins them.
+
+    One list, so :func:`text_of` and :func:`timed` cannot drift apart: the
+    text is the pieces joined, and the offsets are their lengths summed.
+    """
     if not cues:
-        return ""
+        return []
     ending = sum(1 for cue in cues if cue.text.rstrip().endswith(tuple(_TERMINAL)))
     if ending >= PUNCTUATED * len(cues):
-        return " ".join(cue.text for cue in cues)
+        pieces: list[tuple[str, Cue | None]] = []
+        for position, cue in enumerate(cues):
+            if position:
+                pieces.append((" ", None))
+            pieces.append((cue.text, cue))
+        return pieces
 
-    out: list[str] = []
+    pieces = []
     words = 0
     for position, cue in enumerate(cues):
-        if out:
+        if pieces:
             paused = cue.start - cues[position - 1].end >= PAUSE
-            out.append("\n\n" if paused or words >= MAX_WORDS else " ")
+            pieces.append(("\n\n" if paused or words >= MAX_WORDS else " ", None))
             if paused or words >= MAX_WORDS:
                 words = 0
-        out.append(cue.text)
+        pieces.append((cue.text, cue))
         words += len(cue.text.split())
-    return "".join(out)
+    return pieces
 
 
 def looks_like(raw: str) -> bool:

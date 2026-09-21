@@ -137,3 +137,54 @@ _LECTS = {
 def lect_of(code: str) -> str:
     """The pronunciation block this code is taught from, if the entry has one."""
     return _LECTS.get(_key(code), "")
+
+
+#: A letter a language's texts print without the mark its dictionary keeps.
+#: The fourth table of the same kind as :data:`_SECTIONS`, :data:`_JOINERS`
+#: and :data:`_LECTS`, and the same rule -- it is a fact about how the
+#: dictionary is written against how the language is typed, and an entry goes
+#: in when a run has been seen to lose words for want of it.
+#:
+#: One entry. Russian `ё` is optional in ordinary printing and mostly not
+#: printed: `грез`, `темный`, `елка` are how the text spells words the English
+#: Wiktionary titles `грёз`, `тёмный`, `ёлка`. Nothing is wrong with the text
+#: and nothing is wrong with the dictionary, so there is nothing here for a
+#: model to judge -- asked, `qwen3.5:4b` says `грез` is a Russian word meaning
+#: "dreams", which is true and leaves the word without its entry. Restoring
+#: the mark and asking the index is a computation, and this is it.
+#:
+#: Belarusian is not here although it has the letter: its `ё` is obligatory,
+#: so a Belarusian text already spells what the dictionary does.
+_RESTORED = {"ru": (("е", "ё"),)}
+
+#: How many of the letter one word may carry before the candidates are not
+#: worth generating. Every subset is tried, since a word can drop two marks --
+#: `трехколесный` for `трёхколёсный` -- and 4 keeps that at fifteen lookups
+#: against a set already in memory. Beyond it the word is left alone: Russian
+#: words with five `е` exist and words with five `ё` do not.
+_RESTORED_LIMIT = 4
+
+
+def respellings(word: str, code: str) -> tuple[str, ...]:
+    """``word`` as the dictionary may spell it, the text's own spelling aside.
+
+    Candidates only: every one is looked up, and the ones that are not titles
+    cost a set membership test and vanish. `грез` offers `грёз`, which is an
+    entry -- *genitive plural of грёза* -- so the occurrence is glossed as the
+    form the reader met rather than falling back to its lemma.
+    """
+    marks = _RESTORED.get(_key(code))
+    if not marks:
+        return ()
+    found: list[str] = [word]
+    for plain, restored in marks:
+        places = [index for index, letter in enumerate(word) if letter == plain]
+        if not 1 <= len(places) <= _RESTORED_LIMIT:
+            continue
+        for combination in range(1, 1 << len(places)):
+            spelling = list(word)
+            for bit, place in enumerate(places):
+                if combination & (1 << bit):
+                    spelling[place] = restored
+            found.append("".join(spelling))
+    return tuple(dict.fromkeys(found[1:]))

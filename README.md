@@ -33,6 +33,14 @@ of a new speaker dropped. Where such a file has no punctuation at all — some r
 write none — the sentence boundaries come from the cue timings instead. It may also be `-` for
 standard input, which is sniffed for cue files, since standard input has no extension to go by.
 
+It may also be a manga: a [mokuro](https://github.com/kha-white/mokuro) archive, either the
+`.mbz.zip` mokuro writes or the `.mbz` folder it unpacks to. Each speech bubble is one sentence, the
+columns its text was set in joined back together, and the pages are read in the order the archive
+lists them — which is already right to left, top to bottom. Bubbles that are only punctuation —
+`⋯`, `‼︎！` — are dropped, and the pictures are never opened. The deck is named after the series and
+volume the archive knows itself by (`Gokurakugai 0001`) rather than after the file, which is usually
+just a number. See [docs/execution/manga.md](docs/execution/manga.md).
+
 **Several sources** may be given at once, and they are read in order:
 
 ```
@@ -47,6 +55,20 @@ deck you built from one; `--out` and `--name` override both.
 
 `--format` chooses the output — `text` and `json` everywhere, `markdown` for `define`, `apkg` for
 `deck` — and `--out` names the file.
+
+**A deck you are already studying** takes two flags, and they are different jobs. `--previous
+deck.apkg` builds only what that deck does not teach, and numbers the cards after the ones it has
+not shown you yet, so importing adds them to the end of the queue instead of among what is already
+waiting. `--update deck.apkg` rebuilds the whole thing and keeps the identity its notes have in
+Anki, so importing corrects the cards you have — their scheduling included — rather than putting a
+second copy of each beside them; that is what to use when decker has learned to write a card
+better, as it did when a production card stopped printing its own answer. Export the deck from
+Anki to hand it back — with *Support older Anki versions* ticked, since decker cannot read the
+compressed format newer Anki writes by default, and says so by name if you hand it one — or pass
+the `.apkg` decker wrote. Both read the gloss keys decker records on every note, so a deck built
+before those existed says so rather than quietly matching nothing. What an update cannot do is
+move the cards you already have: they keep their place in the queue, so a card added ahead of one
+you have already been given arrives behind it.
 
 ### Languages
 
@@ -72,16 +94,28 @@ reached a card untranslated, and silence there means everything did:
 ```
 
 `--no-disambiguate`, `--no-translate` and `--no-audio` skip those stages outright: much
-faster, much worse. `--no-concepts` and `--no-rules` switch off the two stages that make cards of
-their own — the grammatical terminology a definition is written in, and the regularity behind an
-inflected form.
+faster, much worse. `--no-concepts`, `--no-rules` and `--no-components` switch off the three stages
+that make cards of their own — the grammatical terminology a definition is written in, the
+regularity behind an inflected form, and the terms an etymology decomposes a word into.
+
+That last one reads the etymology the card already shows: where it states a sum of terms in the
+language being taught — `descargar` is `des- +‎ cargar`, `venenoso` is `veneno +‎ -oso` by surface
+analysis — each term gets a card of its own, ahead of the word made of them, and recursively, since
+a term may be a sum itself. Only a sum, so a doublet or a `Compare` names nothing; only that
+language, so the Latin an etymology walks back through stays prose on the card. See
+[docs/execution/etymological-components.md](docs/execution/etymological-components.md).
 
 `--teach-script` is off by default and adds cards rather than skipping them: every character of a
-*term* written in a script the mother tongue does not use gets a card of its own, ahead of the word
-that uses it — the letters of an alphabet, the kana and the kanji of a Japanese word, each with what
-Wiktionary says about the character and how it is pronounced. Only the term: not its definition, its
+*term* written in a script the mother tongue does not use gets a pair of cards of its own, ahead of
+the word that uses it — the letters of an alphabet, the kana and the kanji of a Japanese word, each
+with what Wiktionary says about the character and how it is pronounced. Only the term: not its definition, its
 examples or its transcription. The Latin alphabet counts as one, so a Spanish deck for an English
-reader gains nothing and says so, a Russian one gains its alphabet, a Japanese one its kana. Which
+reader gains nothing and says so, a Russian one gains its alphabet, a Japanese one its kana and
+its kanji. A character the text also teaches as a word of its own gets one card, not two: the word
+card is the one kept, and where the shape was glossed from Translingual — `Kangxi radical #9` — the
+word card replaces that too. A character card carries the readings Wiktionary lists for it — `Kan-on: けつ (ketsu)`,
+`Kun: きまる (kimaru)` — where the language gives a character no single pronunciation, which is what
+Japanese does; and a character the text also teaches as a word of its own gets one card, not two. Which
 scripts a reader already reads is known for English only; under any other `--mother-lang` the flag
 says so and stays off. See
 [docs/execution/teaching-the-script.md](docs/execution/teaching-the-script.md).

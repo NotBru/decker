@@ -130,6 +130,55 @@ the honest kind: there is nothing to inflect.
 The Japanese misses also include the full-width punctuation `（ ） ：` and the Latin words inside the
 article, which is the extractor offering the definer things that were never going to be entries.
 
+### Japanese loses the soft redirects too, and worse than Chinese does
+
+Found on 2026-09-18, building a deck from a manga volume ([manga as a source](manga.md)) — 443
+speech bubbles, 2,284 terms, 965 glosses. **116 terms were reported `no Japanese section`, and 89 of
+them have one**: it is the same soft redirect that costs Chinese its simplified entries, in the form
+the English Wiktionary gives a Japanese spelling that is not the one it writes the entry under.
+
+```
+分かる  →  For pronunciation and definitions of 分かる – see the following entry. 【わかる】
+いう    →  For pronunciation and definitions of いう – see the following entries. 【言う】
+```
+
+The 89 are not marginal words. 飲む, 食い, 分かる, 出来る, 有る, 無い, 取る, 言い, 早く, ください,
+ダメ, バカ, とにかく, 今更 — a beginner's first hundred verbs, plus every kana spelling of a word
+Wiktionary files under kanji and every kanji spelling of one it files under kana. The other 27 of the
+116 are the honest kind: full-width punctuation, the English inside the page, and OCR noise.
+
+Two things make this worse than the Chinese case rather than the same size:
+
+- **The definitions are on the page that was fetched.** The redirect box lists them inline —
+  `【言う】 [verb] to say, to tell somebody …` — so this is not a second fetch that decker declines
+  to make, it is a section of a page already in the cache that the sense reader walks past. The
+  Chinese case at least needs another title.
+- **The unknown-words stage then answers for them**, and answers badly. A word with no section
+  reaches `--unknowns`, which asks the model whether a reader of English would know it; the model
+  says *foreign and widely known* of 分かる, 匂い, バレる, アンタ, しっぽ, 上手い, ヤツ and 関わる,
+  and each gets no card. Of the 116, **at least 32 end with no card at all**, 11 are written by the
+  model instead of by Wiktionary, and 29 survive only because the same text also used a spelling
+  that does have a section.
+
+**Fixed the same day**, and more cheaply than this section first guessed: the box did not need a new
+parser, because `_points_at` — written for Chinese — already matched it. It needed the Japanese
+wording of the sentence and a box reader that counts nested tables. What that cost the deck, on the
+same volume rebuilt:
+
+| | before | after |
+|---|---|---|
+| terms reported with no Japanese section | 116 | 54 |
+| word glosses | 933 | 988 |
+| cards | 2,357 | 2,490 |
+| words with no entry at all | 61 | 21 |
+| cards a model wrote instead of Wiktionary | 14 | 4 |
+
+分かる, 飲む, 出来る, ください, 無い, 取る, ダメ, バカ, とにかく, 匂い, 早く, 上手い, 貰う, 成る and
+あなた are all taught from the dictionary now. The 54 that remain are the honest kind: punctuation,
+the English inside the page, OCR noise, and the 20 kana strings that point at a pile of homophones
+rather than at one spelling — see [definition fetching](definition-fetching.md) for why those are
+left alone.
+
 ### The model imports gender into languages that have none
 
 The rule prose is the weakest link everywhere, and in the agglutinative languages it fails in a way

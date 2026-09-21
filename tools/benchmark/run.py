@@ -50,7 +50,7 @@ def main(model: str, out: str | None, refresh: bool = False) -> int:
             built = G.build(
                 sentences, target_lang=block["lang"], edition="en", model=model,
                 host=os.environ.get("OLLAMA_HOST"), disambiguate=True, audio=False,
-                concepts=False, rules=False, refresh_answers=refresh,
+                concepts=False, components=False, rules=False, refresh_answers=refresh,
             )
         #: Folded, because a card is fronted with Wiktionary's spelling: a
         #: sentence-initial `Хозяин` is glossed `хозяин`, and a check written

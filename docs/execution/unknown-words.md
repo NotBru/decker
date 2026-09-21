@@ -62,6 +62,22 @@ sixteen:
 `und` is the one that separates them: `gemma4:latest` says *it means 'and' in German*, `qwen3.5:4b`
 takes it for a fragment and drops it. Dropping is the cheaper error and the default model makes it.
 
+## Some of these words are the fetcher's fault, not the dictionary's
+
+A word arriving here is a claim that Wiktionary has no entry, and the claim can be wrong. `грез` in a
+Russian text was asked about and came back *a Polish word*. No lever in this stage improves that,
+because the entry exists and the lookup was at fault twice over: the lemma `греза` is a redirect to
+`грёза`, which the fetcher read as a page with no senses, and the form `грез` is spelled `грёз` in
+the dictionary, which the title lookup never tried. Bru found it, 2026-09-16; both are fixed, in
+[Definition fetching](definition-fetching.md) and [Term extraction](term-extraction.md).
+
+Asking the model harder would not have worked, and it is worth saying why, because the obvious
+reading of that bug is that the fallback should have spotted a typo. It is not a typo. Asked plainly,
+`qwen3.5:4b` answers that `грез` is a Russian word meaning *dreams* — `native`, no correction — and
+it is right: `е` for `ё` is how Russian is printed. The disagreement is between the text's spelling
+and the dictionary's, which is a fact to look up and not a judgement to make. The stage is the last
+resort, so a wrong answer here is worth reading as a question about the stage before it.
+
 ## What it does not fix
 
 The explanations are a model's, with a model's accuracy. Asked about `chirola` — Rioplatense slang

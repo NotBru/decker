@@ -13,6 +13,12 @@ decks/
 # extension that would have walked one in.
 *.srt
 *.vtt
+
+# Manga: a mokuro archive is somebody's comic, pages and all, and decker reads
+# one now. Same reason as the cue files above, and a volume is 26 MB of PNG on
+# top of it.
+*.mbz
+*.mbz.zip
 __pycache__/
 *.py[cod]
 

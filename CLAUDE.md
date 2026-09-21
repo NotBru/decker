@@ -36,20 +36,31 @@ the code changes.
 - [Detecting a form-of](docs/execution/form-of-detection.md) — the two regexes that decide what
   points at what: how precise they are, what widening them costs, and the markup that would do it
   properly.
+- [The terms a word is made of](docs/execution/etymological-components.md) — the sums an etymology
+  states, glossed recursively: why the plus is the whole test, what the looser rule would have
+  carded, and what the stage costs per language.
 - [Deck growth](docs/execution/deck-growth.md) — what a deck costs as the corpus grows, measured over
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
 - [Words Wiktionary has no entry for](docs/execution/unknown-words.md) — misspellings looked up,
   foreign words explained or dropped, and the fabrications the first prompt produced.
 - [The benchmark](docs/execution/benchmark.md) — 24 sentences, four languages, known answers: what
   sense disambiguation is checked against, and why the five-sentence one stopped discriminating.
+- [Manga as a source](docs/execution/manga.md) — a mokuro `.mbz` archive read for its speech: why
+  a block is the sentence and its lines are not, the reading order that came free, and the bubbles
+  that are only punctuation.
 - [Subtitles as a source](docs/execution/subtitles.md) — `.srt` and `.vtt` folded back into prose:
   the rolling repeats, the markup, and where sentence boundaries come from when a machine wrote the
   captions and left no punctuation.
 - [What a run says while it runs](docs/execution/the-console.md) — levels, the colour per outcome,
-  the bar and its units, and what Ctrl+C ends.
+  the bar and its units, and what Ctrl+C ends; and the curses screen a terminal gets — log to the
+  left, the deck's tally to the right — including why it takes both descriptors and what it leaves
+  behind.
 - [Teaching the script](docs/execution/teaching-the-script.md) — the default-off flag that teaches
   the characters a term is written in: why the test is a script and not an alphabet, where a symbol
   card's text comes from, and what it costs in each kind of writing system.
+- [When can I watch this](docs/execution/timeline.md) — a deck read back against the subtitle file
+  it was built from: what the clock costs in cards, why the headline is 95% of a stretch and not all
+  of it, and what a deck exported mid-study changes.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.
@@ -63,10 +74,30 @@ uv run decker define --target-lang es --format markdown source.txt   # glosses, 
 uv run decker extract --target-lang es source.txt      # terms, sentence by sentence
 uv run decker index --target-lang es                   # build the whole title index up front
 uv run decker --target-lang es episode.vtt             # subtitles: .srt and .vtt read as prose
+uv run decker --target-lang ja 0001.mbz.zip            # manga: a mokuro archive read for its speech
+uv run decker timeline --target-lang es --deck episode.apkg episode.vtt   # the clock, in cards
 ```
 
 With no subcommand the whole pipeline runs, which is what `deck` does; `define`, `extract` and
-`index` stop it earlier. Sense disambiguation, and translation when `--mother-lang` is not `en`, need
+`index` stop it earlier. `timeline` is the one that reads rather than writes: given a cue file and a
+deck built from it, it says how far into the deck a viewer must be to have met the words said up to
+each timestamp — 95% of them by default, the last of them in a column beside it, and days at
+`--rate` new cards a day. It re-runs extraction and definition over the file to recover the gloss
+keys, so give it the stage flags the deck was built with.
+
+A deck already in Anki is updated with one of two flags: `--previous deck.apkg` builds only what it
+does not teach and numbers those cards after the ones it has not shown, while `--update deck.apkg`
+rebuilds the whole deck keeping the identity its notes have there, so an import corrects the cards
+already being studied instead of duplicating them. Both read the gloss key decker tags every note
+with.
+
+A source is plain text, a `.srt` or `.vtt` cue file, or a mokuro `.mbz` archive — the zip or the
+folder it unpacks to. A manga's blocks are its sentences and a block's `lines` are the columns one
+was set in, so the lines are joined and the blocks are not; the pages come in the order the
+archive's metadata lists them, which is already reading order. The deck's title comes from that
+metadata (`Gokurakugai 0001`) since the file is named after the volume number alone.
+
+Sense disambiguation, and translation when `--mother-lang` is not `en`, need
 an ollama host (`--ollama-host`, or `OLLAMA_HOST`); without one the run degrades and says so.
 Stanza models, Wiktionary title dumps, parsed titles, fetched pages, model answers and audio are
 cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
@@ -76,11 +107,17 @@ own, one per `Appendix:Glossary` entry it links to, titled `Concept:` and carryi
 pair. `--no-concepts` turns the stage off.
 
 `--teach-script`, off by default, adds the writing system itself: every character **of a term**
-written in a script the mother tongue does not use becomes a `Symbol:` card, without a production
-pair, ahead of every term that contains it. The term only — not the definition, the examples or the
-readings — and scripts, not alphabets, so `ñ` and `ç` are Latin and cost nothing while kana, kanji
-and Cyrillic each cost a card. Which scripts a reader reads is known for English only; another
+written in a script the mother tongue does not use becomes a `Symbol:` card, with a production pair
+like a word's, ahead of every term that contains it. The term only — not the definition, the
+examples or the readings — and scripts, not alphabets, so `ñ` and `ç` are Latin and cost nothing
+while kana, kanji and Cyrillic each cost a pair of cards. Which scripts a reader reads is known for English only; another
 `--mother-lang` turns the stage off with a line saying so.
+
+Where an etymology states a sum of terms **in the language being taught** — `des- +‎ cargar`,
+`veneno +‎ -oso` by surface analysis — each of those terms becomes a card of its own, ahead of the
+word made of them and recursively, a component being a word that may be a sum itself. Only a sum,
+so a doublet, a cognate and a `Compare` name nothing; only that language, so the foreign ancestors
+stay prose on the card. `--no-components` turns the stage off.
 
 The regularity behind an inflected form becomes a card too, titled `Rule:` and likewise without a
 production pair: the model is asked whether a form obeys a rule already written for its feature

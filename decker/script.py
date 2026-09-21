@@ -118,6 +118,32 @@ _MARKS = {"Mn", "Mc", "Me"}
 #: word entry may answer for it.
 HAN = "CJK"
 
+#: The languages that read a Han character more than one way, so that the
+#: character has no pronunciation of its own to teach and a card claiming one
+#: is claiming something the language does not have.
+#:
+#: Japanese, and as far as a living language goes only Japanese: it took the
+#: characters twice from Chinese -- go-on and kan-on, the same word heard two
+#: or three centuries apart -- and then wrote its own words with them as well,
+#: so 下 is shita, shimo, moto, ge and ka depending on the word it is in, and
+#: 食 is uka, uke, ke and shoku. Every other language that uses the script
+#: reads a character one way: a hanzi is one syllable of Mandarin, a hanja one
+#: of Korean. Which reading a kanji takes is a fact about the word, and a word
+#: card carries it.
+_MANY_READINGS = {"ja"}
+
+
+def speaks(character: str, code: str) -> bool:
+    """Whether ``character`` has a pronunciation of its own in ``code``.
+
+    A letter and a syllable do -- that is what a phonographic script is -- and
+    so does a hanzi. A kanji does not, and the honest card is the silent one:
+    see :data:`_MANY_READINGS`.
+    """
+    if script_of(character) != HAN:
+        return True
+    return code.strip().casefold().split("-")[0] not in _MANY_READINGS
+
 
 def scripts_of(code: str) -> tuple[str, ...] | None:
     """The scripts a reader of ``code`` already reads, or ``None``.

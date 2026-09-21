@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from decker.console import DETAIL, log
+from decker.console import DETAIL, console, count, log
 
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything, and it is measured rather than guessed.
@@ -130,18 +130,25 @@ class Session:
             else:
                 log(f"[decker]     {self.what}: remembered", level=DETAIL,
                     kind="detail")
+                count("model.remembered")
                 return answer
         #: Timed, because this is where a run's wall clock goes and the whole
         #: of the model comparison in `DEFAULT_MODEL` is these seconds added
         #: up. At `-vv` a slow model is visible in the first minute rather
         #: than at the end of the run.
         started = time.monotonic()
+        count("model.asked")
         try:
             response = self._chat(prompt, schema)
             answer = json.loads(response["message"]["content"])
         except Exception as error:  # ollama down, model missing, bad JSON
             self.warn(str(error))
+            count("model.failed")
             return None
+        #: Added up rather than only printed: the difference between a cold run
+        #: and a warm one is the whole difference in wall clock, and a total on
+        #: the screen says which this is without waiting for the run to end.
+        console.stats.spent("model", time.monotonic() - started)
         log(f"[decker]     {self.what}: {self.model} answered in "
             f"{time.monotonic() - started:.1f}s", level=DETAIL, kind="detail")
         if path is not None:

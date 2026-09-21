@@ -1,5 +1,5 @@
 {
- "what": "Known-answer checks for sense disambiguation: 24 sentences, four languages, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
+ "what": "Known-answer checks for sense disambiguation: 24 sentences, four languages, 48 checks, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
  "languages": {
   "es": {
    "lang": "es",
@@ -89,6 +89,72 @@
       "group of friends"
      ],
      "why": "según la raza: breed"
+    },
+    {
+     "surface": "mundo",
+     "must": [
+      "world"
+     ],
+     "must_not": [
+      "hopscotch",
+      "considerable amount"
+     ],
+     "why": "de varios lugares del mundo: the world, not Peruvian hopscotch"
+    },
+    {
+     "surface": "escrito",
+     "must": [
+      "written"
+     ],
+     "must_not": [
+      "stains or scratches",
+      "legal demand",
+      "typescript"
+     ],
+     "why": "la primera versión escrita: written, not a writ"
+    },
+    {
+     "surface": "primero",
+     "must": [
+      "ordinal number"
+     ],
+     "must_not": [
+      "card game",
+      "chief, fundamental",
+      "prime, initial"
+     ],
+     "why": "la primera versión: the ordinal"
+    },
+    {
+     "surface": "juliana",
+     "must": [
+      "juliano"
+     ],
+     "must_not": [
+      "julienne",
+      "dame's rocket"
+     ],
+     "why": "la tradición juliana: Julian, not the soup cut"
+    },
+    {
+     "surface": "ser",
+     "must": [
+      "copulative"
+     ],
+     "must_not": [
+      "a being, organism",
+      "nature, essence",
+      "value, worth"
+     ],
+     "why": "es un cuento de hadas: the verb, not the noun"
+    },
+    {
+     "surface": "beber",
+     "must": [
+      "draw from"
+     ],
+     "must_not": [],
+     "why": "que bebe de la tradición: the figurative sense, which the plain one is taught under"
     }
    ]
   },
@@ -161,6 +227,93 @@
       "static on TV"
      ],
      "why": "Hagel, Graupel oder Schnee: the weather"
+    },
+    {
+     "surface": "durch",
+     "must": [
+      "by means of"
+     ],
+     "must_not": [
+      "entering, then exiting",
+      "divided by",
+      "crazy, freaked out",
+      "during; throughout"
+     ],
+     "why": "durch eine Artenschranke getrennt: by means of, not through a door"
+    },
+    {
+     "surface": "Sinn",
+     "must": [
+      "sense"
+     ],
+     "must_not": [
+      "sensus",
+      "mind, consciousness",
+      "point, idea, tenor",
+      "feeling"
+     ],
+     "why": "im engeren Sinn: the sense of a word"
+    },
+    {
+     "surface": "Mensch",
+     "must": [
+      "human"
+     ],
+     "must_not": [
+      "derogatory",
+      "rah"
+     ],
+     "why": "im Wohnbereich des Menschen: people, not the dialectal word for a woman"
+    },
+    {
+     "surface": "halten",
+     "must": [
+      "to keep"
+     ],
+     "must_not": [
+      "to hold (an object",
+      "to stop",
+      "lecture",
+      "to stick"
+     ],
+     "why": "im Wohnbereich gehalten: kept, not held or stopped"
+    },
+    {
+     "surface": "werden",
+     "must": [
+      "passive voice"
+     ],
+     "must_not": [
+      "future tense",
+      "to become; to get",
+      "colloquial"
+     ],
+     "why": "zugeordnet wird: the passive auxiliary"
+    },
+    {
+     "surface": "und",
+     "must": [
+      "co-ordinating"
+     ],
+     "must_not": [
+      "so?, now?",
+      "rhetoric questions"
+     ],
+     "why": "Hund und Wolf: the plain conjunction"
+    },
+    {
+     "surface": "können",
+     "must": [
+      "to be able",
+      "auxiliary, with an infinitive"
+     ],
+     "must_not": [
+      "to be to blame",
+      "to be allowed",
+      "to be possible",
+      "informal"
+     ],
+     "why": "können Nachkommen zeugen: to be able to"
     }
    ]
   },
@@ -252,6 +405,75 @@
       "computing) host"
      ],
      "why": "Хозяин купил: the master"
+    },
+    {
+     "surface": "отряд",
+     "must": [
+      "taxonomy"
+     ],
+     "must_not": [
+      "detachment",
+      "squadron",
+      "group, team"
+     ],
+     "why": "отряда хищных: the taxonomic order, not a military detachment"
+    },
+    {
+     "surface": "хлеб",
+     "must": [
+      "bread"
+     ],
+     "must_not": [
+      "Saint Petersburg",
+      "figurative",
+      "in the plural"
+     ],
+     "why": "рецептура хлеба: the bread itself"
+    },
+    {
+     "surface": "капель",
+     "must": [
+      "genitive plural of ка́пля"
+     ],
+     "must_not": [
+      "thawing snow",
+      "chemistry"
+     ],
+     "why": "в виде капель: drops, not the dripping of thawing snow"
+    },
+    {
+     "surface": "описать",
+     "must": [
+      "to describe, to depict"
+     ],
+     "must_not": [
+      "urinate",
+      "inventory",
+      "mathematics"
+     ],
+     "why": "была описана как вид: described in words"
+    },
+    {
+     "surface": "общество",
+     "must": [
+      "society"
+     ],
+     "must_not": [
+      "school slang",
+      "business enterprise"
+     ],
+     "why": "Американское общество маммологов: a learned society"
+    },
+    {
+     "surface": "содержать",
+     "must": [
+      "to contain"
+     ],
+     "must_not": [
+      "to support",
+      "to maintain"
+     ],
+     "why": "рецептура содержит соль: to contain, not to keep or support"
     }
    ]
   },
@@ -349,6 +571,68 @@
       "to average"
      ],
      "why": "平均則為十數年: the average"
+    },
+    {
+     "surface": "世界",
+     "must": [
+      "world"
+     ],
+     "must_not": [
+      "Buddhism",
+      "tarot",
+      "Northern Wu",
+      "Hokkien"
+     ],
+     "why": "全世界各處: the world"
+    },
+    {
+     "surface": "狗",
+     "must": [
+      "dog"
+     ],
+     "must_not": [
+      "derogatory",
+      "police",
+      "cunning",
+      "to flatter",
+      "zodiac"
+     ],
+     "why": "通稱狗: the animal"
+    },
+    {
+     "surface": "民間",
+     "must": [
+      "folk"
+     ],
+     "must_not": [
+      "non-governmental",
+      "among the common people"
+     ],
+     "why": "民間故事: a folk tale"
+    },
+    {
+     "surface": "法語",
+     "must": [
+      "French language"
+     ],
+     "must_not": [
+      "Buddhism",
+      "etiquette"
+     ],
+     "why": "法語：Cendrillon: the language"
+    },
+    {
+     "surface": "年",
+     "must": [
+      "year"
+     ],
+     "must_not": [
+      "harvest",
+      "Chinese New Year",
+      "surname",
+      "period (in history)"
+     ],
+     "why": "超過二十年: years of life"
     }
    ]
   }

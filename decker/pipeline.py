@@ -20,6 +20,7 @@ from decker.cards import Card
 from decker.console import VERBOSE, console, log
 from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
+from decker.languages import respellings
 from decker.nlp import pipeline
 from decker.terms import Term, extract
 from decker.translation import SOURCE_LANG
@@ -37,6 +38,12 @@ class SentenceTerms:
 
     text: str
     terms: list[Term]
+    #: Where the sentence starts in the text the parser was given, so a stage
+    #: that knows something about the source's own shape -- a cue file's
+    #: clock -- can say where in it this sentence was. -1 when the parse did
+    #: not offer one, which is a tokenizer without character offsets rather
+    #: than anything about the sentence.
+    start: int = -1
 
 
 def run(
@@ -64,10 +71,17 @@ def run(
     vocabulary = None
     if not whole_index:
         log("[decker] collecting the text's vocabulary", level=VERBOSE)
+        #: With the respellings, or the filter throws away the very titles
+        #: they were generated to reach: `грёз` is not a spelling the text
+        #: has, and an index built from the text alone would not keep it.
         vocabulary = wiktionary.vocabulary_of(
             tree
             for sentence in sentences
-            for tree in trees.sentence_tree(sentence, join_particles=join_particles)
+            for tree in trees.sentence_tree(
+                sentence,
+                join_particles=join_particles,
+                respell=lambda label: respellings(label, target_lang),
+            )
         )
         log(f"[decker] {len(vocabulary)} distinct spellings to look for",
             level=VERBOSE)
@@ -82,7 +96,12 @@ def run(
     #: is the difference between "it is working" and "it is stuck on the
     #: index".
     found = []
-    with console.phase("terms", sum(len(one.text) for one in sentences)):
+    with console.phase(
+        "terms",
+        sum(len(one.text) for one in sentences),
+        unit="characters",
+        items=len(sentences),
+    ):
         for sentence in sentences:
             if console.skipping():
                 break
@@ -93,11 +112,19 @@ def run(
                         sentence, index, join_particles=join_particles,
                         lang=target_lang,
                     ),
+                    start=_start_of(sentence),
                 )
             )
             console.advance(len(sentence.text))
     log(f"[decker] {sum(len(one.terms) for one in found)} terms", kind="head")
     return found
+
+
+def _start_of(sentence) -> int:
+    """Where a parsed sentence begins in the document, by character."""
+    tokens = getattr(sentence, "tokens", None)
+    start = getattr(tokens[0], "start_char", None) if tokens else None
+    return -1 if start is None else int(start)
 
 
 def define(
@@ -112,6 +139,7 @@ def define(
     disambiguate: bool = True,
     audio: bool = True,
     concepts: bool = True,
+    components: bool = True,
     rules: bool = True,
     unknowns: str = "fix",
     refresh_pages: bool = False,
@@ -121,6 +149,55 @@ def define(
     mother_lang: str = SOURCE_LANG,
 ) -> list[Gloss]:
     """Run the v1 pipeline the whole way, from text to glosses."""
+    return glossed(
+        text,
+        target_lang=target_lang,
+        edition=edition,
+        whole_index=whole_index,
+        refresh_titles=refresh_titles,
+        model=model,
+        host=host,
+        disambiguate=disambiguate,
+        audio=audio,
+        concepts=concepts,
+        components=components,
+        rules=rules,
+        unknowns=unknowns,
+        refresh_pages=refresh_pages,
+        refresh_answers=refresh_answers,
+        known=known,
+        teach_script=teach_script,
+        mother_lang=mother_lang,
+    )[1]
+
+
+def glossed(
+    text: str,
+    *,
+    target_lang: str,
+    edition: str | None = None,
+    whole_index: bool = False,
+    refresh_titles: bool = False,
+    model: str | None = None,
+    host: str | None = None,
+    disambiguate: bool = True,
+    audio: bool = True,
+    concepts: bool = True,
+    components: bool = True,
+    rules: bool = True,
+    unknowns: str = "fix",
+    refresh_pages: bool = False,
+    refresh_answers: bool = False,
+    known: frozenset[str] = frozenset(),
+    teach_script: bool = False,
+    mother_lang: str = SOURCE_LANG,
+) -> tuple[list[SentenceTerms], list[Gloss]]:
+    """The same run, keeping the sentences the glosses were made from.
+
+    :func:`define` is this and its second half. The sentences are what a
+    caller needs to say *where* a gloss came from, which the glosses
+    themselves record only as an index into this list.
+    """
     sentences = run(
         text,
         target_lang=target_lang,
@@ -137,6 +214,7 @@ def define(
         disambiguate=disambiguate,
         audio=audio,
         concepts=concepts,
+        components=components,
         rules=rules,
         unknowns=unknowns,
         refresh=refresh_pages,
@@ -149,7 +227,7 @@ def define(
         mother_lang=mother_lang,
     )
     pages.report()
-    return glosses
+    return sentences, glosses
 
 
 def deck(

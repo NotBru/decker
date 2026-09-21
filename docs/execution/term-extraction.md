@@ -71,6 +71,31 @@ wins and the code is wrong.
   only in lower case. The other 579 are forms Wiktionary has no page for at all, where the lemma's
   entry is the right card and the fix is the one in `definition-fetching.md` — the front now says so.
 
+- **A mark the text leaves off and the dictionary keeps is put back before the lookup.** Russian
+  prints `ё` as `е` nearly everywhere — `грез`, `темный`, `елка`, `звезды` — and the English
+  Wiktionary titles those entries `грёз`, `тёмный`, `ёлка`, `звёзды`. Neither side is wrong, so
+  there is nothing here for the unknown-words model to judge: asked what `грез` is, `qwen3.5:4b`
+  answers that it is a Russian word meaning *dreams*, which is true, and leaves it without its
+  entry. It is a computation, and `languages.respellings` is it — a fourth table beside `_SECTIONS`,
+  `_JOINERS` and `_LECTS`, with one entry, `ru`.
+
+  Every combination of the marks is offered, since a word can drop two (`трехколесный` for
+  `трёхколёсный`), and the candidates are generated blind: they are looked up against the title
+  index like any other spelling, and one that is not a title costs a set membership test and
+  vanishes. A word carrying more than four `е` is left alone — Russian words with five `е` exist
+  and words with five `ё` do not.
+
+  A candidate that *is* a title becomes one of the form's own spellings (`Term.respelled`), so the
+  card is fronted with it. `грез` in `Это мир моих грез` now reaches `грёз` — *genitive plural of
+  грёза* — where before it reached no entry at all and went to the model, which called it a Polish
+  word. Four sentences of ordinary Russian gain thirteen cards this way: `тёмный`, `ёлка`, `ёлку`,
+  `ребёнок`, `звёзды`, `всё`, `ещё`, `её`, `слёзы`, `грёзы`, `приёмный`, `актёрский`, `лётчиком`.
+
+  The vocabulary the index is filtered by has to carry the candidates too, or the scan throws away
+  the very titles they were generated to reach. Over those four sentences it doubles — 58 spellings
+  to 112 — and the index grows from 60 single-word titles to 76, over the same 4.1-second pass of
+  the dump. The pass is the cost, and it is unchanged.
+
 - Joining the particle is restricted to languages that write separable verbs as one word.
   Ungated, English produced the archaic entry `upgive` from `gave ... up`.
 

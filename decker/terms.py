@@ -8,7 +8,7 @@ from typing import Any
 
 from decker import trees
 from decker.console import VERBOSE, log
-from decker.languages import joiner_of
+from decker.languages import joiner_of, respellings
 from decker.wiktionary import TitleIndex
 
 
@@ -48,6 +48,12 @@ class Term:
     #: what the rules stage is given so it does not write a rule about
     #: feminine nouns in Turkish.
     features: tuple[str, ...] = ()
+    #: The dictionary's other spellings of this same form, where the text's
+    #: own is not one it keeps: `грез` is in the dictionary as `грёз`, the
+    #: diaeresis being a mark Russian prints only sometimes. The form the
+    #: reader met, under the spelling the entry is titled with, so
+    #: :attr:`spellings` carries it and the card is fronted with it.
+    respelled: tuple[str, ...] = ()
     #: Wiktionary's own spelling of this form as a bound morpheme, where the
     #: term is one and the dictionary has it: `ל` in the text is `ל־` on the
     #: page. The same form under the dictionary's convention rather than
@@ -73,6 +79,7 @@ class Term:
                 found.append(lowered)
         if self.joined:
             found.append(self.joined)
+        found.extend(self.respelled)
         return tuple(found)
 
 
@@ -93,7 +100,10 @@ def extract(
     A term the sentence uses twice in the same form is reported once.
     """
     matches: dict[frozenset[int], set[str]] = {}
-    for root in trees.sentence_tree(sentence, join_particles=join_particles):
+    respell = (lambda label: respellings(label, lang)) if lang else None
+    for root in trees.sentence_tree(
+        sentence, join_particles=join_particles, respell=respell
+    ):
         for node in root.walk():
             for title in node.labels & index.words:
                 matches.setdefault(_covered_by_label(node, title), set()).add(title)
@@ -137,6 +147,7 @@ def extract(
             initial,
             base,
             joined=bound,
+            lang=lang,
         )
         if term.surface not in seen:
             seen.add(term.surface)
@@ -205,6 +216,7 @@ def _term(
     base: int,
     *,
     joined: str = "",
+    lang: str = "",
 ) -> Term:
     ids = tuple(sorted(covered))
     tokens = [words[token_id] for token_id in ids]
@@ -220,6 +232,18 @@ def _term(
         upos=_head(tokens).upos or "",
         features=_features(tokens),
         joined=joined,
+    )
+    #: Only a respelling the dictionary actually has is the term's own: the
+    #: candidates are generated blind, and one that matched no title is a
+    #: string this occurrence has nothing to do with.
+    term = dataclasses.replace(
+        term,
+        respelled=tuple(
+            spelling
+            for base_spelling in term.spellings
+            for spelling in respellings(base_spelling, lang)
+            if spelling in entries
+        ),
     )
     own = set(term.spellings)
     return dataclasses.replace(
