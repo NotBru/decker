@@ -406,6 +406,45 @@ are three cards whichever of them a symbol card took.
 
 `--teach-script` off makes none of this fire: with no symbol glosses there is nothing to fold.
 
+### Han, and only Han — 2026-09-22
+
+The rule above was written for `決` and applied to every script, and over a Japanese deck that is
+the wrong half of the alphabet. A hanzi is a morpheme: `決 — to decide` is a statement about the
+shape and about the word at once, and one card honestly says both. **A kana is not.** `の — genitive
+case marker` is a statement about a particle. What it never says is that this shape is the syllable
+*no*, that it sits in な行 of the gojūon, and that its counterpart in the other syllabary is `ノ` —
+which is the entire content of `Symbol: の`, and the thing a reader who cannot yet read has to have.
+
+Read back off `decks/japanese.apkg`, the deck of `benchmark.md`: 73 kana had a symbol card and 51
+kana had a word card, and **34 kana had only the word** — `の`, `に`, `て`, `と`, `を`, `つ`, `も`
+among them, which is to say the most common characters in the language were taught as grammar and
+never as writing. The word cards are not silent about the sound (`の` carries `[no̞]` and `• (no)`),
+so what was lost is the shape's own statement and its link to the other syllabary, not the reading.
+
+So both tests now ask `script.script_of(character) == script.HAN` — the constant was already in
+`script.py` carrying exactly this rationale, "a Han character is a morpheme, so a word entry may
+answer for it", and it had simply never been consulted here:
+
+- `symbol()` takes a standing word gloss in place of a shape card **only for a Han character**.
+- The self-guard is Han's too. A one-kana word now asks for its own shape: `私の本です` gives
+  `Symbol: の` as card 3 and `の` as card 5, *after 3*.
+- `_folds_into` returns `None` for anything but Han, so a kana pair is never written into one slot.
+
+**Where the word card came first, the word is made to wait** (`_after`): the shape's card carries
+the higher index, the dependency points backwards, and the shuffle's topological sort is what
+orders the deck. That is the ordinary backwards edge `deck-building.md` already describes.
+
+**It is the phonographic/ideographic split and not a kana special case**, which is why Cyrillic
+moves with it: `Мой дом в лесу` now gives `Symbol: в` ahead of the preposition `в`, where before the
+preposition stood for the letter. Any script whose characters spell sounds gets its shape cards
+back; Han keeps the 2026-09-21 behaviour unchanged, and a run over `私の本です` produces no
+`Symbol: 本` beside `本`.
+
+The cost is cards. The 2026-09-21 fold removed 11 symbol cards from the Gokurakugai deck and this
+gives some of them back, plus one card per kana that only ever appeared alone — at the top end, the
+34 above, each with a production pair, so under 70 cards on a 2,014-card deck. A reader who cannot
+read `の` is not helped by having been taught what it does.
+
 ## What it does not do
 
 - **It does not teach the transcription.** A card still shows `[ˈmalʲt͡ɕɪk]` to a reader who has

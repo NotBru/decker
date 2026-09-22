@@ -520,9 +520,13 @@ class _Builder:
         block glosses three senses, and *to burst* and *to decide* are two
         cards whichever of them the symbol card took.
 
-        `--teach-script` off is `self.symbols` empty, so this never fires.
+        **And only a Han character folds at all**, for the reason
+        :meth:`symbol` gives: a syllable's card and the card of the particle
+        written with that syllable say different things, and Bru's call of
+        2026-09-22 is that both are kept. `--teach-script` off is
+        `self.symbols` empty, so this never fires.
         """
-        if len(surface) != 1:
+        if len(surface) != 1 or script.script_of(surface) != script.HAN:
             return None
         index = self.symbols.get(surface)
         if index is None:
@@ -590,27 +594,67 @@ class _Builder:
     ) -> int | None:
         """The gloss that teaches one character, making it if there is none.
 
-        A character the text already teaches as a word of its own is that
+        A Han character the text already teaches as a word of its own is that
         word's gloss: the reader has met the shape, which is all a dependency
         here asserts. It is what keeps a Chinese deck from carrying a symbol
         card behind every word card.
 
-        Including the word being glossed at this moment, which is the half
-        the rule was missing: `決` asked for its own character while its own
-        gloss was still being built, found nothing in `by_surface` and made
+        **Han, and only Han**, which is Bru's call of 2026-09-22 narrowing a
+        rule that was written for it and applied to every script. A hanzi is a
+        morpheme, so `決 -- to decide` is a statement about the shape and the
+        word at once and one card says both. A kana is not: `の -- genitive
+        case marker` is a statement about a particle, and what it never says
+        is that this shape is the syllable *no*, that its row is な行 and that
+        its counterpart in the other syllabary is `ノ`. That is the symbol
+        card's whole content, and a deck that dropped it taught the most
+        common characters in the language as grammar and never as writing --
+        34 kana of Gokurakugai 0001, `の`, `に`, `て`, `と` and `を` among
+        them. See :data:`script.HAN`.
+
+        Where the word came first the character's card comes after it, and
+        the word is made to wait for it: see :meth:`_after`. The shuffle
+        sorts on the dependency and not on the index, so the reader meets the
+        shape first however late its card was made.
+
+        A Han character is not its own dependency, which is the half the rule
+        was missing: `決` asked for its own character while its own gloss was
+        still being built, found nothing in `by_surface` and made
         `Symbol: 決` a card ahead of an identical `決`. A term is not taught
         before itself, so there is nothing to depend on and nothing to teach.
+        A one-kana word is the same shape of case and the opposite answer:
+        `の` glossed as a particle is not `の` taught as a syllable, so the
+        shape's card is made and the word waits for it.
         """
-        if character == self.glossing:
+        if character == self.glossing and script.script_of(character) == script.HAN:
             return None
         if character in self.symbols:
             return self.symbols[character]
-        if (word := self.by_surface.get(character)) is not None:
+        word = self.by_surface.get(character)
+        if word is not None and script.script_of(character) == script.HAN:
             self.symbols[character] = word
             return word
         index = self._teach(character, readings, where)
         self.symbols[character] = index
+        if index is not None and word is not None:
+            self._after(word, index)
         return index
+
+    def _after(self, gloss: int, needs: int) -> None:
+        """Make a gloss already made wait for one made after it.
+
+        The word `の` reached the deck before anything asked for the shape
+        `の`, so the character's card carries the higher index and would be
+        studied after the particle written with it. The dependency says
+        otherwise and the dependency is what the shuffle's topological sort
+        reads, so this is the ordinary backwards edge the sort already
+        absorbs -- `deck-building.md` -- and not a renumbering.
+        """
+        standing = self.glosses[gloss]
+        if needs == gloss or needs in standing.depends_on:
+            return
+        self.glosses[gloss] = dataclasses.replace(
+            standing, depends_on=_merge(standing.depends_on, (needs,))
+        )
 
     def _teach(
         self, character: str, readings: tuple[str, ...] = (), where: str = ANYWHERE
