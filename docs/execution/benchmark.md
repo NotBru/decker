@@ -223,3 +223,64 @@ sessions, and the second is worth reading: *"take any verb, change its final let
 → 'tabete' → 'tabeteku'"*, on a base recorded as `a`. Rule cards are written by the model out of an
 inflection line and say so on the card; this one is a fabrication, and Japanese is where the stage
 should be looked at next.
+
+
+## The other clock: what a run costs, 2026-09-22
+
+Sense quality is one axis and wall clock is the other, and a deck nobody waits for is not a deck.
+The measurement here is of decker rather than of a model, so it is the one thing in this file that
+is not a judgement: the same work, the same caches cold, the code before a change and after it.
+
+**What was already known** (profiled 2026-09-21, py-spy at 25 Hz, flamegraph kept out of the
+repository in `~/.cache/decker/profiles/`): a cold build of this deck with `--limit-glosses 1024`
+took **1,926 s** and was **97.8 % blocked on two sockets that never talk at the same time** —
+ollama 1,047.7 s (54.4 %), Wikimedia 830 s (43.1 %) — with about 43 s of CPU in the whole run.
+Optimising decker's own Python was never going to matter; the two remote machines taking turns was.
+
+Three changes, all of them the plan that profile produced:
+
+- **One connection per origin, not one per request.** `pages._fetch` built a fresh
+  `urllib.request` every time, so every page paid DNS, TCP and a TLS handshake again — 186 s of
+  that 1,926, measured directly (getaddrinfo 33.7 s, create_connection 88.3 s, do_handshake 63.8 s
+  over 968 requests). It is now one kept-open `http.client` connection per origin, per thread,
+  dropped and remade when the other end has closed it.
+- **A prefetcher two sentences ahead of the gloss loop**, on two threads (`_Ahead`). It fetches the
+  pages the coming terms will need — including the character pages a `--teach-script` run wants,
+  which were 16 % of the Japanese network time — and asks the sense question those terms will be
+  asked, and throws both answers away. What it fills is the page cache and the answer cache; the
+  loop finds them there. It computes no gloss, holds nothing the builder reads, and a prompt is a
+  pure function of the page and the passage, so a question asked ahead is the same question.
+- **Two questions in flight instead of one**, which falls out of the same two threads: the box
+  answers at 0.71 s a question asked serially and **0.45 s at two**, flat at four and six (measured
+  against fesat with `qwen3.5:4b`; the ceiling is the GPU, not admission control). A question
+  already in flight is now waited for rather than asked twice, since a cache file that does not
+  exist yet cannot dedupe anything.
+
+**The connection, measured on its own.** Thirty titles each, the two paths interleaved inside one
+process so that neither arm gets a warmer Wikimedia than the other — because the first pass over a
+title pays for the render and the second does not, which is what made the first attempt at this
+measurement say the opposite of the truth:
+
+| a page fetched through | mean | median | 30 titles |
+|---|---|---|---|
+| a fresh connection, as before | 1.003 s | 0.788 s | 30.1 s |
+| **a kept connection** | **0.664 s** | **0.561 s** | **19.9 s** |
+
+**All three, end to end.** The same workload each time — `deck --target-lang ja --teach-script
+--limit-glosses 256` over `0001.mbz.zip` — with `DECKER_CACHE_DIR` pointed at an empty directory, so
+every page and every answer is fetched and asked for the first time. A throwaway run went first so
+that Wikimedia's own cache was warm for both:
+
+| | wall clock | glosses | cards | pages fetched | questions asked |
+|---|---|---|---|---|---|
+| before | 403 s | 260 | 506 | 245 | 172 |
+| **after** | **232 s** | 258 | 502 | 248 | 172 |
+
+**1.74×**, and 1.8× on the glossing stage itself: 21 s of each run is the parse, the title index and
+term extraction, which none of this touches. The two runs differ by two glosses because each asked
+the model afresh and a GPU batches differently at concurrency two — which is the reason the honest
+check of *sameness* is the other one: **given the same caches and the same `--seed`, the deck the
+new code writes is byte-identical to the deck the old one writes.**
+
+What is left is what the profile said would be left: at 232 s this run is mostly fesat generating
+tokens, and the levers after that are a smaller model, a better card, or asking fewer questions.

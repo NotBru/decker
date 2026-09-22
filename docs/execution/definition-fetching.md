@@ -770,6 +770,32 @@ really is "From zorá, named by a zoologist"; every `See the etymology of the co
 lands on a verb form instead of that form inheriting its lemma's prose.
 
 
+## Reading ahead of the loop
+
+Fetching and glossing alternated, so one of the two machines a run needs was always idle: decker
+asked Wikimedia for a page while the model waited, then asked the model while the network waited. A
+cold Japanese build was 97.8 % blocked on those two sockets. `_Ahead` runs two sentences in front of
+the gloss loop on two threads, fetching the pages the coming terms will need — their own, and under
+`--teach-script` the character pages too — and asking the sense question they will be asked.
+
+**It cannot change a deck, and that is the whole of its design.** It appends no gloss, holds no
+index and writes nothing the builder reads back; what it fills is the page cache and the answer
+cache, which the loop was going to read anyway. The prompt is built by `Disambiguator.question`, the
+one `keep` uses, so the question warmed is the question asked — a prompt differing by a space would
+warm nothing and pay for every question twice — and a prompt is a pure function of the page and the
+passage, asked at temperature zero. A prefetch that guesses wrong costs one wasted question, which
+is why the lookahead is two sentences and the queue is bounded at four: a `--limit-glosses` stop
+should not have paid for sentences nobody read.
+
+Three things had to be made safe for a second thread, each of them a line: the page cache writes
+beside and moves into place, as the answer cache already did; the run's counters take a lock; and a
+question already in flight is waited for rather than asked twice, since a cache file that does not
+exist yet cannot dedupe anything. Wikimedia's half stays serialized by the same pacing floor it
+always had, which is what that server counts.
+
+The numbers are in [The benchmark](benchmark.md): 403 s to 232 s on the same cold workload, and a
+byte-identical deck given the same caches and seed.
+
 ## Licensing
 
 - Wiktionary's text is CC BY-SA 4.0, and a gloss quotes it whole — definitions, examples,
