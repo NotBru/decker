@@ -126,3 +126,100 @@ and the models read a tongue. And **the classifier is what no Spanish benchmark 
 `一名貧苦的少女` is read as *name* by all four, `一則民間故事` as *conjunction* or *rule* by two. A
 classifier is a word that means almost nothing on its own and everything in its slot, and it is the
 single hardest thing in this set.
+
+
+## A deck read back by hand: Gokurakugai 0001, 2026-09-22
+
+The 48 checks measure one stage against known answers. This is the other half of the question —
+**what a finished deck actually reads like** — and it is a different instrument: one deck, read card
+by card against the pages of the manga it was built from, with a judged sample rather than a stored
+answer key. It belongs here because it is the only other thing in the repository that *scores*
+anything, and because it caught failures no check in `checks.json` is shaped to catch.
+
+```
+OLLAMA_HOST=http://172.17.0.1:11435 uv run decker --target-lang ja --teach-script \
+    --limit-glosses 1024 --name Japanese --out decks/japanese.apkg \
+    decks/Gokurakugai/0001.mbz.zip
+```
+
+`qwen3.5:4b`, the default, over the tunnel to the GPU box. The deck is left in `decks/japanese.apkg`
+(gitignored, like every deck). Wall clock is not reported here, and the 110 s this run took is not a
+number: most of its answers were already in the cache. The timings are measured separately, below.
+
+### What came out
+
+| | |
+|---|---|
+| source | 443 speech bubbles, 5,063 characters, 443 sentences, 2,284 terms |
+| read | 234 of the 443 sentences, which is where `--limit-glosses 1024` stopped it |
+| glosses | 1,024 = **736 words, 257 symbols, 31 concepts**, of which 66 are etymological components |
+| cards | **2,014** — 1,024 recognition, 990 production (the 31 concepts and 3 model-explained unknowns carry no pair) |
+| folded | 11 symbol cards became the word card the text teaches the same character with |
+| no entry | 16 words: 2 foreign and explained, 1 foreign and known, 1 native, 12 unrecognizable |
+| coverage | of the 478 distinct term surfaces in the sentences read, **401 (84 %) have a card** |
+| ordering | 4 glosses depend on a gloss with a higher index; **0 cards are studied before something they depend on** — the shuffle's topological sort absorbs it |
+| what a card carries | 713 glosses with IPA, 526 with an etymology, 125 with a recording, 105 with an example |
+
+The two fixes of the same morning are in it: `街` is *town, district, area* `[ɡa̠i]` with
+`Kan’yō-on: がい (gai, Jōyō)` alone under it, and `Symbol: 極` carries `Go-on: ごく (goku, Jōyō)` and
+nothing else. Across the deck, 54 symbol cards carry a single reading line and 128 carry the whole
+list; of the one-character word cards, 127 carry one line and 26 the list.
+
+### Sixty cards, judged in context
+
+A seeded sample of 60 word cards, each read against the bubble it was first met in:
+
+| | | |
+|---|---|---|
+| **right** | 43 | 72 % |
+| thin or defensible | 6 | 10 % |
+| **wrong** | 11 | 18 % |
+
+*Thin* is a card that is not wrong and teaches nothing much: `もの — (conjunctive)`, `なの` labelled
+*chiefly women's speech* under a man's line, `おわす` glossed correctly as a dependency of ござる that
+the text never needed.
+
+**The eleven wrong ones do not have one cause, and only four are the model choosing a sense.** That
+is the finding, and it says where the next work is:
+
+| what went wrong | n | the cards |
+|---|---|---|
+| the sense chosen for a word that really is there | 4 | `消える — to die` (人が消える is *vanish*), `成る — to be acceptable` in 世話になってる, `吐く — to confess` for 嘘を吐く, `電 — lightning` inside 電話 |
+| the parse produced a word that is not there | 3 | `成る` out of the stutter なっなななんなん, `ら — imperfective of る` out of the elongated なーら, `つい — inadvertently` out of について |
+| a dependency judged against a passage it does not appear in | 3 | `小さい` and `と`, both dependencies of ちょっと and disambiguated against the one-word bubble 「ちょっと」; `しまう — to close` reached from ちゃう |
+| the surface's page beat the lemma's | 1 | `せ — rapids, current` for the causative せ of 言わせる, whose own entry せる was in the same candidate listing |
+
+Manga is what makes the second row: speech is drawn, not typed, and elongation (`なーら`,
+`わっかるー`), stuttering (`なっなな`), and set phrases split at the wrong seam (`について`) are what a
+dependency parser meets in a bubble and not in Wikipedia. The OCR adds its own — `鯉` glossed as
+*the common carp* comes from a bubble mokuro read as 極楽街**鯉**決事務所, and `玉 — a female
+entertainer` from `＃玉大ＵＩＫ`. Neither is decker's mistake and both are cards in the deck.
+
+### What a scan of all 1,024 says
+
+Four defects are countable without judgement, and each is a class rather than an accident:
+
+- **4 cards whose definition is Wiktionary's maintenance boilerplate** — `饅 — This term needs a
+  translation to English. Please help out and add a translation`, and the same on `雪`,
+  `Symbol: 旋`, `Symbol: 捕`. A sense that asks the reader to edit Wiktionary is not a sense.
+- **5 cards whose only sense is onomastic** — `最 — a male given name[2]`, `近 — a surname`,
+  `友`, `西`, `雪`. Two of them are right (`西雪春` is a character's name); the other three are
+  components of 最近, where the name sense is the one thing the compound cannot mean.
+- **7 cards for rōmaji transcription entries** — `a`, `an`, `no`, `do`, `you`, `hiragana`,
+  `katakana`, each *Rōmaji transcription of …*. They arrive as dependencies: `ィ`'s definition
+  mentions katakana, the form-of reader takes the word, and the page it reaches is the Latin
+  spelling's. A card fronted with the English word `you` in a Japanese deck is never right.
+- **185 cards above one per surface.** 114 of the 551 distinct word surfaces kept more than one
+  sense — に has 10 cards, て 9, 前 6 (*a portion*, *the front*, *the past*, *the last*, *ago*,
+  *previous*). By the tag the parse gave the term: NOUN 45, VERB 31, ADP 26, AUX 24, PART 13. A
+  fifth of the word cards in the deck are a second or third sense of a word already taught, and the
+  particles are where it concentrates — which is the Hebrew-prefix finding of `definition-fetching.md`
+  turning up in another language with another cause.
+
+**No `Rule:` card appears in this deck at all**, though `--no-rules` was not passed. 59 glosses are
+form-of lines, but a rule's card waits for a second instance of the same bundle and none reached one
+inside the 1,024. The store `~/.cache/decker/rules/ja.json` does hold two rules from earlier
+sessions, and the second is worth reading: *"take any verb, change its final letter to 'te' … 'taberu'
+→ 'tabete' → 'tabeteku'"*, on a base recorded as `a`. Rule cards are written by the model out of an
+inflection line and say so on the card; this one is a fabrication, and Japanese is where the stage
+should be looked at next.
