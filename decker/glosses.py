@@ -25,6 +25,7 @@ import dataclasses
 import hashlib
 import re
 import sys
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -131,6 +132,15 @@ NOTATION_PARTS = ("Symbol",)
 #: all, and this is for the character it has no section for. And only for Han,
 #: which is the one script decker teaches whose characters mean anything.
 HAN_SOURCES = ("zh", "ko", "vi")
+
+#: Where in a term the character asking for a card sits, and so where in the
+#: term's reading its own reading has to be found: at the start, at the end,
+#: anywhere (a character in the middle, or one the term writes twice), or the
+#: whole of it (the term *is* the character). A rough test is worth much more
+#: for knowing this: 一人 is *hitori*, and 人's own page reads it ひと as a
+#: word -- which is inside *hitori*, and is the wrong half of it. See
+#: :func:`_where`.
+ANYWHERE, AT_START, AT_END, THE_WHOLE = "", "start", "end", "whole"
 
 #: The section a character's own entry lives under when no language claims it:
 #: the IPA symbols, the punctuation and the Han characters are all written
@@ -451,8 +461,17 @@ class _Builder:
                 #: The character's readings where the term *is* a character.
                 #: A word is read as a word and has its own pronunciation;
                 #: this list is what a page says instead when there is no
-                #: such thing to say.
-                readings=page.readings_of(sense) if len(surface) == 1 else (),
+                #: such thing to say. Cut to the reading this word is the
+                #: character read as, where the page says which -- a card
+                #: fronting 街 and answering `[ɡa̠i]` has no use for the other
+                #: three; see :func:`_as_used`.
+                readings=(
+                    _as_used(
+                        page.readings_of(sense), page, page.ipa_of(sense), THE_WHOLE
+                    )
+                    if len(surface) == 1
+                    else ()
+                ),
                 audio_urls=(recordings := page.audio_of(sense)),
                 audios=self._audios(page, recordings),
                 depends_on=depends_on,
@@ -557,13 +576,16 @@ class _Builder:
         if not self.teach_script:
             return ()
         found = [
-            self.symbol(character, readings)
+            #: With where in the term the character sits as well as how the
+            #: term is read: 一人 reads 人 as り, and ひと is the other half
+            #: of the same word. See :func:`_where`.
+            self.symbol(character, readings, _where(term, character))
             for character in script.foreign(term, self.reads)
         ]
         return tuple(index for index in found if index is not None)
 
     def symbol(
-        self, character: str, readings: tuple[str, ...] = ()
+        self, character: str, readings: tuple[str, ...] = (), where: str = ANYWHERE
     ) -> int | None:
         """The gloss that teaches one character, making it if there is none.
 
@@ -585,12 +607,12 @@ class _Builder:
         if (word := self.by_surface.get(character)) is not None:
             self.symbols[character] = word
             return word
-        index = self._teach(character, readings)
+        index = self._teach(character, readings, where)
         self.symbols[character] = index
         return index
 
     def _teach(
-        self, character: str, readings: tuple[str, ...] = ()
+        self, character: str, readings: tuple[str, ...] = (), where: str = ANYWHERE
     ) -> int | None:
         """Append the gloss for one character.
 
@@ -603,7 +625,11 @@ class _Builder:
         the shape, and the word that happens to be spelled with it is a
         different card that the text will ask for itself if it uses it.
         """
-        entry, sense, speaks = self._symbol_entry(character, readings)
+        entry, sense, speaks = self._symbol_entry(character, readings, where)
+        #: The parameter is about to be reused for the card's own reading,
+        #: and the term's is still needed below: it is what says which of a
+        #: kanji's readings this deck met it in.
+        term_readings = readings
         shown = script.displayed(character)
         surface = f"{SYMBOL_PREFIX}{shown}"
         definition = sense.definition if sense else script.unicode_name(character)
@@ -653,6 +679,9 @@ class _Builder:
             #: the learner needs are two lines above it, in the section this
             #: deck is being built from.
             spoken = own.readings
+        #: And cut to the reading the term that asked for this card reads it
+        #: with, where the page says which that is: see :func:`_as_used`.
+        spoken = _as_used(spoken, self.page(character), term_readings, where)
         index = len(self.glosses)
         self.glosses.append(
             Gloss(
@@ -692,7 +721,7 @@ class _Builder:
         return index
 
     def _symbol_entry(
-        self, character: str, readings: tuple[str, ...] = ()
+        self, character: str, readings: tuple[str, ...] = (), where: str = ANYWHERE
     ) -> tuple[tuple[Page, Entry] | None, Sense | None, bool]:
         """The entry and sense that talk about the character itself.
 
@@ -737,7 +766,7 @@ class _Builder:
         #: with it are different things, and Russian `я` would come back as
         #: the pronoun.
         if own is not None:
-            entry = self._as_read(own, readings)
+            entry = self._as_read(own, readings, where)
             if entry is not None:
                 return (own, entry), entry.senses[0], False
         #: And only now the other languages that write this character: the
@@ -756,7 +785,9 @@ class _Builder:
                         return (borrowed, entry), entry.senses[0], False
         return None, None, False
 
-    def _as_read(self, page: Page, readings: tuple[str, ...]) -> Entry | None:
+    def _as_read(
+        self, page: Page, readings: tuple[str, ...], where: str = ANYWHERE
+    ) -> Entry | None:
         """The block of ``page`` that the term asking for this card reads with.
 
         A kanji page numbers one etymology per word written with the
@@ -782,14 +813,7 @@ class _Builder:
         blocks = [entry for entry in page.entries if entry.senses]
         if not blocks:
             return None
-        sounds = {_bare(reading) for reading in readings}
-        if sounds:
-            for entry in blocks:
-                for reading in entry.ipa:
-                    bare = _bare(reading)
-                    if bare and any(bare in sound for sound in sounds):
-                        return entry
-        return blocks[0]
+        return _read_as(page, readings, where) or blocks[0]
 
     def translingual_page(self, character: str) -> Page | None:
         """The character's page, cut to the section no language claims."""
@@ -1036,6 +1060,161 @@ def _bare(reading: str) -> str:
     the sounds that have to match.
     """
     return reading.strip("[]/ ").replace("ˈ", "").replace("ˌ", "").replace(" ", "")
+
+
+#: One reading of a `Readings` line, as the line writes it: the kana, then
+#: the romanization and whatever else the line says about it in brackets --
+#: `ごく (goku, Jōyō)`, `きわめる (kiwameru, 極める, Jōyō)`. A line names one
+#: or several, separated by the Japanese comma.
+_ONE_READING = re.compile(r"([^\s、,()]+)\s*\(([^()]*)\)")
+
+#: The romanization a headword line states, which is how a word block says
+#: which reading of the character it is: `• (goku)`, `• (-gai)`. The hyphen a
+#: bound form carries is not part of the sound.
+_ROMAJI = re.compile(r"\(([^()]*)\)")
+
+
+def _where(term: str, character: str) -> str:
+    """Where ``character`` sits in ``term``, as :data:`ANYWHERE` and the rest.
+
+    ``ANYWHERE`` for a character the term writes more than once: which of the
+    two occurrences a reading belongs to is not a question a position can
+    answer, and the unconstrained test is what there was before.
+    """
+    if term.count(character) != 1:
+        return ANYWHERE
+    if len(term) == 1:
+        return THE_WHOLE
+    index = term.index(character)
+    if index == 0:
+        return AT_START
+    return AT_END if index == len(term) - 1 else ANYWHERE
+
+
+def _inside(reading: str, word: str, where: str = ANYWHERE) -> bool:
+    """Whether ``reading`` is one of ``word``'s sounds, start to finish.
+
+    ``where`` says which of them: the first character of a term is read at the
+    start of the term and the last at the end, so a reading found in the wrong
+    half is not this character's. 一人 is *hitori* -- ひと and り, in that
+    order -- and without the constraint 人 took ひと, its own reading as a
+    word, out of the front of the compound. With it 人 is り and 二人 keeps
+    ふた and り as it already had them.
+
+    A substring test, with one guard: a match that stops in the middle of a
+    cluster is not a match. 分 is ぶ `[bɯ̟]` and ぶん `[bɯ̟̃ɴ]`, 分析 is
+    `[bɯ̟̃ɰ̃se̞kʲi]`, and the moraic nasal both nasalizes the vowel before it
+    and assimilates to what follows -- so ぶん does not appear in the compound
+    at all while ぶ appears in the first three characters of it, the tilde
+    over the `ɯ̟` being the fourth. Taking that hands a card `bu` where the
+    word says `bun`. A combining mark following the match means the match cut
+    a sound in half, and a sound cut in half is a different sound.
+    """
+    if where == THE_WHOLE:
+        return reading == word
+    start = word.find(reading)
+    while start != -1:
+        end = start + len(reading)
+        #: A match that begins on a combining mark, or ends before one, cut a
+        #: sound in half at that end, and half a sound is a different sound.
+        whole = not unicodedata.combining(word[start]) and (
+            end >= len(word) or not unicodedata.combining(word[end])
+        )
+        placed = (
+            (where != AT_START or start == 0)
+            and (where != AT_END or end == len(word))
+        )
+        if whole and placed:
+            return True
+        start = word.find(reading, start + 1)
+    return False
+
+
+def _read_as(
+    page: Page, readings: tuple[str, ...], where: str = ANYWHERE
+) -> Entry | None:
+    """The block of ``page`` whose own reading is inside ``readings``.
+
+    The test :meth:`_Builder._as_read` is built on, and ``None`` rather than a
+    first block where nothing matches: a caller that wants to *name* the
+    reading has to know the difference between the page saying so and the page
+    being read top to bottom.
+
+    The longest match wins, which is what makes the test worth anything on a
+    short reading: 分 is ぶん in 分析 and ぶ is a reading of it too, so the
+    shorter one is inside the word as well and taking the first block to match
+    named `bu` where the word says `bun`. A longer match is a match of more of
+    the word, and the reading the word actually uses is the longest of its
+    readings that the word contains.
+    """
+    sounds = {_bare(reading) for reading in readings}
+    if not sounds:
+        return None
+    found: tuple[int, Entry] | None = None
+    for entry in page.entries:
+        if not entry.senses:
+            continue
+        for reading in entry.ipa:
+            bare = _bare(reading)
+            if not bare or not any(_inside(bare, sound, where) for sound in sounds):
+                continue
+            #: Strictly longer, so a length that decides nothing leaves the
+            #: answer where it was before this: the first block to match, in
+            #: the page's own order.
+            if found is None or len(bare) > found[0]:
+                found = (len(bare), entry)
+    return None if found is None else found[1]
+
+
+def _as_used(
+    spoken: tuple[str, ...],
+    page: Page | None,
+    readings: tuple[str, ...],
+    where: str = ANYWHERE,
+) -> tuple[str, ...]:
+    """The `Readings` list cut to the reading the term reads the character with.
+
+    A kanji's list is what a symbol card carries instead of a pronunciation,
+    because the character has none: 極 is ごく, きょく, きわめる and five more
+    by turns. But the term that asked for the card was read some particular
+    way -- `極楽` is *gokuraku* -- and where the page itself says which of its
+    readings that is, a card listing the other seven is answering a question
+    the text already answered. Bru found it on a manga deck, 2026-09-22: the
+    card for 極 came back with the whole list and *goku* nowhere picked out.
+
+    The page says so in two steps, both of them the page's own words. The word
+    block whose reading is inside the term's is the one the character is read
+    as here -- :func:`_read_as`, the test :meth:`_Builder._as_read` already
+    chooses a sense by -- and that block's headword names the romanization,
+    `• (goku)`. The `Readings` line naming the same romanization is the line
+    the deck met, and it is what the card carries, label and all: *Go-on: ごく
+    (goku, Jōyō)* says both how to read it and that this is the reading a
+    compound takes.
+
+    Everything is a fallback to the whole list: no term reading, no word block
+    matching it, no romanization, no line naming it. The rough places are
+    :meth:`_Builder._as_read`'s -- rendaku, and a word like 今日 no character
+    is read in at all -- and the cost of each is the card decker made before
+    this, which is the list.
+    """
+    if len(spoken) <= 1 or page is None or not readings:
+        return spoken
+    entry = _read_as(page, readings, where)
+    if entry is None:
+        return spoken
+    found = _ROMAJI.search(entry.headword)
+    if found is None:
+        return spoken
+    romaji = found.group(1).strip().strip("-\u2010\u2011")
+    if not romaji:
+        return spoken
+    for line in spoken:
+        label, _, rest = line.partition(":")
+        for one in _ONE_READING.finditer(rest if rest else line):
+            if one.group(2).split(",")[0].strip() != romaji:
+                continue
+            return (f"{label.strip()}: {one.group(0)}" if rest else one.group(0),)
+    return spoken
 
 
 def _merge(*groups: tuple[int, ...]) -> tuple[int, ...]:
@@ -1583,7 +1762,7 @@ def _dependency(
     target = builder.page(title)
     if target is None:
         return None
-    labelled = target.senses
+    labelled = target.word_senses
     kept = builder.disambiguator.keep(
         tuple(one for _, one in labelled),
         sentence=marked,
@@ -1689,7 +1868,9 @@ def _plainly(
     """
     if not is_marked(sense.definition):
         return ()
-    plain = [(part, one) for part, one in page.senses if not is_marked(one.definition)]
+    plain = [
+        (part, one) for part, one in page.word_senses if not is_marked(one.definition)
+    ]
     if not plain:
         return ()
     kept = builder.disambiguator.keep(
@@ -1848,7 +2029,11 @@ def _pooled_senses(
     labelled = [
         (page, part, sense)
         for page in candidates
-        for part, sense in page.senses
+        #: The word's senses and not the character's: a `Kanji` block glosses
+        #: the shape, and pooled with them it is one more numbered candidate
+        #: -- the first one -- for a word the text used. See
+        #: :attr:`Page.word_senses`.
+        for part, sense in page.word_senses
     ]
     if not labelled:
         return candidates[0], ()

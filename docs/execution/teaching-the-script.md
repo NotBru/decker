@@ -146,6 +146,7 @@ shape, `SHAPE_PARTS`, most telling first:
 | `的` (zh) | Chinese *Definitions* — bright; clear; distinct |
 | `辺` (ja) | Japanese *Noun* — place, general area, vicinity |
 | `下` (ja) | Japanese *Noun* or *Affix* — whichever of its five etymologies the term is read with |
+| `極` (ja) | Japanese *Kanji* — extreme, with `Go-on: ごく (goku)` alone where the term is 極楽 |
 | `娘` (ja) | Japanese *Noun* — daughter, and not Chinese's *mother* |
 | `한` (ko) | nothing; the card carries `HANGUL SYLLABLE HAN` |
 
@@ -172,9 +173,11 @@ Several of those rows were decisions a run forced:
   taking the top of the page. The term that asked for the card picks instead: 靴下 is read
   *kutsushita*, so した answers and the card says *the underneath*; 地下 is *chika*, so か answers and
   it says *down; below; beneath*. The test is whether a block's own reading is inside the term's
-  (`_as_read`), which rendaku and the sound changes of compounding will defeat — 今日 is read
-  *kyō* and no character in it is read at all — and when it fails the first block stands, which is
-  what there was before. It costs nothing to be wrong and is right whenever it fires.
+  (`_as_read`), the longest match winning, no match allowed to stop in the middle of a sound, and
+  the first character of a term looked for at the start of its reading and the last at the end. What
+  rendaku and the sound changes of compounding do not defeat, that catches — 今日 is read *kyō* and
+  no character in it is read at all — and when it fails the first block stands, which is what there
+  was before. It costs nothing to be wrong and is right whenever it fires.
 - **Another language's section is the last thing asked, not the first.** The first version of this
   read a Han character's meaning from Chinese, on the theory that the meaning belongs to the script;
   the run that followed within the hour said otherwise. 靴 is a *boot* in Chinese and a shoe in
@@ -212,6 +215,24 @@ silent one.
 The reading is then met where it is true — on 靴下's card, which has carried it all along — and the
 silence is the convention rather than a gap in it: *Remembering the Kanji*, the kanji deck a learner
 would otherwise be using, gives a character one English keyword and defers every reading on purpose.
+
+**What the card carries instead is the `Readings` list — cut, from 2026-09-22, to the reading the
+term that asked for the card uses.** `Symbol: 極` was coming back with all four of its readings and
+*goku* nowhere picked out, though the word that made the card was 極楽, *gokuraku*; Bru asked for
+the reading to be selected. The list is what decker says when it does not know which reading is
+meant, and the term is exactly what knows. So the same question `_as_read` already asks of the page
+— which numbered block's own pronunciation is inside the term's — is asked once more, and the block
+that answers names its romanization in its headword line (`• (goku)`); the `Readings` line naming
+that romanization is the one the card keeps, label and all, `Go-on: ごく (goku, Jōyō)`. Where nothing
+matches, the whole list stands as before.
+
+The test needed three guards to be worth making, and `definition-fetching.md` measures them: the
+longest match wins (分 is ぶん in 分析, and ぶ is a reading of it too), a match may not stop in the
+middle of a sound (the moraic nasal nasalizes the vowel before it), and where the character sits in
+the term says where in the term's reading to look — 一人 is *hitori*, and ひと, 人's own reading as a
+word, is the wrong half of it. Over every cached Japanese compound with a pronunciation the term
+answers for **185 of 383** characters, 48 %, and what the other 52 % get is the list, which is what
+there was before.
 
 ## Ordering, dependencies and what is not made
 

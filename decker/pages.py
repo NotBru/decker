@@ -223,6 +223,32 @@ class Page:
             for sense in entry.senses
         ]
 
+    @property
+    def word_senses(self) -> list[tuple[str, Sense]]:
+        """Every sense the page states about a *word* rather than a character.
+
+        A Japanese page heads a `Kanji` block above its etymologies, and what
+        that block glosses is the shape: 街 is *main street or boulevard*
+        there, while the word a text actually uses it as is two blocks below
+        -- the suffix -gai, *town, district, area*. Pooled into one numbered
+        listing the character's gloss comes first, and it won: a manga deck
+        taught *main street or boulevard* on a card fronted with a word, with
+        the kanji's four readings under it and no pronunciation. The shape's
+        gloss is a `Symbol:` card's answer, and :mod:`decker.glosses` reads it
+        out of these same blocks for exactly that.
+
+        Where a character block is all the page has, it stands: a kanji the
+        language writes no word with alone still has to gloss as something,
+        and what the page says about the shape beats no card at all.
+        """
+        words = [
+            (entry.part_of_speech, sense)
+            for entry in self.entries
+            if entry.part_of_speech.strip().lower() not in _CHARACTER_PARTS
+            for sense in entry.senses
+        ]
+        return words or self.senses
+
     def etymology_of(self, sense: Sense) -> str | None:
         """The etymology that belongs to this sense, not to the section.
 
@@ -971,7 +997,9 @@ _READINGS_HEADING = re.compile(r'<h[2-6] id="Readings[^"]*"')
 
 #: What a page calls the parts of speech that are about a character rather
 #: than about a word. A Readings list is a fact about the shape, so it is
-#: attached to these and to nothing else in the same block.
+#: attached to these and to nothing else in the same block; and a definition
+#: written under one of them is a fact about the shape too, which is what
+#: :attr:`Page.word_senses` keeps out of a word's listing.
 _CHARACTER_PARTS = frozenset(
     ("kanji", "hanzi", "hanja", "han character", "character", "letter", "syllable")
 )

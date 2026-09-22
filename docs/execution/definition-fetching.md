@@ -294,6 +294,39 @@ design wins and the code is wrong.
   `http://localhost:11434`, ollama's own default; ollama has no authentication, so it is never bound
   anywhere but a loopback or a tunnel.
 
+- **A character's block is not one of the word's senses.** Bru found the card on 2026-09-22, in the
+  Gokurakugai deck: `街 — main street or boulevard`, with four kanji readings under it and no
+  pronunciation. That is not a sense of the word 街 at all. A Japanese page heads a `Kanji` block
+  above its etymologies and what that block glosses is *the shape*; the word the text used is two
+  blocks below it — the suffix `-gai`, *town, district, area*, `[ɡa̠i]`. Pooled into one numbered
+  listing the character's gloss is simply candidate number one, and either the model picks it or,
+  with no ollama to ask, the first sense stands and it is picked by default.
+
+  `Page.word_senses` is the listing a word is now chosen from: every sense whose block is not one of
+  `_CHARACTER_PARTS` — kanji, hanzi, hanja, han character, character, letter, syllable — which is
+  the same set that decides where a `Readings` list may hang. The shape's gloss has a card of its
+  own already, the `Symbol:` card, and it is read out of these very blocks. A page whose *only*
+  blocks are character blocks keeps them: a kanji the language writes no word with alone still has
+  to gloss as something, and what the page says about the shape beats no card at all.
+
+  Measured over the 10,903 pages this machine had cached, per language section:
+
+  | language | pages with a section | with a character block | and it was candidate one |
+  |---|---|---|---|
+  | Japanese | 1,254 | 268 | **268** |
+  | Russian | 8,222 | 30 | 30 |
+  | German | 178 | 17 | 17 |
+  | Spanish | 860 | 13 | 13 |
+  | Chinese | 631 | 2 | 0 |
+
+  Japanese is where it bites — a fifth of its pages, and the block is *always* on top, because
+  Wiktionary writes the character before the etymologies that use it. Elsewhere it is the single
+  letters (`т`, `ß`, `e`), where the word cards were competing with *the twentieth letter of the
+  Russian alphabet*. Chinese is untouched by design: `Definitions` is how the English Wiktionary
+  heads a Han character's meaning and the only place it is written, so it is not in the set and 的
+  still glosses.
+
+
 ## Fetching, and the page it reads
 
 - **The section heading is named by a table of decker's own, not by Stanza's.** A gloss is read from
@@ -493,6 +526,40 @@ design wins and the code is wrong.
   (`決: Hán Nôm readings: quyết`), and Chinese writes a Pronunciation section per variety, which the
   IPA reader already takes. So the parse is not gated on a language — it reads whatever section it
   was asked for — and Japanese is simply where it fires.
+
+  **And cut to the reading the word in front of the reader uses, from 2026-09-22.** Bru's second
+  finding of that morning: `Symbol: 極` came back with all four of its readings and *goku* nowhere
+  picked out, though the word that asked for the card was 極楽, *gokuraku*. The list is the honest
+  answer when decker does not know which reading is meant — see `teaching-the-script.md` — but here
+  the term says which, and a card listing the other three is answering a question the text already
+  answered.
+
+  `_as_used` reads it off the page in two steps, both of them the page's own words. A kanji page
+  numbers one etymology per word written with the character, each with its own pronunciation, so the
+  block whose reading is inside the term's is the one the term reads it as — the test `_as_read`
+  already chooses a *sense* by — and that block's headword names the romanization, `• (goku)`. The
+  `Readings` line naming the same romanization is the line the deck met, and it is the whole of what
+  the card carries: `Go-on: ごく (goku, Jōyō)`, label and all, since which class a reading belongs to
+  is half of what the line teaches. The same cut is made for the word card of a single character —
+  街 answers `[ɡa̠i]` and has no use for `け`, `かい` and `まち` under it.
+
+  Three things had to be true of the test before it was worth making. **The longest match wins**:
+  分 is ぶん in 分析 and ぶ is a reading of it too, so the short one is inside the word as well and
+  first-past-the-post named *bu* where the word says *bun*. **A match may not cut a sound in half**:
+  the moraic nasal nasalizes the vowel before it, so 分析 is `[bɯ̟̃ɰ̃se̞kʲi]` and ぶ `[bɯ̟]` is
+  inside it only if a match is allowed to stop before the combining tilde — which is how *bu* won
+  anyway. And **where in the term the character sits decides where in the reading to look**: 一人 is
+  *hitori*, 人's own reading as a word is ひと, and ひと is the wrong half of that word. The first
+  character of a term is read at the start of it and the last at the end; a character in the middle,
+  or one the term writes twice, is looked for anywhere as before.
+
+  Measured over every cached Japanese word of two or more Han characters with a pronunciation —
+  383 character-in-a-word questions, each about a page with more than one reading: **185 of them the
+  word answers** (48 %), and the reading lines those cards carry fall from 1,521 to 960. Reading the
+  185 back: 極楽 gives 極 ごく and 楽 らく, 靴下 gives した and 地下 か, 二人 gives ふた and り, 何者
+  なに and もの, 馬鹿 ば and か. The ones that fail fail into the full list — 分析 and 一昨日 both
+  do, the first for the nasal and the second because *issakujitsu* ends in the very reading its
+  first character would have matched — which is the card decker made before any of this.
 
 - Every recording in the language section is fetched, not the first. A page can list several — `el`
   has one for Spain and one for Colombia — and which one a learner wants is not decker's to guess;
