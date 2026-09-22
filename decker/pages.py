@@ -13,10 +13,12 @@ file is downloaded next to it only when asked for.
 from __future__ import annotations
 
 import gzip
+import http.client
 import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -65,6 +67,18 @@ MAX_ATTEMPTS = 5
 BACKOFF = 2.0
 
 _last_request = 0.0
+_pacing = threading.Lock()
+
+#: How many redirects one request follows before giving up. `urlopen` did this
+#: for us and the connections below do not, so the number is written down:
+#: enough for the one hop an upload URL takes, and not a loop.
+MAX_REDIRECTS = 5
+
+#: The kept-open connections, one per origin **per thread**. A connection is a
+#: stream and two threads cannot share one, so the pool is thread-local; the
+#: prefetcher and the gloss loop each keep their own and both are paced by the
+#: same lock, which is what Wikimedia counts.
+_pool = threading.local()
 
 _IPA = re.compile(r'<span class="IPA[^"]*">([^<]+)</span>')
 _AUDIO = re.compile(r'src="(//upload\.wikimedia\.org/[^"]+\.(?:ogg|oga|mp3|wav))"')
@@ -713,8 +727,18 @@ def _payloads(title: str, *, edition: str, refresh: bool) -> dict | None:
         return payloads
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with gzip.open(path, "wt", encoding="utf-8") as out:
-        json.dump(payloads, out, ensure_ascii=False)
+    #: Written beside and moved into place, the way an answer is: the page
+    #: ahead of the gloss loop is fetched by another thread now, so a reader
+    #: can arrive while a writer is halfway through, and two threads can want
+    #: the same title at once. `os.replace` is atomic, and the name carries
+    #: the writer so the two do not share a half-written file either.
+    temporary = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.part")
+    try:
+        with gzip.open(temporary, "wt", encoding="utf-8") as out:
+            json.dump(payloads, out, ensure_ascii=False)
+        os.replace(temporary, path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
     return payloads
 
 
@@ -792,12 +816,10 @@ def _fetch(
     is how a single run collected eighteen `429 Your bot is making too many
     requests` and silently dropped the files.
     """
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(MAX_ATTEMPTS):
         _pace()
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                body = response.read()
+            body = _request(url)
             return body if decode is None else decode(body)
         except urllib.error.HTTPError as error:
             if error.code == 404:
@@ -829,13 +851,100 @@ def _get_json(url: str, *, quiet: bool = False) -> dict | list | None:
     return answer if isinstance(answer, (dict, list)) else None
 
 
+def _connection(scheme: str, host: str) -> http.client.HTTPConnection:
+    """This thread's open connection to an origin, opening one if there is none.
+
+    One connection per origin, kept and reused. `urlopen` builds a fresh one
+    for every call, and on a cold run that is DNS, TCP and a TLS handshake per
+    page: **186 s of a 1,926 s run**, 9.7 %, measured in the profile of
+    2026-09-21 (getaddrinfo 33.7 s, create_connection 88.3 s, do_handshake
+    63.8 s over 968 requests). Nothing about what is fetched changes.
+
+    Thread-local, because a connection carries one request at a time.
+    """
+    pool = getattr(_pool, "connections", None)
+    if pool is None:
+        pool = _pool.connections = {}
+    key = (scheme, host)
+    if key not in pool:
+        opener = (
+            http.client.HTTPSConnection if scheme == "https"
+            else http.client.HTTPConnection
+        )
+        pool[key] = opener(host, timeout=30)
+    return pool[key]
+
+
+def _drop(scheme: str, host: str) -> None:
+    """Forget this thread's connection to an origin, closing it if it is open.
+
+    A kept connection is closed by the other end sooner or later -- a server's
+    keep-alive timeout, a proxy, a sleep -- and the failure arrives as the
+    *next* request on it. So a dead connection is dropped and the request is
+    made again on a fresh one, which is what `urlopen` gave for free by never
+    keeping one.
+    """
+    pool = getattr(_pool, "connections", None)
+    if pool is None:
+        return
+    connection = pool.pop((scheme, host), None)
+    if connection is not None:
+        try:
+            connection.close()
+        except OSError:
+            pass
+
+
+def _request(url: str, redirects: int = MAX_REDIRECTS) -> bytes:
+    """One GET on a kept connection, following a redirect and retrying a stale one.
+
+    Raises what `urlopen` raised, since the caller decides what a 404, a 403
+    and a 429 mean: `urllib.error.HTTPError` for a status the server sent, and
+    `urllib.error.URLError` for a connection that could not be made at all.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, ""))
+    headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "identity"}
+    for stale in (True, False):
+        connection = _connection(parts.scheme, parts.netloc)
+        try:
+            connection.request("GET", path, headers=headers)
+            response = connection.getresponse()
+            body = response.read()
+        except (http.client.HTTPException, ConnectionError, TimeoutError) as error:
+            #: A connection that had been sitting idle is the ordinary reason,
+            #: and it is not a failure of the request: drop it and ask again
+            #: on a new one. Twice is enough -- a second failure is the
+            #: network, not the pool.
+            _drop(parts.scheme, parts.netloc)
+            if stale:
+                continue
+            raise urllib.error.URLError(error) from error
+        except OSError as error:
+            _drop(parts.scheme, parts.netloc)
+            if stale:
+                continue
+            raise urllib.error.URLError(error) from error
+        if response.status in (301, 302, 303, 307, 308):
+            where = response.getheader("Location")
+            if where and redirects:
+                return _request(urllib.parse.urljoin(url, where), redirects - 1)
+        if response.status >= 400:
+            raise urllib.error.HTTPError(
+                url, response.status, response.reason, response.headers, None
+            )
+        return body
+    raise urllib.error.URLError("unreachable")
+
+
 def _pace() -> None:
-    """Keep a floor between one request and the next."""
+    """Keep a floor between one request and the next, whoever is asking."""
     global _last_request
-    wait = _last_request + MIN_INTERVAL - time.monotonic()
-    if wait > 0:
-        time.sleep(wait)
-    _last_request = time.monotonic()
+    with _pacing:
+        wait = _last_request + MIN_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_request = time.monotonic()
 
 
 def _retry_after(error: urllib.error.HTTPError, attempt: int) -> float:

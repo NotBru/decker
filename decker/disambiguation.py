@@ -190,27 +190,17 @@ class Disambiguator:
         """
         if not self.enabled or len(senses) <= 1:
             return senses[:1] if single else senses
-        listing = "\n".join(
-            f"{number}. {_labelled(sense, parts_of_speech, sources, number - 1)}"
-            for number, sense in enumerate(senses, start=1)
-        )
-        prompt = (
-            PROMPT_ONE.format(
-                language=language,
-                sentence=sentence,
-                surface=surface,
-                title=title,
-                senses=listing,
-            )
-            if single
-            else PROMPT.format(
-                language=language,
-                sentence=sentence,
-                surface=surface,
-                reading=CAPITAL if positional_capital else reading_of(upos),
-                title=title,
-                senses=listing,
-            )
+        prompt = self.question(
+            senses,
+            sentence=sentence,
+            surface=surface,
+            title=title,
+            language=language,
+            parts_of_speech=parts_of_speech,
+            sources=sources,
+            upos=upos,
+            positional_capital=positional_capital,
+            single=single,
         )
         chosen = self._ask(prompt)
         if chosen is None:
@@ -221,6 +211,62 @@ class Disambiguator:
             if number in chosen
         ) or senses
         return kept[:1] if single else kept
+
+    def question(
+        self,
+        senses: tuple[Sense, ...],
+        *,
+        sentence: str,
+        surface: str,
+        title: str,
+        language: str,
+        parts_of_speech: tuple[str, ...] = (),
+        sources: tuple[str, ...] = (),
+        upos: str = "",
+        positional_capital: bool = False,
+        single: bool = False,
+    ) -> str:
+        """The exact prompt this choice is made with.
+
+        Its own method because two callers have to produce the same string:
+        :meth:`keep`, which asks and reads the answer, and :meth:`warm`, which
+        asks ahead of the run so that `keep` finds the answer already on disk.
+        A prompt that differed by a space between them would warm nothing and
+        pay for every question twice.
+        """
+        listing = "\n".join(
+            f"{number}. {_labelled(sense, parts_of_speech, sources, number - 1)}"
+            for number, sense in enumerate(senses, start=1)
+        )
+        if single:
+            return PROMPT_ONE.format(
+                language=language,
+                sentence=sentence,
+                surface=surface,
+                title=title,
+                senses=listing,
+            )
+        return PROMPT.format(
+            language=language,
+            sentence=sentence,
+            surface=surface,
+            reading=CAPITAL if positional_capital else reading_of(upos),
+            title=title,
+            senses=listing,
+        )
+
+    def warm(self, prompt: str) -> None:
+        """Ask a question whose answer nobody is waiting for yet.
+
+        The answer goes to the cache and is dropped here; what it buys is the
+        model working while the run is on the network, and two questions in
+        flight instead of one. A failure is nothing to report -- the question
+        will be asked again where it is needed, and `keep` will report it
+        there.
+        """
+        if not self.enabled:
+            return
+        self.session.ask(prompt, SCHEMA)
 
     def _ask(self, prompt: str) -> set[int] | None:
         answer = self.session.ask(prompt, SCHEMA)

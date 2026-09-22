@@ -11,6 +11,7 @@ with the stage that writes them.
 from __future__ import annotations
 
 import hashlib
+import threading
 import json
 import os
 import sys
@@ -83,6 +84,21 @@ def _said_something(response) -> bool:
     return bool(content and content.strip())
 
 
+#: The questions being asked right now, by digest, and the lock that guards
+#: the register. Two threads want the same answer often enough to matter:
+#: the prefetcher reads ahead of the gloss loop, and where it is only a little
+#: ahead the loop arrives at a question the prefetcher has already sent. The
+#: cache cannot dedupe those -- it is a file that does not exist yet -- so the
+#: second asker waits for the first instead of paying the GPU twice.
+_IN_FLIGHT: dict[str, threading.Event] = {}
+_IN_FLIGHT_LOCK = threading.Lock()
+
+#: How long a waiter waits before deciding the other asker is not coming back.
+#: Longer than any answer takes and shorter than a hung run: on a miss the
+#: question is simply asked again, which is what would have happened anyway.
+IN_FLIGHT_TIMEOUT = 120.0
+
+
 @dataclass
 class Session:
     """A model on an ollama host, and what to say when it is not there."""
@@ -122,16 +138,22 @@ class Session:
         text repeated the whole of its cost and none of its work.
         """
         path = self._remembered(prompt, schema)
-        if path is not None and not self.refresh and path.exists():
-            try:
-                answer = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                pass  # a half-written or unreadable answer is simply asked again
-            else:
-                log(f"[decker]     {self.what}: remembered", level=DETAIL,
-                    kind="detail")
-                count("model.remembered")
-                return answer
+        remembered = self._recall(path)
+        if remembered is not None:
+            return remembered
+        #: Nobody has this answer yet. Whoever registers the question asks it;
+        #: anybody else waits for that one and reads what it wrote.
+        waiting = None
+        if path is not None and not self.refresh:
+            with _IN_FLIGHT_LOCK:
+                waiting = _IN_FLIGHT.get(path.name)
+                if waiting is None:
+                    _IN_FLIGHT[path.name] = threading.Event()
+        if waiting is not None:
+            waiting.wait(IN_FLIGHT_TIMEOUT)
+            remembered = self._recall(path)
+            if remembered is not None:
+                return remembered
         #: Timed, because this is where a run's wall clock goes and the whole
         #: of the model comparison in `DEFAULT_MODEL` is these seconds added
         #: up. At `-vv` a slow model is visible in the first minute rather
@@ -144,6 +166,7 @@ class Session:
         except Exception as error:  # ollama down, model missing, bad JSON
             self.warn(str(error))
             count("model.failed")
+            self._released(path)
             return None
         #: Added up rather than only printed: the difference between a cold run
         #: and a warm one is the whole difference in wall clock, and a total on
@@ -153,7 +176,30 @@ class Session:
             f"{time.monotonic() - started:.1f}s", level=DETAIL, kind="detail")
         if path is not None:
             self._remember(path, answer)
+            self._released(path)
         return answer
+
+    def _recall(self, path: "Path | None") -> dict | None:
+        """The answer already on disk, or ``None``."""
+        if path is None or self.refresh or not path.exists():
+            return None
+        try:
+            answer = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None  # a half-written or unreadable answer is asked again
+        log(f"[decker]     {self.what}: remembered", level=DETAIL, kind="detail")
+        count("model.remembered")
+        return answer
+
+    @staticmethod
+    def _released(path: "Path | None") -> None:
+        """Let go of a question, waking whoever waited for its answer."""
+        if path is None:
+            return
+        with _IN_FLIGHT_LOCK:
+            waiting = _IN_FLIGHT.pop(path.name, None)
+        if waiting is not None:
+            waiting.set()
 
     def _remembered(self, prompt: str, schema: dict) -> "Path | None":
         """Where this exact question's answer is kept, if anywhere.
@@ -180,7 +226,7 @@ class Session:
             path.parent.mkdir(parents=True, exist_ok=True)
             #: Written beside and moved into place, so a run interrupted
             #: mid-write leaves no half-answer for the next one to read.
-            temporary = path.with_suffix(".part")
+            temporary = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.part")
             temporary.write_text(
                 json.dumps(answer, ensure_ascii=False), encoding="utf-8"
             )

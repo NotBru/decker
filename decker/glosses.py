@@ -27,6 +27,7 @@ import re
 import sys
 import unicodedata
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -1303,25 +1304,33 @@ def build(
         teach_script=teach_script,
         reads=reads,
     )
-    with console.phase(
-        "glossing",
-        sum(len(one.text) for one in sentences),
-        unit="characters",
-        items=len(sentences),
-    ):
-        for position, sentence in enumerate(sentences):
-            if console.skipping() or _enough(builder, limit):
-                #: What is glossed is glossed; the deck is built from it and
-                #: the run carries on to the cards.
-                break
-            builder.position = position
-            around = _around(sentences, position)
-            log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
-            for term in sentence.terms:
-                _gloss_term(builder, term, sentence.text, around)
-                if _enough(builder, limit):
+    #: Reading ahead of the loop below, on two threads, so that the network
+    #: and the model are busy at the same time. It changes no gloss: see
+    #: :class:`_Ahead`.
+    ahead = _Ahead(builder, sentences)
+    try:
+        with console.phase(
+            "glossing",
+            sum(len(one.text) for one in sentences),
+            unit="characters",
+            items=len(sentences),
+        ):
+            for position, sentence in enumerate(sentences):
+                if console.skipping() or _enough(builder, limit):
+                    #: What is glossed is glossed; the deck is built from it and
+                    #: the run carries on to the cards.
                     break
-            console.advance(len(sentence.text))
+                ahead.reach(position)
+                builder.position = position
+                around = _around(sentences, position)
+                log(f"[decker] {sentence.text[:70]}", level=DETAIL, kind="detail")
+                for term in sentence.terms:
+                    _gloss_term(builder, term, sentence.text, around)
+                    if _enough(builder, limit):
+                        break
+                console.advance(len(sentence.text))
+    finally:
+        ahead.close()
     if _enough(builder, limit):
         #: Said where a reader will see it and not only in the help: a deck
         #: built from part of a text looks exactly like a deck built from all
@@ -1448,6 +1457,126 @@ CONTEXT_WORDS = 20
 CONTEXT_FOR = frozenset({"NOUN", "PROPN", "VERB", "ADJ", "ADV", "INTJ"})
 
 
+#: How far ahead of the gloss loop the prefetcher works, and how many threads
+#: it works with. Two sentences is enough to keep both remote machines busy
+#: without asking a great deal that a `--limit-glosses` stop would throw away:
+#: a sentence is five terms of manga speech and twenty of prose, and a term is
+#: a page fetch and a question.
+#:
+#: Two workers, because two is what the GPU box answers fastest at: 0.71 s a
+#: question asked one at a time, **0.45 s at two**, and flat at four and six --
+#: measured against fesat with `qwen3.5:4b` on 2026-09-21. The ceiling is the
+#: card, not admission control, and the pacing lock in :mod:`decker.pages`
+#: keeps Wikimedia's half serialized however many threads are here.
+LOOKAHEAD = 2
+AHEAD_WORKERS = 2
+
+#: How many sentences may be queued at once. The pool would otherwise take the
+#: whole text the moment the loop ran ahead of it, and a run that stops at
+#: `--limit-glosses` would have paid the model for questions about sentences
+#: it never read.
+AHEAD_PENDING = 4
+
+
+class _Ahead:
+    """Fetch the pages and ask the questions of the sentences not reached yet.
+
+    The whole of the wall clock is two sockets that never talk at the same
+    time. A cold run of the Gokurakugai deck was **97.8 % blocked** on them --
+    ollama 54.4 %, Wikimedia 43.1 %, and 43 s of CPU in 1,926 s -- because
+    fetching and glossing strictly alternate: decker asks Wikimedia for a page
+    while the model sits idle, then asks the model while the network sits
+    idle. Profiled 2026-09-21; the flamegraph is in
+    `~/.cache/decker/profiles/`.
+
+    So this reads ahead. For the terms of the next sentences it fetches the
+    pages they will need and asks the sense question they will be asked, and
+    throws both answers away: the page cache and the answer cache are what it
+    is filling, and the gloss loop finds them there. **Nothing it does can
+    change a deck.** It computes no gloss, holds no index, and writes nothing
+    the builder reads; asking a question twice is the same answer, since a
+    prompt is a pure function of the page and the passage and the model is
+    asked at temperature zero. A prefetch that guesses wrong costs one wasted
+    question, which is why the lookahead is short and the queue is bounded.
+    """
+
+    def __init__(self, builder: _Builder, sentences: list["SentenceTerms"]) -> None:
+        self.builder = builder
+        self.sentences = sentences
+        self.pool = ThreadPoolExecutor(
+            max_workers=AHEAD_WORKERS, thread_name_prefix="decker-ahead"
+        )
+        self.pending: set[Future] = set()
+        self.next = 0
+        self.stopped = False
+
+    def reach(self, position: int) -> None:
+        """Queue the sentences after ``position``, up to the lookahead."""
+        if self.stopped:
+            return
+        self.pending = {one for one in self.pending if not one.done()}
+        self.next = max(self.next, position + 1)
+        target = min(position + 1 + LOOKAHEAD, len(self.sentences))
+        while self.next < target and len(self.pending) < AHEAD_PENDING:
+            self.pending.add(self.pool.submit(self._sentence, self.next))
+            self.next += 1
+
+    def close(self) -> None:
+        """Stop, dropping whatever has not been started.
+
+        Called when the loop ends, however it ends: a `--limit-glosses` stop
+        and a Ctrl+C both leave sentences queued that nobody will read.
+        """
+        self.stopped = True
+        self.pool.shutdown(wait=False, cancel_futures=True)
+
+    def _sentence(self, position: int) -> None:
+        sentence = self.sentences[position]
+        around = _around(self.sentences, position)
+        for term in sentence.terms:
+            if self.stopped:
+                return
+            try:
+                self._term(term, sentence.text, around)
+            except Exception as error:  # a prefetch failing is not a failure
+                log(f"[decker] reading ahead: {error}", level=DETAIL, kind="detail")
+
+    def _term(self, term: Term, sentence: str, around: tuple[str, str]) -> None:
+        """One term's page fetches and one question, exactly as the loop will ask."""
+        builder = self.builder
+        candidates = _candidates(builder, term)
+        if not candidates:
+            return
+        if builder.teach_script:
+            #: The characters too: a `--teach-script` run fetches a page per
+            #: character of a term, and those were 16 % of the Japanese run's
+            #: network time. Only the pages -- which card is made of them, and
+            #: whether one is made at all, stays with the loop.
+            for character in script.foreign(term.surface, builder.reads):
+                builder.page(character)
+                builder.translingual_page(character)
+        labelled = [
+            (part, sense) for page in candidates for part, sense in page.word_senses
+        ]
+        if len(labelled) <= 1:
+            return
+        builder.disambiguator.warm(
+            builder.disambiguator.question(
+                tuple(sense for _, sense in labelled),
+                sentence=_passage(term, sentence, around),
+                surface=term.surface,
+                title=", ".join(f'"{page.title}"' for page in candidates),
+                language=candidates[0].language,
+                parts_of_speech=tuple(part for part, _ in labelled),
+                sources=tuple(
+                    page.title for page in candidates for _ in page.word_senses
+                ),
+                upos="" if _capital_only(term, candidates) else term.upos,
+                positional_capital=_capital_only(term, candidates),
+            )
+        )
+
+
 def _enough(builder: _Builder, limit: int) -> bool:
     """Whether `--limit-glosses` has been reached."""
     return bool(limit) and len(builder.glosses) >= limit
@@ -1499,12 +1628,29 @@ def _categories(sentences: list["SentenceTerms"]) -> tuple[str, ...]:
     )
 
 
+def _candidates(builder: _Builder, term: Term) -> list[Page]:
+    """The pages a term's senses are chosen from: its own spellings, or its lemma's."""
+    return builder.own_pages(term) or [
+        page for page in (builder.first_page(term.entries),) if page is not None
+    ]
+
+
+def _passage(term: Term, sentence: str, around: tuple[str, str]) -> str:
+    """The sentence with this occurrence bracketed, and its neighbours around it.
+
+    The neighbours only for a word that has a meaning to choose; see
+    :data:`CONTEXT_FOR`.
+    """
+    marked = mark_occurrence(sentence, term.spans)
+    if term.upos in CONTEXT_FOR:
+        marked = " ".join(part for part in (around[0], marked, around[1]) if part)
+    return marked
+
+
 def _gloss_term(
     builder: _Builder, term: Term, sentence: str, around: tuple[str, str] = ("", "")
 ) -> None:
-    candidates = builder.own_pages(term) or [
-        page for page in (builder.first_page(term.entries),) if page is not None
-    ]
+    candidates = _candidates(builder, term)
     if not candidates:
         _no_entry(builder, term, sentence, around)
         return
@@ -1520,9 +1666,7 @@ def _gloss_term(
     #: mark in it however much context the passage carries -- and no neighbours
     #: at all for a closed-class word, which is the other half of the choice
     #: recorded at :data:`CONTEXT_FOR`.
-    marked = mark_occurrence(sentence, term.spans)
-    if term.upos in CONTEXT_FOR:
-        marked = " ".join(part for part in (around[0], marked, around[1]) if part)
+    marked = _passage(term, sentence, around)
     page, senses = _pooled_senses(builder, candidates, term, marked)
     surface = _spelling(page)
     for sense in senses:
@@ -2004,9 +2148,7 @@ def _capital_is_the_lines(term: Term, candidates: list[Page]) -> bool:
     whole for every other tag, which is what it was written for: `ADP` against
     the name of a Hebrew letter is not a guess the capital made.
     """
-    if term.upos != "PROPN" or not term.positional_capital:
-        return False
-    if not any(page.title[:1].islower() for page in candidates):
+    if not _capital_only(term, candidates):
         return False
     log(
         "the parse reads it as a proper noun, which its line-initial capital "
@@ -2014,6 +2156,18 @@ def _capital_is_the_lines(term: Term, candidates: list[Page]) -> bool:
         word=term.surface, level=VERBOSE, kind="detail",
     )
     return True
+
+
+def _capital_only(term: Term, candidates: list[Page]) -> bool:
+    """The predicate above without the line, for a caller with nothing to say.
+
+    The prompt the prefetcher warms has to be the one the gloss loop will
+    build, so it asks the same question -- and it is not the one reading the
+    run, so it says nothing about the answer.
+    """
+    if term.upos != "PROPN" or not term.positional_capital:
+        return False
+    return any(page.title[:1].islower() for page in candidates)
 
 
 def _pooled_senses(

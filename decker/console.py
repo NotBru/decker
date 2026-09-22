@@ -150,12 +150,18 @@ class Stats:
     #: a run's wall clock goes, and the only way to tell a cold run from a warm
     #: one without watching the clock.
     seconds: Counter = field(default_factory=Counter)
+    #: Counted from more than one thread since the prefetcher: a page read
+    #: ahead of the loop is a page read, and `+=` on a counter is a read and a
+    #: write with a gap in between.
+    _lock: object = field(default_factory=threading.Lock)
 
     def count(self, name: str, amount: int = 1) -> None:
-        self.counts[name] += amount
+        with self._lock:
+            self.counts[name] += amount
 
     def spent(self, name: str, seconds: float) -> None:
-        self.seconds[name] += seconds
+        with self._lock:
+            self.seconds[name] += seconds
 
     def __getitem__(self, name: str) -> int:
         return self.counts[name]
