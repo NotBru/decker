@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from decker.console import DETAIL, console, count, log
+from decker.reach import BLIPS, Gate
 
 #: The model is parametrizable; this is the design's default, for every stage
 #: that asks a model anything, and it is measured rather than guessed.
@@ -98,6 +99,50 @@ _IN_FLIGHT_LOCK = threading.Lock()
 #: question is simply asked again, which is what would have happened anyway.
 IN_FLIGHT_TIMEOUT = 120.0
 
+#: Hosts that have answered at least once this run. Losing one of those is an
+#: outage, whatever the run was or was not told.
+_ANSWERED: set[str] = set()
+
+#: One gate per host, shared by every stage that asks it: disambiguation,
+#: rules, translation and the unknown-word questions all hold on the same
+#: outage and it is logged once, not once a stage.
+_GATES: dict[str, Gate] = {}
+_GATES_LOCK = threading.Lock()
+
+
+def _gate(host: str) -> Gate:
+    with _GATES_LOCK:
+        if host not in _GATES:
+            def probe(host: str = host) -> bool:
+                import ollama
+
+                ollama.Client(host=host, timeout=10).list()
+                return True
+
+            _GATES[host] = Gate(f"ollama at {host}", probe)
+        return _GATES[host]
+
+
+def _unreachable(error: BaseException) -> bool:
+    """Whether a failed call never reached a model that could answer it.
+
+    ollama's client turns a refused connection into the builtin
+    `ConnectionError`; a reset, a hang-up mid-answer or a timeout arrive as
+    httpx's own transport errors. Anything else -- a 404 for a model the host
+    does not hold, a reply that is not JSON -- was an answer, however useless.
+    """
+    if isinstance(error, (ConnectionError, TimeoutError)):
+        return True
+    try:
+        import httpx
+    except ImportError:
+        return False
+    return isinstance(error, httpx.TransportError)
+
+
+def _reason(error: BaseException) -> str:
+    return str(error) or type(error).__name__
+
 
 @dataclass
 class Session:
@@ -118,12 +163,24 @@ class Session:
         self._warned = False
         self._thinkable = True
 
+    def _host(self) -> str:
+        return self.host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST
+
+    def _relied_on(self) -> bool:
+        """Whether losing this host is an outage to wait out, not a missing model.
+
+        It is when the run was told to use it -- ``--ollama-host`` or
+        ``OLLAMA_HOST`` -- and when it has answered once already this run.
+        """
+        return bool(self.host or os.environ.get("OLLAMA_HOST")) or (
+            self._host() in _ANSWERED
+        )
+
     def client(self):
         if self._client is None:
             import ollama
 
-            host = self.host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST
-            self._client = ollama.Client(host=host)
+            self._client = ollama.Client(host=self._host())
         return self._client
 
     def ask(self, prompt: str, schema: dict) -> dict | None:
@@ -160,14 +217,28 @@ class Session:
         #: than at the end of the run.
         started = time.monotonic()
         count("model.asked")
-        try:
-            response = self._chat(prompt, schema)
-            answer = json.loads(response["message"]["content"])
-        except Exception as error:  # ollama down, model missing, bad JSON
-            self.warn(str(error))
-            count("model.failed")
-            self._released(path)
-            return None
+        blips = 0
+        while True:
+            try:
+                response = self._chat(prompt, schema)
+                answer = json.loads(response["message"]["content"])
+                break
+            except Exception as error:  # ollama down, model missing, bad JSON
+                #: Unreachable is not an answer: a host this run was told to
+                #: use, or one that has already answered, is waited for and
+                #: the question asked again, so a dropped tunnel costs time
+                #: and never a sense. Only a host nobody named that never
+                #: answered is gone without, which is the run with no model.
+                if _unreachable(error) and self._relied_on() and blips < BLIPS:
+                    if not _gate(self._host()).wait(_reason(error)):
+                        blips += 1
+                    started = time.monotonic()
+                    continue
+                self.warn(_reason(error))
+                count("model.failed")
+                self._released(path)
+                return None
+        _ANSWERED.add(self._host())
         #: Added up rather than only printed: the difference between a cold run
         #: and a warm one is the whole difference in wall clock, and a total on
         #: the screen says which this is without waiting for the run to end.

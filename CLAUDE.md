@@ -61,6 +61,9 @@ the code changes.
 - [When can I watch this](docs/execution/timeline.md) — a deck read back against the subtitle file
   it was built from: what the clock costs in cards, why the headline is 95% of a stretch and not all
   of it, and what a deck exported mid-study changes.
+- [When a remote stops answering](docs/execution/connectivity.md) — a dropped tunnel or a
+  Wiktionary outage is waited out and logged, never turned into a degraded deck: what counts as
+  unreachable, what still degrades, and what a wait costs.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.

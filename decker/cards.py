@@ -24,7 +24,7 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 
-from decker import script
+from decker import reach, script
 from decker.console import console, count, log
 from decker.glosses import Gloss, is_marked, leading_qualifier
 from decker.ollama import default_model
@@ -191,6 +191,7 @@ def build(
             )
             console.advance(items=0)
     translator.report()
+    reach.report()
     cards = _unclashed(builder.cards, english)
     log(f"[decker] {len(cards)} cards", kind="head")
     return cards

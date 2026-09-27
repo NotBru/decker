@@ -670,8 +670,11 @@ design wins and the code is wrong.
   stopped, and exits 2. Counting these instead would mean scrolling hundreds of them and finishing
   "successfully" with a deck missing most of its glosses.
 
-- Every other fetch that gives up is counted and reported: `[decker] 2 fetches failed: 1 audio:
-  unreachable, 1 page: HTTP 500`. A page decker cannot get is a gloss it cannot make, and until
+- A site that is down is waited for, not given up on: a connection that cannot be made, or a 5xx
+  the whole site is answering, holds the fetch until the site is back, logged when it goes and
+  when it returns ([When a remote stops answering](connectivity.md)). A 429 is waited out for as
+  long as it lasts. Every other fetch that gives up is counted and reported: `[decker] 2 fetches
+  failed: 1 audio: unreachable, 1 page: HTTP 500`. A page decker cannot get is a gloss it cannot make, and until
   this line existed the only way to notice was to read the deck and find it thin. Silence means
   every fetch that was tried came back. 404 is not counted, being an answer rather than a failure:
   it is how Wiktionary says a title has no entry.
@@ -725,8 +728,10 @@ design wins and the code is wrong.
   with `think=False`. A client that rejects the argument is asked again without it, and not asked
   with it again for the rest of the run.
 
-- When ollama cannot be reached, or answers something unusable, the gloss keeps every sense and a
-  warning is printed once. The design says disambiguation *must* happen, so this is a degraded run,
+- When ollama answers something unusable, or there is no model at all -- no host named and the
+  default one never answered -- the gloss keeps every sense and a warning is printed once. A named
+  host that cannot be reached, or one that has answered earlier in the run, is waited for instead
+  and the question asked again ([When a remote stops answering](connectivity.md)). The design says disambiguation *must* happen, so this is a degraded run,
   not a supported mode; `--no-disambiguate` is the way to ask for it deliberately.
 
 - The occurrence being judged is bracketed in the sentence the model is shown — `—Vaya, ⟨vaya⟩ a

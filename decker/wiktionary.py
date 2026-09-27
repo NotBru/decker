@@ -15,6 +15,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
@@ -25,6 +27,7 @@ import stanza
 from decker import trees
 from decker.console import VERBOSE, console, log
 from decker.languages import joiner_of
+from decker.reach import BLIPS, http_gate
 from decker.nlp import pipeline
 from decker.trees import Node
 
@@ -100,16 +103,35 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
     log(f"[decker] downloading {url}", kind="head")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     partial = path.with_suffix(".gz.part")
-    with urllib.request.urlopen(request) as response, partial.open("wb") as out:
-        #: Tens of megabytes over whatever connection the run has, once per
-        #: edition, and the only stage that can honestly count bytes because
-        #: the server says how many there are. Not skippable: half a dump is
-        #: not a dump, and the run has nothing to do without it.
-        size = int(response.headers.get("Content-Length") or 0)
-        with console.phase("dump", size, skippable=False, unit="bytes"):
-            while chunk := response.read(1 << 20):
-                out.write(chunk)
-                console.advance(len(chunk))
+    blips = 0
+    while True:
+        try:
+            with urllib.request.urlopen(request) as response, partial.open("wb") as out:
+                #: Tens of megabytes over whatever connection the run has, once
+                #: per edition, and the only stage that can honestly count bytes
+                #: because the server says how many there are. Not skippable:
+                #: half a dump is not a dump, and the run has nothing to do
+                #: without it.
+                size = int(response.headers.get("Content-Length") or 0)
+                with console.phase("dump", size, skippable=False, unit="bytes"):
+                    while chunk := response.read(1 << 20):
+                        out.write(chunk)
+                        console.advance(len(chunk))
+            break
+        except urllib.error.HTTPError as error:
+            if error.code < 500:
+                raise
+            reason, failure = f"HTTP {error.code}", error
+        except (urllib.error.URLError, OSError) as error:
+            reason, failure = str(getattr(error, "reason", error)), error
+        #: The dumps host dropping, before or halfway through, is waited out
+        #: and the download started over; see `decker.reach`. A failure while
+        #: the host answers -- a full disk, say -- is not, past a few tries.
+        if not http_gate(url, USER_AGENT).wait(reason):
+            blips += 1
+            if blips >= BLIPS:
+                raise failure
+            time.sleep(2.0)
     partial.replace(path)
     log(f"[decker] {path.stat().st_size // (1 << 20)} MB of titles cached at "
         f"{path}", level=VERBOSE, kind="detail")

@@ -68,8 +68,10 @@ what follows is the consequence of taking that literally and finding where it ne
   It is a live wiki page that gains an entry now and then, so a cache with no way to notice would
   hold a stale copy for good, while re-fetching half a megabyte every run to find out would be
   worse. The revision id is asked for instead — a few hundred bytes — and the page itself only when
-  that id has moved. A run that cannot reach Wikimedia keeps the copy it has; a glossary one
-  revision old explains `dative case` exactly as well. Nothing is asked for at all when nothing is
+  that id has moved. A Wikimedia that is down is waited for, like every fetch
+  ([When a remote stops answering](connectivity.md)); a refused one leaves the copy already here,
+  since a glossary one revision old explains `dative case` exactly as well. A mirror that does not
+  answer is waited for too, never mistaken for a mirror without the page. Nothing is asked for at all when nothing is
   glossed, or under `--no-concepts`.
 
   Bru's call, 2026-09-11, over caching it like any other page.
@@ -97,7 +99,8 @@ what follows is the consequence of taking that literally and finding where it ne
   inventing a description for terminology decker cannot explain.
 
 - **A missing glossary page is not three hundred broken links.** Since it is always read upstream,
-  the one way to have none is Wikimedia being unreachable with nothing cached from an earlier run.
+  the one way to have none is Wikimedia refusing the request with nothing cached from an earlier
+  run (an unreachable one is waited for).
   The stage then stands down after saying so once, rather than reporting every anchor in the run as
   an entry that does not exist.
 

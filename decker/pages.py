@@ -31,6 +31,7 @@ from pathlib import Path
 
 from decker.languages import lect_of, section_of
 from decker.console import DETAIL, NORMAL, VERBOSE, count, log
+from decker.reach import BLIPS, http_gate
 from decker.wiktionary import USER_AGENT, cache_dir
 
 #: Where the pages are asked for. A local mirror answers the same paths under
@@ -816,7 +817,14 @@ def _fetch(
     is how a single run collected eighteen `429 Your bot is making too many
     requests` and silently dropped the files.
     """
-    for attempt in range(MAX_ATTEMPTS):
+    #: A server that cannot be reached, or answers 5xx to everything, is an
+    #: outage and is waited out at its gate -- see `decker.reach` -- so no
+    #: page is lost to one. What is still given up on is what the server says
+    #: about *this* request: a 5xx the rest of the site does not share, a
+    #: status that is not an error of the moment, a body that is not JSON.
+    attempt = 0
+    blips = 0
+    while True:
         _pace()
         try:
             body = _request(url)
@@ -826,21 +834,47 @@ def _fetch(
                 return None
             if error.code == 403:
                 raise Refused(url) from error
-            if error.code not in (429, 503) or attempt == MAX_ATTEMPTS - 1:
-                if not quiet:
-                    log(f"[decker] {url}: HTTP {error.code}",
-                        level=VERBOSE, kind="warn")
-                    FAILURES[f"{what}: HTTP {error.code}"] += 1
-                return None
-            time.sleep(_retry_after(error, attempt))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            if error.code == 429:
+                #: Throttled: the server is there and has said when to come
+                #: back, so this is waited out however many times it takes.
+                count("fetch.throttled")
+                log(f"[decker] {url}: HTTP 429, waiting as asked",
+                    level=VERBOSE, kind="warn")
+                time.sleep(_retry_after(error, min(attempt, MAX_ATTEMPTS)))
+                attempt += 1
+                continue
+            if error.code >= 500:
+                if attempt < MAX_ATTEMPTS - 1:
+                    time.sleep(_retry_after(error, attempt))
+                    attempt += 1
+                    continue
+                if http_gate(url, USER_AGENT).wait(f"HTTP {error.code}"):
+                    attempt = 0
+                    continue
+            if not quiet:
+                log(f"[decker] {url}: HTTP {error.code}",
+                    level=VERBOSE, kind="warn")
+                FAILURES[f"{what}: HTTP {error.code}"] += 1
+            return None
+        except (urllib.error.URLError, TimeoutError) as error:
+            if http_gate(url, USER_AGENT).wait(str(getattr(error, "reason", error))):
+                continue
+            blips += 1
+            if blips < BLIPS:
+                time.sleep(BACKOFF**blips)
+                continue
+            if not quiet:
+                log(f"[decker] {url}: {error}", level=VERBOSE, kind="warn")
+                FAILURES[f"{what}: unreachable"] += 1
+            return None
+        except json.JSONDecodeError as error:
             if attempt == MAX_ATTEMPTS - 1:
                 if not quiet:
                     log(f"[decker] {url}: {error}", level=VERBOSE, kind="warn")
-                    FAILURES[f"{what}: unreachable"] += 1
+                    FAILURES[f"{what}: not JSON"] += 1
                 return None
             time.sleep(BACKOFF**attempt)
-    return None
+            attempt += 1
 
 
 def _get_json(url: str, *, quiet: bool = False) -> dict | list | None:
@@ -1886,9 +1920,12 @@ def _glossary_page(edition: str, *, refresh: bool = False) -> dict | None:
     changes: a cache with no way to notice would hold a stale copy for good,
     and re-fetching half a megabyte every run to find out would be worse. So
     the revision id is asked for -- a few hundred bytes -- and the page itself
-    only when that id has moved. A run that cannot reach Wikimedia keeps the
-    copy it has: a glossary one revision old explains `dative case` exactly as
-    well.
+    only when that id has moved. A run whose Wikimedia is down waits for it,
+    as every fetch does (`decker.reach`); one that is refused keeps the copy
+    it has, since a glossary one revision old explains `dative case` exactly
+    as well. A mirror that does not answer is waited for too, and never read
+    as a mirror without the page -- that would switch the run's source over a
+    dropped connection.
     """
     upstream = DEFAULT_ORIGIN.format(edition=edition).rstrip("/")
     mirror = origin(edition)

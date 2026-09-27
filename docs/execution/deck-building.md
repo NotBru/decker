@@ -243,7 +243,9 @@ user's own it is a copyright question too, and the ollama default is what keeps 
 - The prompt asks for the target language to be left alone — the example sentences, the headword,
   the forms a definition names — since those are the thing being taught and not prose about it.
 
-- Failure is the same degraded run disambiguation has: warn once, keep what Wiktionary wrote. A deck
+- Failure is the same degraded run disambiguation has: warn once, keep what Wiktionary wrote. A
+  host that was named and has stopped answering is not a failure but an outage, and is waited for
+  ([When a remote stops answering](connectivity.md)). A deck
   in the wrong language is worth more than no deck.
 
 ### The titles decker writes itself

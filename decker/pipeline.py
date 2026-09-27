@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 
 from decker import cards as deck_cards
-from decker import pages
+from decker import pages, reach
 from decker import shuffling, trees, wiktionary
 from decker.cards import Card
 from decker.console import VERBOSE, console, log
@@ -235,6 +235,7 @@ def glossed(
         limit=limit_glosses,
     )
     pages.report()
+    reach.report()
     return sentences, glosses
 
 
