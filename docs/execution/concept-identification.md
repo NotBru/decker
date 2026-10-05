@@ -108,8 +108,7 @@ what follows is the consequence of taking that literally and finding where it ne
 
 Bru's todo, 2026-10-05: Finnish `-taa` is "Forms causative verbs from verbs", and *causative verbs*
 links `Appendix:Finnish verbal derivatives#Causative`, not the glossary. The design names
-`Appendix:Glossary` only, so this goes past its letter; the design line is the human's to rewrite
-if it is to stay true.
+`Appendix:Glossary` only; it was amended the same day to name a language's own appendix too.
 
 - **Any appendix, but only a place on one.** A link inside a definition to `Appendix:X#Y` is a
   concept, read from entry `Y` of page `X`. A link with no fragment is not: measured over the
