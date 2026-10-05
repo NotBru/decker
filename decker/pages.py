@@ -26,6 +26,7 @@ import urllib.request
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -121,7 +122,10 @@ class Sense:
     #: Glossary anchors this definition links to -- `first_person`,
     #: `singular_number`. Wiktionary links the linguistic terminology inside a
     #: definition to `Appendix:Glossary`, which is how the terminology is told
-    #: from the words around it without a lexicon of decker's own.
+    #: from the words around it without a lexicon of decker's own. A link to a
+    #: language's own appendix is here too, whole --
+    #: `Appendix:Finnish verbal derivatives#Causative` -- which is how it is
+    #: told from a bare glossary anchor: see :func:`concept_reference`.
     concepts: tuple[str, ...] = ()
     #: The titles this definition says its word is a form of, as Wiktionary's
     #: own markup names them: a form-of line wraps the word it points at in
@@ -155,6 +159,9 @@ class Concept:
     name: str
     description: str
     anchor: str
+    #: The appendix the entry is on. `Appendix:Glossary` for nearly all of
+    #: them; a language's own appendix for the terminology only it explains.
+    page: str = "Appendix:Glossary"
 
 
 @dataclass(frozen=True)
@@ -1318,6 +1325,47 @@ def _html_examples(item: dict) -> list[Example]:
 GLOSSARY_PAGE = "Appendix:Glossary"
 _GLOSSARY_LINK = f"/wiki/{GLOSSARY_PAGE}#"
 
+#: Where the rest of the terminology lives. A language explains its own
+#: grammar in appendices of its own -- `-taa` is "Forms causative verbs",
+#: and *causative verbs* links `Appendix:Finnish verbal derivatives#Causative`
+#: -- and a definition links into them exactly as it links into the glossary.
+_APPENDIX_LINK = "/wiki/Appendix:"
+
+#: Appendices a definition links that are not terminology. The bibliography
+#: is a footnote's source, not something to teach.
+_NOT_TERMINOLOGY = ("Appendix:Bibliography/",)
+
+
+def concept_reference(href: str) -> str | None:
+    """What a link inside a definition names as a concept, if anything.
+
+    A glossary entry is its bare anchor, as it always was; an entry of any
+    other appendix is its page and anchor whole, `Appendix:Swahili noun
+    classes#M-wa_class`, since the anchor alone does not say which page it is
+    on. Only a link to a *place* on an appendix counts: one with no fragment
+    is a whole page -- `Appendix:Cyrillic script` under every letter, the
+    pronunciation key under every reading -- and a page is not a concept.
+    """
+    if _GLOSSARY_LINK in href:
+        return urllib.parse.unquote(href.split("#", 1)[1])
+    if not href.startswith(_APPENDIX_LINK):
+        return None
+    path, _, fragment = href[len("/wiki/"):].partition("#")
+    if not fragment:
+        return None
+    title = urllib.parse.unquote(path).replace("_", " ")
+    if title.startswith(_NOT_TERMINOLOGY):
+        return None
+    return f"{title}#{urllib.parse.unquote(fragment)}"
+
+
+def appendix_of(reference: str) -> tuple[str, str]:
+    """A concept reference as the page it is on and the anchor on it."""
+    if reference.startswith("Appendix:") and "#" in reference:
+        page, _, anchor = reference.partition("#")
+        return page, anchor
+    return GLOSSARY_PAGE, reference
+
 #: What Wiktionary wraps the word a form-of definition points at in. Its own
 #: name for the relation decker otherwise has to infer from English prose.
 _FORM_OF_LINK = "form-of-definition-link"
@@ -1457,10 +1505,9 @@ def _concepts_in(node, *, skip=()) -> tuple[str, ...]:
         if isinstance(child, str) or child.get("tag") in skip:
             return
         href = child["attrs"].get("href") or "" if child.get("tag") == "a" else ""
-        if _GLOSSARY_LINK in href:
-            anchor = urllib.parse.unquote(href.split("#", 1)[1])
-            if anchor not in found:
-                found.append(anchor)
+        anchor = concept_reference(href)
+        if anchor and anchor not in found:
+            found.append(anchor)
         for grandchild in child["children"]:
             walk(grandchild)
 
@@ -1868,8 +1915,13 @@ def glossary(edition: str, *, refresh: bool = False) -> dict[str, Concept]:
     if not isinstance(html, str):
         return {}
 
+    return _definition_list(_parse_tree(html))
+
+
+def _definition_list(tree: dict, page: str = GLOSSARY_PAGE) -> dict[str, Concept]:
+    """The `dt`/`dd` entries of a glossary-shaped page, by anchor."""
     concepts: dict[str, Concept] = {}
-    for definition_list in _find(_parse_tree(html), lambda n: n.get("tag") == "dl"):
+    for definition_list in _find(tree, lambda n: n.get("tag") == "dl"):
         anchors: list[tuple[str, str]] = []
         for child in definition_list["children"]:
             if isinstance(child, str):
@@ -1881,12 +1933,144 @@ def glossary(edition: str, *, refresh: bool = False) -> dict[str, Concept]:
                 description = _tidy(_text(child))
                 if description:
                     concept = Concept(
-                        name=name, description=description, anchor=anchors[0][0]
+                        name=name, description=description, anchor=anchors[0][0],
+                        page=page,
                     )
                     for anchor, _ in anchors:
                         concepts.setdefault(anchor, concept)
                 anchors = []
     return concepts
+
+
+def appendix(title: str, *, edition: str, refresh: bool = False) -> dict[str, Concept]:
+    """Every entry a language's appendix explains, by the anchors that reach it.
+
+    Fetched and cached like any entry, from whichever source pages come from:
+    unlike `Appendix:Glossary`, which every run asks for, which of these a run
+    needs says what language its text is in and what grammar it uses, so a
+    mirrored run never names one to Wikimedia. A mirror without the page
+    leaves the links unresolved, counted like a glossary anchor with no entry.
+
+    These pages are not one shape. A glossary of a language's own is either
+    the `dt`/`dd` list `Appendix:Glossary` is, or a bulleted list whose items
+    open with an anchor -- `Appendix:Japanese glossary`, `Appendix:Chinese
+    glossary` -- and an appendix that is prose is sections, linked by the
+    heading's id: `#Causative`, `#M-wa_class`. All three are read, and an
+    anchor found in two of them keeps the first.
+
+    Each name carries the page's, `causative (Finnish verbal derivatives)`:
+    the glossary has a `causative` too, the two say different things, and a
+    learner shown both needs to see they are not the same card twice.
+    """
+    payloads = _payloads(title, edition=edition, refresh=refresh)
+    html = ((payloads or {}).get("parse") or {}).get("parse", {}).get("text")
+    if not isinstance(html, str):
+        return {}
+    tree = _parse_tree(html)
+    found: dict[str, Concept] = {}
+    for source in (_definition_list(tree, title), _anchored_items(tree, title),
+                   _sections(tree, title)):
+        for anchor, concept in source.items():
+            found.setdefault(anchor, concept)
+    where = title.removeprefix("Appendix:")
+    return {
+        anchor: replace(concept, name=f"{concept.name} ({where})")
+        for anchor, concept in found.items()
+    }
+
+
+#: An en dash between an item's name and what it says: `Rendaku (連濁) –
+#: voicing of an unvoiced initial consonant...`.
+_NAMED = " – "
+
+
+def _anchored_items(tree: dict, page: str) -> dict[str, Concept]:
+    """List items that open with an anchor: one entry each."""
+    found: dict[str, Concept] = {}
+    for item in _find(tree, lambda n: n.get("tag") in ("li", "dd")):
+        anchors = [
+            node for node in item["children"]
+            if not isinstance(node, str) and "template-anchor" in _classes(node)
+        ]
+        if not anchors:
+            continue
+        text = _tidy(_text(item, skip=("ul", "ol", "dl")))
+        bold = next(iter(_find(item, lambda n: n.get("tag") == "b")), None)
+        name = _tidy(_text(bold)) if bold else ""
+        head, named, rest = text.partition(_NAMED)
+        description = rest if named else text
+        name = name or _tidy(head if named else "") or (
+            anchors[0]["attrs"].get("data-id") or ""
+        )
+        if not name or not description:
+            continue
+        ids = [_anchor_id(node) for node in anchors if node["attrs"].get("id")]
+        if not ids:
+            continue
+        concept = Concept(
+            name=name, description=_tidy(description), anchor=ids[0], page=page,
+        )
+        for anchor in ids:
+            found.setdefault(anchor, concept)
+    return found
+
+
+_HEADINGS = ("h2", "h3", "h4", "h5", "h6")
+
+
+def _anchor_id(node: dict) -> str:
+    """An element's id as a link to it spells it.
+
+    Some templates escape the id twice, so the page reads
+    `id="ren&amp;#039;yōkei"` where the link reads `#ren&#39;yōkei`, and one
+    unescaping leaves `ren&#039;yōkei` against `ren'yōkei`. A second makes
+    them the same, and an id with no entity in it is untouched by it.
+    """
+    return unescape(node["attrs"].get("id") or "")
+
+
+def _sections(tree: dict, page: str) -> dict[str, Concept]:
+    """Sections of prose, one entry each: the heading, and its paragraphs.
+
+    Only the paragraphs, and only the ones before the next heading of any
+    level. An appendix section goes on into example lists and inflection
+    tables, which are the appendix's to show and too much for a card; what
+    the section *says* the thing is sits in its opening prose. A section with
+    no paragraph of its own -- `Causative types`, a heading over subsections
+    -- has nothing to put on a card and is left out.
+    """
+    found: dict[str, Concept] = {}
+    for parent in [tree, *_find(tree, lambda n: bool(n["children"]))]:
+        heading: tuple[str, str] | None = None
+        paragraphs: list[str] = []
+
+        def close() -> None:
+            if heading and paragraphs:
+                anchor, name = heading
+                found.setdefault(anchor, Concept(
+                    name=name, description=" ".join(paragraphs),
+                    anchor=anchor, page=page,
+                ))
+
+        for child in parent["children"]:
+            if isinstance(child, str):
+                continue
+            inner = (
+                child if child.get("tag") in _HEADINGS
+                else next((n for n in child["children"] if not isinstance(n, str)
+                           and n.get("tag") in _HEADINGS), None)
+                if "mw-heading" in _classes(child) else None
+            )
+            if inner is not None:
+                close()
+                anchor = _anchor_id(inner)
+                heading = (anchor, _tidy(_text(inner))) if anchor else None
+                paragraphs = []
+            elif heading and child.get("tag") == "p":
+                if paragraph := _tidy(_text(child)):
+                    paragraphs.append(paragraph)
+        close()
+    return found
 
 
 #: What a page's current revision is, asked for on its own because it is a

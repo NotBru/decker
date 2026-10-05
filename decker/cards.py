@@ -27,6 +27,7 @@ from dataclasses import dataclass, field, replace
 from decker import reach, script
 from decker.console import console, count, log
 from decker.glosses import Gloss, is_marked, leading_qualifier
+from decker.morphology import RULE_PREFIX
 from decker.ollama import default_model
 from decker.pages import Example
 from decker.translation import SOURCE_LANG, SOURCE_LANGUAGE, Translator
@@ -174,8 +175,11 @@ def build(
             #: After the translation, not instead of it: `gloss` renders the
             #: examples the edition rendered, and this one writes a rendering
             #: for the examples it left bare. A deck in the edition's own
-            #: language has nothing to do here.
-            examples = translator.rendered(examples, target_language=gloss.language)
+            #: language has nothing to do here. Nor does a rule, whose examples
+            #: are `сон → снов`: two words of the language and an arrow, which
+            #: a rendering could only translate into a different pair of words.
+            if gloss.title_prefix != RULE_PREFIX:
+                examples = translator.rendered(examples, target_language=gloss.language)
             title = _titled(gloss, definition, translator)
             if title != gloss.surface:
                 english[gloss.index] = _fronted(gloss, gloss.surface, definition)

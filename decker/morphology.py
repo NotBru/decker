@@ -325,6 +325,9 @@ class Outcome:
     #: The rule it obeys, if any. Absent for an irregular form, and for every
     #: form at all when the stage is off or the model cannot be reached.
     rule: Rule | None = None
+    #: The word this occurrence was derived from, which with the occurrence
+    #: itself is the transformation a rule card shows as its example.
+    base: str = ""
 
 
 @dataclass
@@ -348,6 +351,8 @@ class Morphology:
     #: The gloss indexes of the first instances of each rule that reached the
     #: deck, up to the number the explanation card waits for.
     examples: dict[tuple, list[int]] = field(default_factory=dict, init=False)
+    #: Those same instances as the transformations they are, `сон → снов`.
+    pairs: dict[tuple, list[tuple[str, str]]] = field(default_factory=dict, init=False)
     #: Rules whose explanation card has already been made this run.
     explained: set[tuple] = field(default_factory=set, init=False)
     #: Words already asked about, so a form met twice is one pair of calls.
@@ -394,7 +399,7 @@ class Morphology:
         )
         if rule is None:
             return Outcome()
-        return Outcome(keep=self._cull(rule), rule=rule)
+        return Outcome(keep=self._cull(rule), rule=rule, base=base)
 
     def _rule_for(
         self,
@@ -569,7 +574,9 @@ class Morphology:
         self.shown[key] = shown + 1
         return True
 
-    def example(self, rule: Rule, index: int) -> tuple[int, ...] | None:
+    def example(
+        self, rule: Rule, index: int, pair: tuple[str, str]
+    ) -> tuple[int, ...] | None:
         """Record an instance that reached the deck; say when the rule can be told.
 
         The explanation card depends on the first two instances, so it is made
@@ -580,10 +587,28 @@ class Morphology:
         seen = self.examples.setdefault(rule.key, [])
         if len(seen) < EXAMPLES_BEFORE_RULE and index not in seen:
             seen.append(index)
+            self.pairs.setdefault(rule.key, []).append(pair)
         if rule.key in self.explained or len(seen) < EXAMPLES_BEFORE_RULE:
             return None
         self.explained.add(rule.key)
         return tuple(seen)
+
+    def transformations(self, rule: Rule) -> tuple[str, ...]:
+        """What the rule does, shown whole: `сон → снов`, one line per word.
+
+        The title names the word the rule was written from, and a learner
+        reading `Rule: genitive plural (снов)` sees the result without the
+        word it was made from -- which is the half that says what the rule
+        did. So the representative comes first, with its base, and then the
+        instances this deck showed before the card, which are the ones the
+        learner has actually met; a representative from an earlier run may
+        be a word this text never says.
+        """
+        found = [(rule.base, rule.representative)]
+        for pair in self.pairs.get(rule.key, []):
+            if pair not in found:
+                found.append(pair)
+        return tuple(f"{base} → {surface}" for base, surface in found)
 
     def report(self) -> None:
         """Say what the stage did, when it did anything at all."""

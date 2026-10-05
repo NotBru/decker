@@ -113,7 +113,9 @@ cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
 
 The terminology a definition is written in — dative, diminutive, colloquial — becomes cards of its
 own, one per `Appendix:Glossary` entry it links to, titled `Concept:` and carrying no production
-pair. `--no-concepts` turns the stage off.
+pair. A link to a place on a language's own appendix counts too — `-taa`'s *causative verbs* is
+`Appendix:Finnish verbal derivatives#Causative` — read through the mirror like any page and titled
+with the appendix beside it. `--no-concepts` turns the stage off.
 
 `--teach-script`, off unless asked for, adds the writing system itself: every character **of a term**
 written in a script the mother tongue does not use becomes a `Symbol:` card, with a production pair

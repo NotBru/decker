@@ -298,6 +298,10 @@ class _Builder:
     #: `Appendix:Glossary`, by every anchor that reaches an entry of it. One
     #: page, read on first use, so a run that glosses nothing never asks for it.
     _glossary: dict[str, Concept] | None = None
+    #: The other appendices a definition has linked into, by title, each read
+    #: on first use: a language's own grammar, `Appendix:Finnish verbal
+    #: derivatives`, explained where the glossary does not.
+    _appendices: dict[str, dict[str, Concept]] = field(default_factory=dict)
     #: Anchors linked by a definition that the glossary has no entry for.
     unresolved: Counter[str] = field(default_factory=Counter)
     #: How many of the glosses below are concepts rather than words.
@@ -343,6 +347,17 @@ class _Builder:
         if self._glossary is None:
             self._glossary = pages.glossary(self.edition, refresh=self.refresh)
         return self._glossary
+
+    def resolve(self, reference: str) -> Concept | None:
+        """The entry a definition's link reaches, on whichever appendix."""
+        page, anchor = pages.appendix_of(reference)
+        if page == pages.GLOSSARY_PAGE:
+            return self.glossary().get(anchor)
+        if page not in self._appendices:
+            self._appendices[page] = pages.appendix(
+                page, edition=self.edition, refresh=self.refresh
+            )
+        return self._appendices[page].get(anchor)
 
     def references_of(self, page: Page) -> dict[str, tuple[str, ...]]:
         if page.title not in self.refs:
@@ -908,7 +923,7 @@ class _Builder:
             return ()
         found = []
         for anchor in sense.concepts:
-            concept = self.glossary().get(anchor)
+            concept = self.resolve(anchor)
             if concept is None:
                 self.unresolved[anchor] += 1
                 continue
@@ -943,7 +958,7 @@ class _Builder:
                 lemma=surface,
                 title_prefix=CONCEPT_PREFIX,
                 title_prose=concept.name,
-                entry=pages.GLOSSARY_PAGE,
+                entry=concept.page,
                 definition=concept.description,
                 #: What the text is *about* is grammar, not a language, but
                 #: this field is read by the translator as the language a card
@@ -1021,11 +1036,13 @@ class _Builder:
         """
         if not sense.concepts:
             return ()
-        glossary = self.glossary() if self.concepts else {}
         names = []
         for anchor in sense.concepts:
-            concept = glossary.get(anchor)
-            names.append(concept.name if concept else anchor.replace("_", " "))
+            concept = self.resolve(anchor) if self.concepts else None
+            names.append(
+                concept.name if concept
+                else pages.appendix_of(anchor)[1].replace("_", " ")
+            )
         return tuple(sorted(set(names)))
 
     def rule(self, rule: Rule, depends_on: tuple[int, ...]) -> int | None:
@@ -1065,6 +1082,12 @@ class _Builder:
                 #: itself is not on any page.
                 entry=rule.entry,
                 definition=rule.description,
+                #: The transformation itself, base and result, where a word's
+                #: card has its example sentences: in the language taught, and
+                #: outside the key, so a deck updated with these keeps its notes.
+                examples=tuple(
+                    Example(line) for line in self.morphology.transformations(rule)
+                ),
                 language=name_of(self.lang),
                 depends_on=depends_on,
                 key=gloss_key(*key),
@@ -1415,14 +1438,16 @@ def build(
         total = sum(builder.unresolved.values())
         names = ", ".join(anchor for anchor, _ in builder.unresolved.most_common(5))
         log(
-            f"[decker] {total} links to glossary entries that do not exist "
+            f"[decker] {total} links to glossary or appendix entries that do not exist "
             f"({len(builder.unresolved)} distinct: {names}); no cards for those",
             level=VERBOSE, kind="warn",
         )
     if builder.concept_count:
         log(
             f"[decker] {builder.concept_count} of them are concepts "
-            f"({pages.GLOSSARY_PAGE})"
+            f"({pages.GLOSSARY_PAGE}"
+            + "".join(f", {title}" for title in builder._appendices)
+            + ")"
         )
     if builder.composed:
         log(
@@ -1743,7 +1768,9 @@ def _gloss_term(
         )
         if outcome.rule is None or index is None:
             continue
-        if (examples := builder.morphology.example(outcome.rule, index)) is not None:
+        if (examples := builder.morphology.example(
+            outcome.rule, index, (outcome.base, surface)
+        )) is not None:
             builder.rule(outcome.rule, examples)
 
     added = len(builder.glosses) - before

@@ -104,6 +104,48 @@ what follows is the consequence of taking that literally and finding where it ne
   The stage then stands down after saying so once, rather than reporting every anchor in the run as
   an entry that does not exist.
 
+## A language's own appendices
+
+Bru's todo, 2026-10-05: Finnish `-taa` is "Forms causative verbs from verbs", and *causative verbs*
+links `Appendix:Finnish verbal derivatives#Causative`, not the glossary. The design names
+`Appendix:Glossary` only, so this goes past its letter; the design line is the human's to rewrite
+if it is to stay true.
+
+- **Any appendix, but only a place on one.** A link inside a definition to `Appendix:X#Y` is a
+  concept, read from entry `Y` of page `X`. A link with no fragment is not: measured over the
+  15,615 cached pages, the fragment-less appendix links inside definitions are script pages
+  (`Appendix:Cyrillic script` under every letter, 1,852 of them; Latin, Korean, kana), the SI
+  units table and the like — a page, not a concept. `Appendix:Bibliography/…` is excluded by name;
+  those are a footnote's sources. What is left, across 54 distinct targets: the Chinese glossary
+  (`obs-std`, `hist-dict`), the Japanese glossary (`ren'yōkei`, `rendaku`), Swahili and Tooro noun
+  classes, the Finnish, Catalan, Irish and Japanese verb appendices, `English nouns#Attributive`.
+  Rare beside the glossary's 27,090 links, and concentrated in exactly the languages whose
+  grammar the glossary does not cover.
+
+- **Three shapes of entry, all read.** These pages are not one format: a `dt`/`dd` list like the
+  glossary's; a bulleted list whose items open with an anchor span (the Japanese and Chinese
+  glossaries — the bold name, and the text after the en dash); and prose sections linked by the
+  heading's id (`#Causative`, `#M-wa_class`). A section's description is its paragraphs before the
+  next heading of any level, never its example lists or tables, which run to pages in
+  `Catalan verbs`. A heading over subsections with no paragraph of its own (`Causative types`) is
+  no entry. One template escapes its ids twice (`ren&#039;yōkei`), so ids are unescaped once more.
+
+- **The name carries the page:** `Concept: Causative (Finnish verbal derivatives)`. The glossary
+  has a `causative` too, the two say different things, and a learner shown both should see they
+  are two cards on purpose.
+
+- **Fetched like an entry, not like the glossary.** The glossary is the same title on every run,
+  so asking Wikimedia for it reveals nothing. Which of these a run needs says what language its
+  text is in and what grammar it uses, so they go through the ordinary page path — the mirror when
+  one is set, cached by title, no Wikimedia fallback — and a mirror without the page leaves the
+  link unresolved, counted with the glossary's dangling anchors. No revision check either: they
+  are pages like any other.
+
+- **A rule's feature bundle reads them too**, since it is built from the same references. Swahili
+  `mi class(IV) inflected form of -a` now has its noun class in the bundle, where before the link
+  was not read at all; a rule book written before this keys such forms without it, and a new rule
+  is written for them once.
+
 ## How a concept reaches a card
 
 - **A concept is a gloss, not a new kind of thing.** It has a title, a description, an identity and

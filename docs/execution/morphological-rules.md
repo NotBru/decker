@@ -163,6 +163,21 @@ The consequence: a rule with only one instance in this text produces no card. Th
 constraint read strictly — a rule stated after one example is a generalization from one example — and
 the rule itself is still written to the database, so the next deck can teach it.
 
+### The card shows the transformation whole: `сон → снов`
+
+Bru's todo, 2026-10-05. The title names the word the rule was written from —
+`Rule: genitive plural (снов)` — and that is the result without the word it was made from, which
+is the half that says what the rule *did*. So a rule card's examples, where a word's card has its
+example sentences, are the transformations themselves, one per line: the representative with its
+base first, then the instances this deck showed before the card, which are the ones the learner has
+actually met (a representative from an earlier run's book may be a word this text never says).
+Pairs repeated are shown once.
+
+They sit outside the gloss key, which is the title and the description, so a deck rebuilt with
+`--update` keeps its rule notes and corrects them in place. And the translator's renderings skip
+them: a rendering of `сон → снов` could only be a different pair of words in the mother tongue,
+which is worse than nothing beside a rule about this one.
+
 ### A rule card carries no production pair, like a concept card
 
 `Gloss.production` now says this outright, and `cards.py` reads it instead of testing whether the
