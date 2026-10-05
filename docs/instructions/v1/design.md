@@ -53,7 +53,8 @@ below) don't.
 
 ### Concept identification
 
-We identify concepts as any of the entries in Wiktionary's `Appendix:Glossary`. Detection is done
+We identify concepts as any of the entries in Wiktionary's `Appendix:Glossary`, or in a language's
+own appendix (e.g. `Appendix:Finnish verbal derivatives#Causative`). Detection is done
 through any link to them **inside the definition**, and should produce a `Concept: {concept}` card
 *without a production pair*.
 
@@ -86,6 +87,7 @@ Dropping an example means keeping the base word's card but not the current insta
 
 The explanation card should depend on the first 2 examples, so that it appears only after the user
 has been exposed to them.
+It should show the transformation of its representative and of those examples in full, e.g. `сон -> снов`.
 
 The rules should be translated to the mother language.
 

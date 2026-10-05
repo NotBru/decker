@@ -151,11 +151,12 @@ For:
   reading order, thus leaking information about the source text.
 - **No rate limits, no 403.** Wikimedia's pacing and its backoff stop applying.
 - **Nothing but the model's host is reached at run time**, once the title list is cached —
-  `Appendix:Glossary`, which the concept cards are made from, included, as long as the mirror
+  `Appendix:Glossary` and the language appendices, which the concept cards are made from, included,
+  as long as the mirror
   carries the `Appendix:` namespace. A dump holds those pages but an import files them under the
   main namespace unless the namespaces were declared first; see
   [docs/execution/local-wiktionary.md](docs/execution/local-wiktionary.md). Where it does not,
-  that one page is read from Wikimedia and nothing else is.
+  the glossary is read from Wikimedia and nothing else is.
 
 Against:
 
