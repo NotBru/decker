@@ -146,6 +146,14 @@ def _main(argv: list[str] | None = None) -> int:
         ),
     )
     deck.add_argument(
+        "--no-strokes",
+        action="store_true",
+        help=(
+            "do not draw the stroke order on cards whose term is one Japanese "
+            "or Chinese character"
+        ),
+    )
+    deck.add_argument(
         "--no-translate",
         action="store_true",
         help="leave the cards in the edition's language whatever --mother-lang says",
@@ -806,6 +814,7 @@ def _run_deck(arguments: argparse.Namespace, text: str) -> int:
         target_lang=arguments.target_lang,
         mother_lang=arguments.mother_lang,
         translate=not arguments.no_translate,
+        strokes=not arguments.no_strokes,
         seed=arguments.seed,
         window=arguments.window,
         **_definition_arguments(arguments),

@@ -67,6 +67,9 @@ the code changes.
 - [Ten languages, one mother tongue](docs/execution/language-survey.md) — the whole pipeline over ten
   languages for a speaker of English: what works everywhere, which stage gives way in each, and what
   was done about the first four findings.
+- [Stroke order](docs/execution/stroke-order.md) — the order a one-character card's term is written
+  in, drawn on its answer: why the source is the target language's and not twpen's, and the one
+  case it draws in the wrong hand.
 
 ## Committing
 
@@ -125,6 +128,11 @@ while kana, kanji and Cyrillic each cost a pair of cards. A character whose lang
 several ways carries the `Readings` list Wiktionary gives it instead of a pronunciation, and a
 character the text also teaches as a word of its own is one card and not two — the word's, which
 also replaces a shape glossed from Translingual.
+
+A card whose term is one Japanese or Chinese character — a `Symbol:` card or a one-character word
+— shows that character's strokes, numbered in writing order, on its answer: KanjiVG for Japanese,
+Make Me a Hanzi for Chinese, each one archive downloaded once into the cache. `--no-strokes` turns
+it off.
 
 `--limit-glosses N` stops glossing at N and builds the deck from what stands, which is Ctrl+C's
 ending reached on a count; the check is between terms, so the count overshoots by the last term. Which scripts a reader reads is known for English only; another

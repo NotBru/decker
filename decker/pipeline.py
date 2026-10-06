@@ -9,6 +9,7 @@ function here stops the pipeline one stage further along.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import time
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from decker import cards as deck_cards
 from decker import pages, reach
 from decker import shuffling, trees, wiktionary
+from decker import strokes as strokes_
 from decker.cards import Card
 from decker.console import VERBOSE, console, log
 from decker.glosses import Gloss
@@ -247,6 +249,7 @@ def deck(
     seed: int | None = None,
     window: int = shuffling.WINDOW,
     translate: bool = True,
+    strokes: bool = True,
     **define_arguments,
 ) -> list[Card]:
     """Run every stage: text, terms, glosses, cards, and the order to learn them."""
@@ -261,7 +264,39 @@ def deck(
         translate=translate,
         refresh_answers=define_arguments.get("refresh_answers", False),
     )
+    if strokes:
+        built = _with_strokes(built, glosses, target_lang)
     return shuffling.shuffle(built, seed=seed, window=window)
+
+
+def _with_strokes(
+    cards: list[Card], glosses: list[Gloss], target_lang: str
+) -> list[Card]:
+    """Every card whose term is one character, with that character's strokes.
+
+    Read off the gloss rather than the card: a recognition card's front may be
+    `Symbol: 所` or a word marked with its sense, and the gloss knows which
+    character it is. A title decker wrote -- a concept, a rule -- is prose and
+    never a character, whatever its length.
+    """
+    drawn: dict[int, str] = {}
+    for gloss in glosses:
+        if gloss.title_prose:
+            continue
+        character = gloss.surface.removeprefix(gloss.title_prefix)
+        if path := strokes_.drawn(character, target_lang):
+            drawn[gloss.index] = path
+    if drawn:
+        log(f"[decker] {len(drawn)} characters drawn with their stroke order",
+            kind="head")
+    return [
+        dataclasses.replace(
+            card, answer=dataclasses.replace(card.answer, strokes=drawn[card.gloss])
+        )
+        if card.gloss in drawn
+        else card
+        for card in cards
+    ]
 
 
 def build_index(

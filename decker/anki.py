@@ -23,6 +23,7 @@ from pathlib import Path
 
 import genanki
 
+from decker import strokes
 from decker.cards import PRODUCTION, RECOGNITION, Card, Side
 from decker.markdown import LICENSE_URL, WIKTIONARY_HOME, entry_url
 
@@ -69,6 +70,8 @@ CSS = """\
 .headword { font-size: 17px; opacity: 0.8; margin-top: 0.3em; }
 .examples, .etymology { font-size: 17px; opacity: 0.8; margin-top: 0.7em; }
 .examples { font-style: italic; }
+.strokes img { width: 160px; height: 160px; margin-top: 0.4em; }
+.nightMode .strokes img { filter: invert(1); }
 .credit { font-size: 12px; opacity: 0.5; margin-top: 1.4em; }
 .credit a { color: inherit; }
 """
@@ -78,11 +81,11 @@ CSS = """\
 #: existing ones renumbered under the notes already in it.
 RECOGNITION_FIELDS = (
     "Term", "Examples", "Definition", "IPA", "Etymology", "Audio", "Credit",
-    "Headword", "Renderings", "Equivalent", "Readings",
+    "Headword", "Renderings", "Equivalent", "Readings", "Strokes",
 )
 PRODUCTION_FIELDS = (
     "Definition", "Term", "IPA", "Etymology", "Credit", "Headword", "Audio",
-    "Equivalent", "Readings",
+    "Equivalent", "Readings", "Strokes",
 )
 
 RECOGNITION_FRONT = """\
@@ -99,6 +102,7 @@ RECOGNITION_BACK = """\
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
 {{#Readings}}<div class="readings">{{Readings}}</div>{{/Readings}}
+{{#Strokes}}<div class="strokes">{{Strokes}}</div>{{/Strokes}}
 {{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
 <div class="credit">{{Credit}}</div>\
@@ -116,6 +120,7 @@ PRODUCTION_BACK = """\
 {{#Headword}}<div class="headword">{{Headword}}</div>{{/Headword}}
 {{#IPA}}<div class="ipa">{{IPA}}</div>{{/IPA}}
 {{#Readings}}<div class="readings">{{Readings}}</div>{{/Readings}}
+{{#Strokes}}<div class="strokes">{{Strokes}}</div>{{/Strokes}}
 {{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}
 {{#Etymology}}<div class="etymology">{{Etymology}}</div>{{/Etymology}}
 <div class="credit">{{Credit}}</div>\
@@ -166,6 +171,8 @@ def write(
     media: dict[str, None] = {}
     for position, card in enumerate(cards, start=1):
         media.update(dict.fromkeys(card.answer.audios))
+        if card.answer.strokes:
+            media[card.answer.strokes] = None
         deck.add_note(
             _note(
                 card,
@@ -178,6 +185,13 @@ def write(
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    #: The drawings' licences travel with the deck as Wiktionary's does: once
+    #: here, and on every card that carries one.
+    drawers = dict.fromkeys(
+        strokes.credit(card.answer.strokes) for card in cards if card.answer.strokes
+    )
+    if drawers:
+        deck.description += " " + "; ".join(drawers) + "."
     genanki.Package(deck, media_files=list(media)).write_to_file(path)
     return path
 
@@ -376,6 +390,8 @@ def _note(
         #: rule came from -- but the sentence in front of it says the rule is
         #: not something Wiktionary wrote.
         credit = f"{card.attribution} {credit}".strip()
+    if card.answer.strokes:
+        credit = f"{credit}<br>{strokes.credit(card.answer.strokes)}".removeprefix("<br>")
     if card.kind == RECOGNITION:
         fields = [
             card.challenge.term or "",
@@ -389,6 +405,7 @@ def _note(
             _lines(card.answer.renderings),
             card.answer.equivalent,
             _lines(card.answer.readings),
+            _drawing(card.answer.strokes),
         ]
     else:
         fields = [
@@ -401,6 +418,7 @@ def _note(
             _sounds(card.answer.audios),
             card.challenge.equivalent,
             _lines(card.answer.readings),
+            _drawing(card.answer.strokes),
         ]
     return genanki.Note(
         model=model,
@@ -442,6 +460,10 @@ def _sounds(paths: tuple[str, ...]) -> str:
     Wiktionary lists them; Anki plays them one after another.
     """
     return "".join(f"[sound:{Path(path).name}]" for path in paths)
+
+
+def _drawing(path: str) -> str:
+    return f'<img src="{Path(path).name}">' if path else ""
 
 
 def _recognition_model() -> genanki.Model:

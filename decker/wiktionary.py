@@ -98,22 +98,33 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
     path = cache_dir() / f"{edition}wiktionary-all-titles.gz"
     if path.exists() and not refresh:
         return path
+    download(DUMP_URL.format(edition=edition), path, phase="dump")
+    log(f"[decker] {path.stat().st_size // (1 << 20)} MB of titles cached at "
+        f"{path}", level=VERBOSE, kind="detail")
+    return path
+
+
+def download(url: str, path: Path, *, phase: str) -> Path:
+    """Fetch ``url`` whole into ``path``, waiting out a host that drops.
+
+    For the files decker takes once and in one piece -- a title dump, a
+    stroke-order archive -- which leak nothing about the text being read.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    url = DUMP_URL.format(edition=edition)
     log(f"[decker] downloading {url}", kind="head")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    partial = path.with_suffix(".gz.part")
+    partial = path.with_name(path.name + ".part")
     blips = 0
     while True:
         try:
             with urllib.request.urlopen(request) as response, partial.open("wb") as out:
-                #: Tens of megabytes over whatever connection the run has, once
-                #: per edition, and the only stage that can honestly count bytes
+                #: Tens of megabytes over whatever connection the run has, once,
+                #: and the only kind of stage that can honestly count bytes
                 #: because the server says how many there are. Not skippable:
                 #: half a dump is not a dump, and the run has nothing to do
                 #: without it.
                 size = int(response.headers.get("Content-Length") or 0)
-                with console.phase("dump", size, skippable=False, unit="bytes"):
+                with console.phase(phase, size, skippable=False, unit="bytes"):
                     while chunk := response.read(1 << 20):
                         out.write(chunk)
                         console.advance(len(chunk))
@@ -124,17 +135,15 @@ def dump_path(edition: str, *, refresh: bool = False) -> Path:
             reason, failure = f"HTTP {error.code}", error
         except (urllib.error.URLError, OSError) as error:
             reason, failure = str(getattr(error, "reason", error)), error
-        #: The dumps host dropping, before or halfway through, is waited out
-        #: and the download started over; see `decker.reach`. A failure while
-        #: the host answers -- a full disk, say -- is not, past a few tries.
+        #: The host dropping, before or halfway through, is waited out and the
+        #: download started over; see `decker.reach`. A failure while the host
+        #: answers -- a full disk, say -- is not, past a few tries.
         if not http_gate(url, USER_AGENT).wait(reason):
             blips += 1
             if blips >= BLIPS:
                 raise failure
             time.sleep(2.0)
     partial.replace(path)
-    log(f"[decker] {path.stat().st_size // (1 << 20)} MB of titles cached at "
-        f"{path}", level=VERBOSE, kind="detail")
     return path
 
 

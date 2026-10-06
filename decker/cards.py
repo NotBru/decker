@@ -83,6 +83,11 @@ class Side:
     #: question, and a recognition card showing `f (plural servilletas)` on
     #: its front would be answering half of itself.
     headword: str = ""
+    #: The cached drawing of the term's strokes, numbered in writing order,
+    #: where the term is one character: on the answers of both cards, since
+    #: on the production card's question it would be the answer itself. See
+    #: :mod:`decker.strokes`.
+    strokes: str = ""
 
 
 @dataclass(frozen=True)
