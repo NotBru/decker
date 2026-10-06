@@ -24,6 +24,7 @@ all rights reserved and draws Taiwan's order), Korean, and the alphabets. See
 from __future__ import annotations
 
 import json
+import re
 import zipfile
 from dataclasses import dataclass
 from functools import cache
@@ -84,6 +85,29 @@ SOURCES = {
 
 _BY_NAME = {source.name: source for source in (KANJIVG, MAKEMEAHANZI)}
 
+#: Which drawing a media file holds, in its name. Anki keys media by bare name,
+#: so a drawing decker has since learned to draw differently has to be a new
+#: name or a collection keeps showing the old one. 2: direction arrows.
+DRAWING = 2
+
+#: The strokes in grey, so that what is drawn over them reads: the direction
+#: of each in red, dashed and ending in an arrowhead, and its number in black.
+#: Both sources record a stroke in the order the brush moves -- KanjiVG's path
+#: and Make Me a Hanzi's median start where the stroke starts -- so the arrow
+#: is the data's own and nothing is guessed.
+STROKE = "#b8b8b8"
+ARROW = "#d03030"
+NUMBER = "#1a1a1a"
+
+
+def _arrowhead(size: float) -> str:
+    """The marker every direction line ends in, ``size`` in the line's widths."""
+    return (
+        '<defs><marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" '
+        f'markerWidth="{size}" markerHeight="{size}" orient="auto">'
+        f'<path d="M0,1 L10,5 L0,9 z" fill="{ARROW}"/></marker></defs>'
+    )
+
 
 def drawn(character: str, lang: str) -> str:
     """The cached SVG of ``character``'s strokes as ``lang`` writes them.
@@ -118,7 +142,7 @@ def _media(source: Source, character: str) -> Path:
     #: Anki keeps every deck's media in one folder by bare name, so the name
     #: says it is decker's and whose drawing it is, not just which code point.
     return (
-        cache_dir() / "strokes" / f"decker-strokes-{source.name}-{ord(character):05x}.svg"
+        cache_dir() / "strokes" / f"decker-strokes-{source.name}-{ord(character):05x}-d{DRAWING}.svg"
     )
 
 
@@ -142,13 +166,33 @@ def _kanjivg_names() -> tuple[zipfile.ZipFile, frozenset[str]]:
 
 
 def _from_kanjivg(character: str) -> str:
-    """KanjiVG's own file for the character, licence comment and numbers in it.
+    """KanjiVG's own file for the character, with each stroke's direction.
 
-    The base file only: `-Kaisho` and the other variants are other hands.
+    Its licence comment and numbers stay; the strokes are greyed and each path
+    drawn again over itself, thin, dashed and arrowed -- which ShareAlike
+    allows, the file saying so. The base file only: `-Kaisho` and the other
+    variants are other hands.
     """
     archive, names = _kanjivg_names()
     name = f"kanji/{ord(character):05x}.svg"
-    return archive.read(name).decode("utf-8") if name in names else ""
+    if name not in names:
+        return ""
+    svg = archive.read(name).decode("utf-8")
+    paths = re.findall(r'<path id="kvg:[^"]*"[^>]*?\sd="([^"]+)"', svg)
+    arrows = "".join(f'<path d="{d}"/>' for d in paths)
+    svg = svg.replace("-->", "Direction arrows added by decker.\n-->", 1)
+    svg = svg.replace("stroke:#000000", f"stroke:{STROKE}", 1)
+    svg = svg.replace("fill:#808080", f"fill:{NUMBER}", 1)
+    overlay = (
+        _arrowhead(3.5)
+        + f'<g style="fill:none;stroke:{ARROW};stroke-width:0.9;'
+        f'stroke-dasharray:2.4,1.6;stroke-linecap:round;" marker-end="url(#arrow)">'
+        f"{arrows}</g>\n"
+    )
+    #: Under the numbers, which are the last group: a number is never hidden
+    #: by an arrow crossing it.
+    numbers = svg.index('<g id="kvg:StrokeNumbers')
+    return svg[:numbers] + overlay + svg[numbers:]
 
 
 @cache
@@ -175,6 +219,12 @@ def _from_hanzi(character: str) -> str:
         return ""
     data = json.loads(line)
     strokes = "".join(f'<path d="{d}"/>' for d in data["strokes"])
+    arrows = "".join(
+        '<polyline points="'
+        + " ".join(f"{x},{y}" for x, y in median)
+        + '"/>'
+        for median in data["medians"]
+    )
     numbers = "".join(
         f'<text x="{x - 70}" y="{900 - y - 10}">{number}</text>'
         for number, ((x, y), *_) in enumerate(data["medians"], start=1)
@@ -184,10 +234,12 @@ def _from_hanzi(character: str) -> str:
         "Arphic Public License; drawn by decker. -->\n"
         '<svg xmlns="http://www.w3.org/2000/svg" width="109" height="109" '
         'viewBox="0 0 1024 1024">'
-        f'<g transform="scale(1,-1) translate(0,-900)" fill="#000000">{strokes}</g>'
-        #: Red rather than KanjiVG's grey, since here the numbers sit on
-        #: filled strokes rather than beside thin lines.
+        + _arrowhead(3.5)
+        + '<g transform="scale(1,-1) translate(0,-900)">'
+        f'<g fill="{STROKE}">{strokes}</g>'
+        f'<g fill="none" stroke="{ARROW}" stroke-width="9" stroke-dasharray="24,16" '
+        f'stroke-linecap="round" marker-end="url(#arrow)">{arrows}</g></g>'
         '<g font-size="80" font-weight="bold" font-family="sans-serif" '
-        'fill="#d03030">'
+        f'fill="{NUMBER}">'
         f"{numbers}</g></svg>\n"
     )

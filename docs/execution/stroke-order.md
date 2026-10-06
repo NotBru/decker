@@ -33,12 +33,19 @@ drawn the Japanese way.
 | `ja` | [KanjiVG](https://kanjivg.tagaini.net), release `r20260714` | kanji, hiragana, katakana — 6,700 files | CC BY-SA 3.0 |
 | `zh`, `zh-hans`, `zh-hant` | [Make Me a Hanzi](https://github.com/skishore/makemeahanzi) `graphics.txt` | 9,574 hanzi, PRC order | Arphic Public License |
 
-- **KanjiVG's file is used as it is**, numbers and licence comment included. Only the scripts the
-  deck is teaching to write are drawn — a Latin `A` or a digit in a Japanese text is in KanjiVG too,
+- **KanjiVG's file is used nearly as it is**, numbers and licence comment included; only the
+  direction arrows below are added, and the comment says so. Only the scripts the deck is teaching
+  to write are drawn — a Latin `A` or a digit in a Japanese text is in KanjiVG too,
   and is not drawn.
 - **Make Me a Hanzi has outlines, not drawings**, so decker draws them: filled strokes, a red number
   at each stroke's first median point, nudged up and left so it sits off the stroke. Checked by
   rendering 我, whose seven strokes come out in the standard order.
+- **Every stroke shows its direction**, which the first version did not — the numbers said where a
+  stroke starts and nothing said where it goes, Bru's catch the same day. The strokes are drawn grey,
+  and over each runs a dashed red line ending in an arrowhead, as twpen draws it. Nothing is guessed:
+  KanjiVG's paths and Make Me a Hanzi's medians are both recorded in the order the brush moves, so
+  the arrow is the data drawn again, thinner. The numbers go on top, in near-black, so no arrow
+  hides one.
 - **Traditional characters get the PRC order.** Make Me a Hanzi covers them, but Taiwan's standard
   differs for a minority of characters, and no openly licensed Taiwanese set was found. A `zh-hant`
   deck is therefore occasionally drawn in the mainland hand; it is the one known inaccuracy.
@@ -61,8 +68,10 @@ helper as the title dump (`wiktionary.download`), waiting out a dropped host the
 
 ## In the deck
 
-- The drawing is an SVG media file named `decker-strokes-<source>-<codepoint>.svg`: Anki keeps every
-  deck's media in one folder by bare name, so the name says whose it is.
+- The drawing is an SVG media file named `decker-strokes-<source>-<codepoint>-d<N>.svg`: Anki keeps
+  every deck's media in one folder by bare name, so the name says whose it is — and which drawing,
+  `DRAWING` in `decker/strokes.py`. A collection holding a file of that name keeps its own copy, so a
+  drawing decker has since changed (the arrows were `d2`) has to arrive under a new name.
 - A `Strokes` field is **appended** to both note types, as `Equivalent` and `Readings` were, so a
   collection that already holds decker's note types gains a column rather than having its existing
   ones renumbered. Note identities do not change: a rebuilt deck updates the notes it made.
