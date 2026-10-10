@@ -418,6 +418,18 @@ design wins and the code is wrong.
   parsers emit; Parsoid also marks it with a `<link rel="mw:PageProp/redirect">` and the mirror's
   legacy parser does not, so that is not what is matched.
 
+  The target may name a section — `解決する` redirects to `解決#Japanese`, the way the English
+  Wiktionary files a Japanese `-する` verb under its noun — and the regex took only a bare target,
+  so every one of those was dropped and handed to a model that wrote its own gloss
+  (`解決すん`, *a colloquial contraction of 'kettei suru'*). The fragment is now matched and
+  dropped. Nothing reached these pages before Sudachi: Stanza never kept `解決` and `すん` together.
+
+- **A see-box's namespace links are not its target.** うぐいす's box points at 【鶯】 and also says
+  where to *see* the category of kanji read that way, `Category:Japanese kanji read as うぐいす`,
+  which `_points_at` took for the spelling, so 鶯 was never read and a model explained the word
+  as a swallow. A target with a namespace prefix is skipped; the box then answers with its one
+  【 】 entry, and the card reads *short for 鶯色: an olive-green colour*, which is the line's.
+
   This reaches a lemma whose `ё`-less spelling is a redirect, and only that. An inflected form has
   no redirect of its own — `грёз` is an entry, *genitive plural of грёза*, while `грез` is not a
   title at all — so the form is reached by restoring the mark before the lookup instead, which is

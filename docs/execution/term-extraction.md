@@ -173,6 +173,26 @@ wins and the code is wrong.
 
   Chinese is in the same set for the same reason, but has not been run since.
 
+- **What it did to the Gokurakugai volume** (`qwen3.5:4b`, script cards on, 2026-10-10). The deck
+  grew from 2,977 cards to 3,245: 892 distinct words where there were 793. 111 terms are now
+  phrases over several tokens, and they are most of the growth — `事務所`, `他人事`,
+  `行方不明者`, `週刊誌`, `出回る`, `いい加減`, `そういえば`, `かもしれない`, `因果応報` — with
+  `撮る`, `太る` and `減る` reached through Sudachi's lemmas. Gone are the cards for `(`, `)`, `~`
+  and `「 」`, and the fragments a split compound used to leave: `腰` six times over, `人事`
+  *human affairs*, `最` *a male given name*.
+
+  About 25 of the phrases are inflected forms with a page of their own — `出て`, `食べた`, `見て`
+  — and each is a form-of card ahead of its lemma's, which is what the design asks of an inflected
+  form and what Spanish already gets. Four of the 111 are false: a kana run that is also the
+  reading of another word. `そうだ` is `そう` + `だ`, *so I hear*, and its page holds only 操舵,
+  *steering*, so the model had no right sense to choose; `あったら` (*alas!*), `いいん` (*clinic*,
+  out of `いいんだ`) and `らに` are the same. A judged sample of 45 word cards went from 25 right,
+  14 wrong to 27 and 12: the gain is in the words above, not spread across the deck, since sense
+  choice is still the 4B's.
+
+  Still wrong after the change: `いんなら` (`いむ`, *to detest*), `長ェ`, and `ねえ` as a negative
+  — contractions no dictionary has — and every sense error that was the model's.
+
 ## Known gaps
 
 All four below are **accepted for v1**, in the order they should be taken up afterwards. The

@@ -505,6 +505,7 @@ _SEE_TARGET = re.compile(r'\bsee\b\s*(?:<[^>]+>\s*)*<a href="/wiki/([^"#]+)')
 #: lists rather than spellings of one word, mostly reached from a fragment
 #: Stanza cut rather than from a word the text used, and "the first of them"
 #: is the answer decker refuses to give anywhere else.
+_NAMESPACED = re.compile(r"^[A-Z][A-Za-z ]*:")
 _SEE_ENTRY = re.compile(r'【\s*(?:<[^>]+>\s*)*<a href="/wiki/([^"#]+)')
 
 
@@ -548,9 +549,16 @@ def _points_at(payloads: dict, language: str, title: str) -> str | None:
     box = _see_box(section)
     if box is None:
         return None
-    named = _SEE_TARGET.search(box)
-    if named is not None:
-        return _spelling(named.group(1), title)
+    #: A link into a namespace is never the spelling a box hands its
+    #: definitions to: うぐいす's box also says where to *see* the category of
+    #: kanji read that way, and that was taken for the target, so the 【鶯】
+    #: entry below it was never read and the word went to a model, which
+    #: called a bush warbler a swallow. Found 2026-10-10, once Sudachi stopped
+    #: cutting the word in two.
+    for named in _SEE_TARGET.finditer(box):
+        target = _spelling(named.group(1), title)
+        if target is not None and not _NAMESPACED.match(target):
+            return target
     #: No spelling in the sentence, so the 【 】 blocks are the targets, and
     #: one of them is a pointer while several are a homophone list. `dict`
     #: rather than `set` because a box can name the same spelling twice and
@@ -605,7 +613,12 @@ def _from_pointer(
 #: One regex, matching the list the notice is written as, which both parsers
 #: emit: Parsoid marks the redirect with a `<link rel="mw:PageProp/redirect">`
 #: as well, and the mirror's legacy parser does not.
-_REDIRECT = re.compile(r'class="redirectText">\s*<li>\s*<a href="/wiki/([^"#]+)"')
+#:
+#: The target may name a section, `解決#Japanese`, which is how a Japanese
+#: `-する` verb redirects to its noun; the fragment is dropped, the language
+#: section being read by name anyway. Matching only a bare target missed
+#: every one of them.
+_REDIRECT = re.compile(r'class="redirectText">\s*<li>\s*<a href="/wiki/([^"#]+)(?:#[^"]*)?"')
 
 
 def _redirects_to(payloads: dict, title: str) -> str | None:
