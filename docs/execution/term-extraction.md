@@ -135,6 +135,9 @@ wins and the code is wrong.
   volume would have been one sentence. Decker's ends a sentence at a blank line or at a closing
   mark (`。！？!?‼⁉`, with a closing bracket or a variation selector kept on the sentence it
   follows), and hands Sudachi the text a line at a time, since it refuses inputs over 49,149 bytes.
+  A morpheme with no text is skipped: Sudachi reads `…` as the three dots it normalises it to and
+  hands back the two it made up as empty words, which Stanza refuses. The manga writes `⋯` and
+  never hit it; the first Japanese benchmark sentence with `…` did.
 
 - **The shortest unit (split mode A), and the core dictionary.** Long units (mode C) make
   `事務所` one token, but also make a compound Wiktionary has no page for one token with no entry
@@ -192,6 +195,64 @@ wins and the code is wrong.
 
   Still wrong after the change: `いんなら` (`いむ`, *to detest*), `長ェ`, and `ねえ` as a negative
   — contractions no dictionary has — and every sense error that was the model's.
+
+- **A kana title that is only the reading of another word is not a phrase.** The four false
+  phrases above share one cause: Wiktionary titles a page by the kana of a word normally written in
+  kanji, and a run of kana can spell it by coincidence. Parsing the title does not separate them —
+  `そうだ` alone cuts into the same `そう` + `だ` as the text — and the model cannot, since the
+  page offers nothing else. What does separate them is where the kanji spelling's words fall.
+  Sudachi reads `操舵` as one word, `そうだ`; the run is two. A kana run that really is the word
+  is that word written another way and cut in the same places: `かもしれない` is `かも知れない`,
+  `みなさん` is `皆さん`, `にげて` is `逃げて`.
+
+  So, for Japanese, every kana-only title the runs reach is checked before it is parsed
+  (`decker/readings.py`). The spellings it names are read off the page — a see-box's target, or
+  the `委員:` a kana entry opens a definition with — and each one is cut with Sudachi and its words
+  measured in kana. The title is kept if one of its senses names no spelling (it is the kana's own
+  word), or names one whose reading is the run and whose words end wherever the run's do. It is
+  dropped when every sense names a spelling and none of them is cut that way. A form-of target is
+  not a spelling: `みて` pointing at `見る` is the same word.
+
+  The first rule proposed was "drop a kana phrase whose page is only a pointer to a kanji
+  spelling". Checked against the volume before it was built, it would have dropped three right
+  phrases (`かもしれない`, `にげて`, `みなさん`) for two wrong ones, and missed `いいん`, whose page
+  lists its homophones as senses rather than pointing. The reading test drops sixteen titles over
+  the volume — `そうだ` 操舵, `いいん` 委員, `よね` 米, `はどう` 波動, `たから` 宝, … — and keeps
+  every one of the 46 kana phrases that were right. `あったら` now reaches `あった`, *past of ある*,
+  through its last token's lemma, which is what the text says.
+
+  It costs a page read per kana title, at the index stage rather than the definition stage, so
+  `decker extract` over Japanese now reads pages too. They are the pages definition would read
+  anyway, and cached the same way.
+
+- **A run cannot start on a suffix or end on a prefix.** `らに` — an obsolete name for a plant — was
+  matched in `お前らに`, *to you lot*, where `ら` closes `お前ら`. A run that opens on a suffix
+  starts inside the word before it, and one that closes on a prefix ends inside the next, so the
+  match is refused when its first token is tagged `接尾辞` or its last `接頭辞` (Stanza's tags for
+  Japanese are UniDic's, so no new data was needed). It removed `らに` and nothing else.
+
+- **Sudachi's normalised form, measured as the fix for contractions** (2026-10-10, over the
+  volume). 231 distinct tokens have a normalised form that differs from their dictionary form.
+
+  *As the lemma*, it is harmful. It is a standard spelling, not a reading of the text, and it
+  replaces the word the author chose with a homograph that means something else: `遭う` → `会う`,
+  `貼る` → `張る`, `上手い` → `旨い`, `ケツ` → `穴`, `造る` → `作る`, `まとも` → `正面`, `ほい` →
+  `其れ`.
+
+  *As a fallback*, used only where neither the surface nor the dictionary form is a title, it
+  reaches 35 token types. 26 are right: `ンな` → `そんな`, `メシ` → `飯`, `みてえ` → `みたい`,
+  `臭え` → `臭い`, `すげー` → `凄い`, `食える` → `食う`, `ずーっと` → `ずっと`. The other 9 are where
+  Sudachi's cut was already wrong, so the normalised form of a wrong word is wrong too: `ぶね` →
+  `船` out of `あっぶね`, `おっ` → `御`, `いー` → `良い` out of `悪いー`.
+
+  *For grammar words* (`助動詞`, and adjectives tagged `非自立可能`), it is what the negative `ねえ`
+  needs: 13 of its 15 occurrences are normalised to `ない`, against a dictionary form `ねえ` whose
+  page is the interjection *hey*. The other two are a sentence-final `ねぇ` tagged as an auxiliary.
+  `っす` → `です` and `す` → `です` are right too.
+
+  None of the three fixes `いんなら` or `長ェ`. Sudachi reads `いん` as the verb `忌む` and cuts
+  `長ェ` into `長` + `ェ`, so the error is in the cut, before any form is chosen. Nothing here is
+  built yet; the fallback and the grammar-word rule are the candidates.
 
 ## Known gaps
 

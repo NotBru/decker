@@ -16,7 +16,8 @@ document per topic, each one saying up front that the human docs outrank it. Kee
 the code changes.
 
 - [Term extraction](docs/execution/term-extraction.md) — v1's choices about titles, matching and
-  gaps, and Japanese: cut by Sudachi, and compounds matched in a language without spaces.
+  gaps, and Japanese: cut by Sudachi, compounds matched in a language without spaces, and the kana
+  titles that are only another word's reading.
 - [Definition fetching](docs/execution/definition-fetching.md) — where the data comes from, how
   glosses and their dependencies are made, and sense disambiguation.
 - [Deck building](docs/execution/deck-building.md) — cards, translation, shuffling and the Anki
@@ -43,7 +44,7 @@ the code changes.
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
 - [Words Wiktionary has no entry for](docs/execution/unknown-words.md) — misspellings looked up,
   foreign words explained or dropped, and the fabrications the first prompt produced.
-- [The benchmark](docs/execution/benchmark.md) — 24 sentences, four languages, known answers: what
+- [The benchmark](docs/execution/benchmark.md) — 37 sentences, five languages, known answers: what
   sense disambiguation is checked against, and why the five-sentence one stopped discriminating.
 - [Manga as a source](docs/execution/manga.md) — a mokuro `.mbz` archive read for its speech: why
   a block is the sentence and its lines are not, the reading order that came free, and the bubbles
@@ -182,7 +183,7 @@ Nothing asserts on decker's own functions, and checking work still means running
 from a scratchpad, on the smallest input that shows the thing.
 
 What does live in the repository, at Bru's instruction on 2026-09-15, is
-`tools/benchmark/` — 24 sentences in Spanish, German, Russian and Chinese with known answers for the
+`tools/benchmark/` — 37 sentences in Spanish, German, Russian, Chinese and Japanese with known answers for the
 one stage whose output is a judgement rather than a computation:
 
 ```

@@ -16,7 +16,7 @@ cannot tell its subjects apart has stopped being one. Bru's call: more sentences
 
 ## What it is
 
-`tools/benchmark/checks.json`: **24 sentences over four languages**, and **48 checks** — twelve per
+`tools/benchmark/checks.json`: **24 sentences over four languages**, and **48 checks** (plus the Japanese block below) — twelve per
 language, doubled from 24 on Bru's instruction, 2026-09-17.
 
 | | why it is in there |
@@ -66,6 +66,45 @@ OLLAMA_HOST=... DECKER_WIKTIONARY_HOST=... \
 
 Concepts and rules are off, so the glosses are word senses and nothing else. It exits non-zero when
 a check fails, which is the only respect in which it behaves like a test.
+
+## Japanese, 2026-10-10: thirteen sentences of speech
+
+The fifth block is not Wikipedia. It was written to recreate, in lines of its own, the ambiguities
+the Gokurakugai deck got wrong — a manga's speech is copyrighted and stays out of the repository —
+so it is **colloquial on purpose**: dropped particles, `〜ちゃった`, `〜ってば`, a verb read through
+its stem. Thirteen sentences, **fifteen checks**: `出る` answering the phone and not leaving, `やる`
+*to give* and not the colloquial *to do*, `振る` *to dump someone*, `乗る` *to go along with* an
+idea, `うまい` *skilful* and not *delicious*, `負け` and `切れ` read through to the verb they are a
+stem of. That brings the file to 37 sentences, five languages and 63 checks.
+
+Writing it found three things that were not the model's:
+
+- **The first draft passed everything.** Sentences that spelled their own sense out — *I'm hungry,
+  this ramen is うまい* — settle nothing; the cue has to be a reader's inference, not a gloss.
+- **A check can only be scored where the model is asked.** `切れちゃった` was meant to check
+  `ちゃう`, but `ちゃっ` has a page of its own with one sense (a blade's sound), the surface's page
+  beats the lemma's, and a single-sense page is never put to the model. That is a term-extraction
+  failure, not a judgement, and the check was dropped rather than left to blame a model for it.
+- **Sudachi reads `…` as three dots** and hands back two of them as words with no text, which
+  Stanza refuses. The manga writes `⋯` and never hit it; `nlp._morphemes` now skips them.
+
+| model | passed | failed | glosses | cold wall clock | failures |
+|---|---|---|---|---|---|
+| `qwen3.5:latest` (9B) | **14** | 1 | 98 | 313 s | うまい |
+| `gpt-oss:20b` | **14** | 1 | 98 | 4,370 s | 出る |
+| `gemma4:latest` | 13 | 2 | 97 | 107 s | やる, うまい |
+| `qwen3:14b` | 13 | 2 | 100 | 412 s | やる, うまい |
+| `qwen3.5:4b` | 12 | 3 | 101 | **93 s** | やる, 負け, うまい |
+| `gemma3:4b` | 11 | 4 | 112 | 95 s | those three, 切れ |
+
+**`うまい` is the hard one**, failed by five of six: the page's first sense is *delicious* and every
+model but `gpt-oss` keeps it for a drawing. **`やる`** is the other: four read *to do* where the
+money says *to give*. `qwen3.5:4b` alone takes `負け` for the noun *defeat* inside `負けたら`.
+
+**The ranking is the four-language one again.** The 9B is ahead of the 4B by two checks of fifteen
+for 3.4× the time — a smaller multiple than the 10× on the 48 checks, because the Japanese block
+asks fewer questions and more of the 9B's time is load. `gpt-oss:20b` matches the 9B and takes an
+hour; it does not fit the card. Nothing changes the default: `qwen3.5:4b` stays.
 
 ## What it says, 2026-09-17, on the 48 checks
 

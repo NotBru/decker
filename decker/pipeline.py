@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from decker import cards as deck_cards
@@ -100,6 +101,7 @@ def run(
         edition=edition,
         vocabulary=vocabulary,
         runs=runs,
+        misread=_misread(target_lang, edition) if runs is not None else None,
         refresh_titles=refresh_titles,
     )
     #: Term extraction is fast per sentence and slow over a series, and it is
@@ -314,6 +316,7 @@ def build_index(
     edition: str | None = None,
     vocabulary: set[str] | None = None,
     runs: set[str] | None = None,
+    misread: Callable[[str], str | None] | None = None,
     refresh_titles: bool = False,
 ) -> TitleIndex:
     """Build the title index, parsing its titles as ``target_lang``."""
@@ -322,5 +325,19 @@ def build_index(
         lang=target_lang,
         vocabulary=vocabulary,
         runs=runs,
+        misread=misread,
         refresh=refresh_titles,
+    )
+
+
+def _misread(target_lang: str, edition: str | None) -> Callable[[str], str | None] | None:
+    """What a kana title is only the reading of, for Japanese; nothing elsewhere."""
+    if target_lang != "ja":
+        return None
+    from decker.readings import kana_only, read_as_another
+
+    return lambda title: (
+        read_as_another(title, edition=edition or MOTHER_EDITION, lang=target_lang)
+        if kana_only(title)
+        else None
     )

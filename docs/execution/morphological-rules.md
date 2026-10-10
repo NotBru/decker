@@ -358,3 +358,11 @@ stays taught and the rebuild only adds.
   dependency, and this stage reuses exactly that; a line naming two words gives the first.
 - **Rules are per target language, and never shared between languages.** The database is keyed by
   language and so is every rule in it.
+- **Japanese inflected forms mostly never reach it.** The bundle is the glossary anchors a form-of
+  line links, and the lines Wiktionary's Japanese templates write link none: `出て` is *conjunctive
+  form of 出る*, `食べた` *past tense form of 食べる*, `なった` *past tense form of なる*, all
+  without a link. An empty bundle is not considered, so these stay ordinary form-of cards, one per
+  form, with no rule and no culling. Of the Gokurakugai volume's inflected forms only `やった`,
+  whose line is hand-written *past of やる* with `past tense` linked, made a rule. Found
+  2026-10-10. Reading the bundle from the line's prose when it links nothing would bring them in;
+  that is not built.

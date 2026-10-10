@@ -124,6 +124,12 @@ def _morphemes(text: str) -> Iterator[tuple[int, int, str, str | None]]:
     for offset, chunk in _chunks(text):
         for morpheme in tokenizer.tokenize(chunk, SplitMode.A):
             surface = morpheme.surface()
+            #: Sudachi reads `…` as the three dots it normalises it to, and
+            #: hands the two it made up back as words with no text at all;
+            #: Stanza refuses a token with none. The manga writes `⋯`, so it
+            #: was a benchmark sentence that found this, 2026-10-10.
+            if not surface:
+                continue
             symbol = morpheme.part_of_speech()[0] == "補助記号" or not any(
                 character.isalnum() for character in surface
             )
@@ -133,6 +139,31 @@ def _morphemes(text: str) -> Iterator[tuple[int, int, str, str | None]]:
                 surface,
                 None if symbol else morpheme.dictionary_form(),
             )
+
+
+def boundaries(text: str, *, read: bool = False) -> list[int]:
+    """Where Sudachi's words of ``text`` end, counted in characters.
+
+    With ``read``, counted in the hiragana of each word's reading instead, so a
+    kanji spelling can be laid against the kana it is read as: 皆さん ends its
+    words at 2 and 4, where `みな` and `さん` do, while 操舵 is one word read
+    `そうだ` and ends only at 3.
+    """
+    from sudachipy import SplitMode
+
+    ends: list[int] = []
+    position = 0
+    for morpheme in _sudachi().tokenize(text, SplitMode.A):
+        position += len(_hiragana(morpheme.reading_form()) if read else morpheme.surface())
+        ends.append(position)
+    return ends
+
+
+def _hiragana(text: str) -> str:
+    return "".join(
+        chr(ord(character) - 0x60) if "\u30a1" <= character <= "\u30f6" else character
+        for character in text
+    )
 
 
 def _chunks(text: str) -> Iterator[tuple[int, str]]:

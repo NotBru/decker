@@ -107,6 +107,7 @@ def extract(
     #: this a compound's parse matches any two tokens that happen to hang off
     #: each other the same way.
     adjacent = not unspaced(lang)
+    words = {word.id: word for word in sentence.words}
     for root in trees.sentence_tree(
         sentence, join_particles=join_particles, respell=respell
     ):
@@ -115,10 +116,11 @@ def extract(
                 matches.setdefault(_covered_by_label(node, title), set()).add(title)
             for title, tree in index.phrases_rooted_at(node.labels):
                 covered = trees.match(tree, node)
-                if covered is not None and (adjacent or _contiguous(covered)):
+                if covered is not None and (
+                    adjacent or (_contiguous(covered) and _whole(covered, words))
+                ):
                     matches.setdefault(covered, set()).add(title)
 
-    words = {word.id: word for word in sentence.words}
     punctuation = {word.id for word in sentence.words if word.upos == "PUNCT"}
     numerals = {word.id for word in sentence.words if _is_number(word.text)}
     if numerals:
@@ -164,6 +166,27 @@ def extract(
 def _contiguous(covered: frozenset[int]) -> bool:
     """Whether ``covered`` is a run of adjacent token ids."""
     return max(covered) - min(covered) + 1 == len(covered)
+
+
+#: The tags, in the UniDic set Japanese is tagged with, of a token that belongs
+#: to the word before it and of one that belongs to the word after.
+_SUFFIX = "接尾辞"
+_PREFIX = "接頭辞"
+
+
+def _whole(covered: frozenset[int], words: dict[int, Any]) -> bool:
+    """Whether an unspaced run starts and ends at the edges of words.
+
+    A run that opens on a suffix starts inside the word before it: `お前ら` +
+    `に` is *to you lot*, and `らに` was matched as the title of an obsolete
+    name for a plant. A run that closes on a prefix ends inside the next.
+    """
+    ids = sorted(covered)
+    first, last = words.get(ids[0]), words.get(ids[-1])
+    return not (
+        (first is not None and (first.xpos or "").startswith(_SUFFIX))
+        or (last is not None and (last.xpos or "").startswith(_PREFIX))
+    )
 
 
 def _covered_by_label(node: trees.Node, label: str) -> frozenset[int]:

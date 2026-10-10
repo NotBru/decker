@@ -18,7 +18,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -163,6 +163,7 @@ def build_index(
     lang: str,
     vocabulary: set[str] | None = None,
     runs: set[str] | None = None,
+    misread: Callable[[str], str | None] | None = None,
     refresh: bool = False,
 ) -> TitleIndex:
     """Build the title index for ``edition``.
@@ -179,6 +180,10 @@ def build_index(
     the parser -- matches the two tokens it is written as. The whole index
     leaves such titles single-word: parsing every unspaced title an edition
     has is not a cost a one-time setup should hide.
+
+    ``misread`` is asked of each of those titles before it is parsed, and
+    names the word a title is only the reading of: `そうだ` is 操舵, and a
+    title it names is left out. See :mod:`decker.readings`.
     """
     path = dump_path(edition, refresh=refresh)
     joiner = joiner_of(lang)
@@ -206,6 +211,8 @@ def build_index(
             if read % _BAR_STEP == 0:
                 console.advance(int(_BAR_STEP / _TITLES_PER_BYTE))
     log(f"[decker] {read} titles read", level=VERBOSE, kind="detail")
+    if misread is not None:
+        pending = _vetted(pending, misread)
     log(
         f"[decker] {len(index.words)} single-word titles, "
         f"{len(pending)} multi-word titles to parse"
@@ -213,6 +220,19 @@ def build_index(
     for title, tree in _parse_titles(pending, lang=lang, edition=edition):
         index.add_phrase(title, tree)
     return index
+
+
+def _vetted(titles: list[str], misread: Callable[[str], str | None]) -> list[str]:
+    """``titles`` less the ones ``misread`` names another word for, said aloud."""
+    kept: list[str] = []
+    for title in titles:
+        other = misread(title) if " " not in title else None
+        if other is None:
+            kept.append(title)
+        else:
+            log(f"[decker] not a phrase: {title} is only the reading of {other}",
+                level=VERBOSE, kind="dropped")
+    return kept
 
 
 #: Titles per compressed byte, near enough for a bar: the dump is one short

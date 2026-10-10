@@ -1,5 +1,5 @@
 {
- "what": "Known-answer checks for sense disambiguation: 24 sentences, four languages, 48 checks, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
+ "what": "Known-answer checks for sense disambiguation: 37 sentences, five languages, 63 checks, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
  "languages": {
   "es": {
    "lang": "es",
@@ -633,6 +633,205 @@
       "period (in history)"
      ],
      "why": "超過二十年: years of life"
+    }
+   ]
+  },
+  "ja": {
+   "lang": "ja",
+   "source": "written for this benchmark, not taken from any text: colloquial lines that recreate the ambiguities a manga deck got wrong (Gokurakugai, 2026-10-10), whose own lines are copyrighted and stay out of the repository",
+   "sentences": [
+    "電話鳴ってるよ。ちょっと出てくれる？",
+    "この温泉、まさに極楽だなあ。",
+    "金ならやるから、もう帰れ。",
+    "僕はもう子供じゃないってば。",
+    "春になったら、みんなで花見に行こう。",
+    "負けたらジュースおごりな。",
+    "寝る前に部屋の電気を消してね。",
+    "この店、味はいいけど高いんだよな。",
+    "金がないから、今月は外食なし。",
+    "彼女に振られて、ずっと落ち込んでる。",
+    "この絵、うまいね。",
+    "その話、乗った！",
+    "タバコ切れちゃった。"
+   ],
+   "checks": [
+    {
+     "surface": "出る",
+     "must": [
+      "to answer (the phone or door)"
+     ],
+     "must_not": [
+      "to leave a place",
+      "to go out",
+      "semen"
+     ],
+     "why": "電話…出てくれる: answer the phone"
+    },
+    {
+     "surface": "極楽",
+     "must": [
+      "heaven, paradise"
+     ],
+     "must_not": [
+      "red-light district",
+      "Amitabha",
+      "place name",
+      "surname"
+     ],
+     "why": "温泉、まさに極楽: paradise, figuratively"
+    },
+    {
+     "surface": "やる",
+     "must": [
+      "to give"
+     ],
+     "must_not": [
+      "to do (something)",
+      "to have sex",
+      "to kill",
+      "to send somebody"
+     ],
+     "why": "金ならやる: give the money"
+    },
+    {
+     "surface": "僕",
+     "must": [
+      "I; me"
+     ],
+     "must_not": [
+      "servant",
+      "low social status",
+      "civil servant"
+     ],
+     "why": "僕はもう子供じゃない: the pronoun"
+    },
+    {
+     "surface": "春",
+     "must": [
+      "spring (season)"
+     ],
+     "must_not": [
+      "sexual intercourse",
+      "adolescence",
+      "New Year",
+      "lust"
+     ],
+     "why": "春になったら…花見: the season"
+    },
+    {
+     "surface": "負け",
+     "must": [
+      "負ける"
+     ],
+     "must_not": [
+      "defeat; loss"
+     ],
+     "why": "負けたら…おごり: the verb's stem, not the noun defeat"
+    },
+    {
+     "surface": "電気",
+     "must": [
+      "electric light"
+     ],
+     "must_not": [
+      "electricity"
+     ],
+     "why": "部屋の電気を消して: the light"
+    },
+    {
+     "surface": "消す",
+     "must": [
+      "to turn off"
+     ],
+     "must_not": [
+      "to erase",
+      "to kill"
+     ],
+     "why": "電気を消して: switch the light off"
+    },
+    {
+     "surface": "味",
+     "must": [
+      "flavor, taste"
+     ],
+     "must_not": [
+      "clever",
+      "mysterious",
+      "(go)",
+      "body part"
+     ],
+     "why": "この店、味はいい: the food's taste"
+    },
+    {
+     "surface": "高い",
+     "must": [
+      "expensive"
+     ],
+     "must_not": [
+      "high, tall",
+      "superior"
+     ],
+     "why": "味はいいけど高い: the price"
+    },
+    {
+     "surface": "金",
+     "must": [
+      "money"
+     ],
+     "must_not": [
+      "gold (Au)",
+      "Friday",
+      "metal",
+      "gold general"
+     ],
+     "why": "金がないから外食なし: money"
+    },
+    {
+     "surface": "振る",
+     "must": [
+      "to reject someone"
+     ],
+     "must_not": [
+      "to wave",
+      "to sprinkle",
+      "to throw away",
+      "furigana"
+     ],
+     "why": "彼女に振られて: dumped"
+    },
+    {
+     "surface": "うまい",
+     "must": [
+      "skillful"
+     ],
+     "must_not": [
+      "delicious",
+      "profitable",
+      "foolish"
+     ],
+     "why": "この絵、うまい: skilfully drawn"
+    },
+    {
+     "surface": "乗る",
+     "must": [
+      "to accept one's talk"
+     ],
+     "must_not": [
+      "to get on/ride"
+     ],
+     "why": "その話、乗った: I'm in"
+    },
+    {
+     "surface": "切れ",
+     "must": [
+      "depletion"
+     ],
+     "must_not": [
+      "sharpness",
+      "cloth",
+      "piece, bit"
+     ],
+     "why": "タバコ切れ: out of cigarettes, read through the form 切れ"
     }
    ]
   }

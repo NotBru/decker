@@ -571,6 +571,54 @@ def _points_at(payloads: dict, language: str, title: str) -> str | None:
     return next(iter(targets)) if len(targets) == 1 else None
 
 
+def spellings_named(title: str, *, edition: str, lang: str) -> list[tuple[str, ...]] | None:
+    """The other spellings this page says its senses are written in, per sense.
+
+    One tuple per sense: the spelling a Japanese kana entry prefixes a
+    definition with -- いいん is *委員: committee member*, *医院: medical
+    clinic* -- or nothing, where the sense is the kana's own. A see-box is one
+    more group, its 【 】 targets together, since they are alternatives for
+    the same reading. ``None`` when the page has no section for the language.
+
+    Read for :mod:`decker.readings`, which asks whether a kana run is the word
+    the text wrote or only the reading of another; a form-of target is not a
+    spelling, so it is not here -- `みて` pointing at 見る is the same word.
+    """
+    payloads = _payloads(title, edition=edition, refresh=False)
+    if payloads is None:
+        return None
+    parse = payloads.get("parse")
+    html = parse.get("parse", {}).get("text") if isinstance(parse, dict) else None
+    if not isinstance(html, str):
+        return None
+    language = section_of(lang)
+    section = _language_section(html, language)
+    if section is None:
+        return None
+    groups: list[tuple[str, ...]] = []
+    box = _see_box(section)
+    if box is not None:
+        pointed = _points_at(payloads, language, title)
+        named = (pointed,) if pointed else tuple(
+            dict.fromkeys(
+                found for raw in _SEE_ENTRY.findall(box)
+                if (found := _spelling(raw, title)) is not None
+            )
+        )
+        if named:
+            groups.append(named)
+    for entry in _entries_from_html(parse, language, lect_of(lang)):
+        for sense in entry.senses:
+            prefixed = _SPELLING_PREFIX.match(sense.definition)
+            groups.append((prefixed.group(1),) if prefixed else ())
+    return groups
+
+
+#: A definition that opens by naming the spelling it is the reading of, the way
+#: a Japanese kana entry lists its homophones: `委員: committee member`.
+_SPELLING_PREFIX = re.compile(r"^([^\s:：()（）]+)[:：]\s")
+
+
 def _spelling(href: str, title: str) -> str | None:
     """A `/wiki/` target as a title, or ``None`` if it is this page's own."""
     target = urllib.parse.unquote(href).replace("_", " ")
