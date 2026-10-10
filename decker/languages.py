@@ -117,6 +117,26 @@ def joiner_of(code: str) -> str:
     return _JOINERS.get(_key(code), "")
 
 
+#: Languages written without spaces between words, whose Wiktionary titles
+#: therefore never have one either. A title is single-word by its spaces
+#: everywhere else, and matched by spelling against one token; here that rule
+#: made every compound the parser splits unreachable -- `事務所` is two tokens,
+#: `事務` and `所`, in the text and alone, so no token ever spelled it. Found in
+#: the Gokurakugai deck, 2026-10-10. Chinese is in for the same reason in the
+#: same script, its titles being just as unspaced.
+_UNSPACED = frozenset({"ja", "zh", "zh-hans", "zh-hant", "lzh"})
+
+
+def unspaced(code: str) -> bool:
+    """Whether ``code`` writes its words without spaces between them."""
+    return _key(code) in _UNSPACED
+
+
+def spacer_of(code: str) -> str:
+    """What goes between the tokens of a phrase when it is written out."""
+    return "" if unspaced(code) else " "
+
+
 #: Which lect's pronunciation a code is being taught, where the entry gives one
 #: per lect. The English Wiktionary writes a Chinese entry as a single section
 #: with a pronunciation block per variety -- 狗 carries 59 readings over nine of

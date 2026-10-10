@@ -20,9 +20,13 @@ wins and the code is wrong.
   Wikimedia's own dump for a third party's, so it is a v2 question.
 - A single-word title's tree is a single node, so it needs no parse: it is matched by spelling.
   Only multi-word titles are parsed into trees. Their parses are cached on disk, as are the dumps.
+  A title is multi-word by its spaces — except in a language written without them, where a title
+  the parser cuts into several tokens is parsed too; see *Languages written without spaces* below.
 - The index is built for the text at hand: a title whose words the text cannot spell cannot match,
   so it is never parsed. `decker index` (or `extract --whole-index`) builds the whole index that
-  the design's one-time setup describes instead. Both produce the same terms.
+  the design's one-time setup describes instead. Both produce the same terms, but for one thing:
+  the whole index leaves an unspaced compound single-word, so `事務所` is found only by a run over
+  a text.
 
 ## Matching
 
@@ -101,6 +105,73 @@ wins and the code is wrong.
 
 - Matches covering nothing but punctuation are dropped, and a term the sentence uses twice in the
   same form is reported once.
+
+## Japanese, and languages written without spaces
+
+- **Japanese is cut by Sudachi, not by Stanza.** Stanza still tags and parses it; Sudachi decides
+  where its words begin and end and what each one's dictionary form is. Stanza's Japanese
+  tokenizer and lemmatizer were trained on edited prose, and a manga's speech is not that. Over
+  the first Gokurakugai volume, 2026-10-10:
+
+  | in the text | Stanza's lemma | Sudachi's |
+  |---|---|---|
+  | `撮られん` | `取る` | `撮る` |
+  | `太んなくて` | `太ぶ` | `太る` |
+  | `減んない` | `減む` | `減る` |
+  | `遭うまで` | `会う` | `遭う` |
+  | `もータオさん` | `もーター` (*motor*) | `もー`, `タオ` |
+  | `他人事` | `他` + `人事` | `他人事` |
+  | `いんなら` | `言う` | `いむ` — both wrong |
+  | `長ェな` | `長ェ`, unparsed | `長` + `ェ` — both wrong |
+
+  A wrong lemma is the one error nothing downstream can undo: the model is shown the senses of
+  `取る` and chooses among them. The last two rows are what is left, and they are the contracted
+  forms a dictionary has no entry for; normalising them before the cut is the next step, not this
+  one.
+
+- **Decker registers its own Sudachi tokenizer with Stanza** rather than using the `sudachipy`
+  variant Stanza ships. That one cuts at Sudachi's longest units and ends a sentence only at
+  `。！？`, and a manga's bubbles are separated by blank lines and rarely punctuated: the whole
+  volume would have been one sentence. Decker's ends a sentence at a blank line or at a closing
+  mark (`。！？!?‼⁉`, with a closing bracket or a variation selector kept on the sentence it
+  follows), and hands Sudachi the text a line at a time, since it refuses inputs over 49,149 bytes.
+
+- **The shortest unit (split mode A), and the core dictionary.** Long units (mode C) make
+  `事務所` one token, but also make a compound Wiktionary has no page for one token with no entry
+  at all; short units keep the pieces, and the title index puts a compound back together wherever a
+  page exists (below). `極楽街` stays `極楽` + `街`, which is the most the dictionary can teach.
+  The full dictionary was tried alongside and cut these lines the same way; core is Stanza's
+  default and a third of the download.
+
+- **Lemmas are Sudachi's dictionary form, put in after Stanza has run.** Stanza's lemmatizer still
+  runs — the parser was trained with its output there — and its answers are then replaced span for
+  span. Sudachi is run over the text twice for that, which is milliseconds and the same cut both
+  times. Its normalised form is not used: it would turn `遭う` back into `会う`.
+
+- **A symbol is the dictionary's to know.** Stanza's tagger, handed Sudachi's cut, tagged `！` a
+  noun, and Sudachi's dictionary form for it is a half-width `!` the text never wrote, which is a
+  Wiktionary title. A morpheme Sudachi calls `補助記号`, or one with no letter or digit in it — it
+  calls `‼︎` a common noun — keeps its own text as its lemma and is tagged `PUNCT`.
+
+- **In a language written without spaces, a title is a phrase when the text spells it across
+  adjacent tokens.** Single-word titles are matched by spelling against one token, and a title was
+  single-word by having no space; in Japanese no title has one, so `事務所`, `他人事` and
+  `行方不明` — two tokens each in the text — were never reachable, and their parts were glossed
+  instead: `事務` *clerical work* and `所` *place* for an office. The index now collects every run
+  of two to eight adjacent tokens as the text writes it, and with its last token in its lemma
+  (`出回ったら` is also `出回る`); a title among those that no single token spells is parsed like a
+  multi-word one. Stanza cuts a title alone the way it cuts it in a sentence, so the tree matches.
+  On six lines of the volume that was 52 single-word titles and 6 phrases parsed, and the terms
+  came out as `事務所`, `行方不明者`, `他人事`, `出回る` and `週刊誌`.
+
+  Two things go with it. A phrase there must cover adjacent tokens, since an unspaced title is a
+  word and its pieces are written side by side; elsewhere `gave himself up` still matches
+  `give up`. And the phrase is written without spaces, with only its last token's lemma — the end
+  is where a compound inflects, and every token's lemma would make `出回る` into `出る回る`. A marked
+  occurrence's adjacent spans are bracketed as one, so the model is shown `⟨出て⟩` and not
+  `⟨出⟩⟨て⟩`.
+
+  Chinese is in the same set for the same reason, but has not been run since.
 
 ## Known gaps
 

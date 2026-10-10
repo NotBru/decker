@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 
 from decker import pages, script
 from decker.console import DETAIL, VERBOSE, console, count, log
-from decker.disambiguation import Disambiguator
+from decker.disambiguation import Disambiguator, Link
 from decker.languages import name_of, section_of
 from decker.morphology import RULE_PREFIX, Morphology, Outcome, Rule, label_of
 from decker.ollama import default_model
@@ -1893,6 +1893,7 @@ def _referenced(
     builder: _Builder,
     page: Page,
     sense: Sense,
+    surface: str,
     marked: str,
     chain: frozenset[str],
 ) -> tuple[int, ...]:
@@ -1905,12 +1906,18 @@ def _referenced(
     the pointer relies on, so each reference is a single gloss. The chain of
     titles already being resolved keeps a pair that defines each other in terms
     of the other from looping.
+
+    Which sense that is depends on the occurrence, not on the pointer: `stem
+    form of 出る` says nothing about which 出る, and `出てください` on the
+    telephone is the fifth. So the question carries the definition and the
+    passage both.
     """
+    link = Link("points", surface, sense.definition)
     return tuple(
         index
         for title in builder.references_of(page).get(sense.definition, ())
         if title not in chain
-        and (index := _dependency(builder, title, marked, chain)) is not None
+        and (index := _dependency(builder, title, marked, chain, link)) is not None
     )
 
 
@@ -1918,6 +1925,7 @@ def _composed(
     builder: _Builder,
     page: Page,
     sense: Sense,
+    surface: str,
     marked: str,
     chain: frozenset[str],
 ) -> tuple[int, ...]:
@@ -1942,11 +1950,13 @@ def _composed(
     if not builder.components:
         return ()
     dependencies = []
-    for title in page.etymons_of(sense):
+    parts = page.etymons_of(sense)
+    link = Link("component", surface, " + ".join(f'"{part}"' for part in parts))
+    for title in parts:
         if title in chain:
             continue
         fresh = title not in builder.by_surface
-        index = _dependency(builder, title, marked, chain)
+        index = _dependency(builder, title, marked, chain, link)
         if index is None:
             continue
         if fresh:
@@ -1962,6 +1972,7 @@ def _dependency(
     title: str,
     marked: str,
     chain: frozenset[str],
+    link: Link,
 ) -> int | None:
     """Gloss one word another gloss leans on, in the one sense it leans on.
 
@@ -1986,6 +1997,7 @@ def _dependency(
         language=target.language,
         parts_of_speech=tuple(part for part, _ in labelled),
         single=True,
+        link=link,
     )
     if not kept:
         return None
@@ -2017,8 +2029,8 @@ def _dependencies(
     """
     return (
         _plainly(builder, page, sense, surface, lemma, marked, chain)
-        + _referenced(builder, page, sense, marked, chain)
-        + _composed(builder, page, sense, marked, chain)
+        + _referenced(builder, page, sense, surface, marked, chain)
+        + _composed(builder, page, sense, surface, marked, chain)
     )
 
 
@@ -2097,6 +2109,7 @@ def _plainly(
         parts_of_speech=tuple(part for part, _ in plain),
         sources=tuple(page.title for _ in plain),
         single=True,
+        link=Link("plain", surface, sense.definition),
     )
     if not kept:
         return ()
@@ -2110,8 +2123,8 @@ def _plainly(
         surface=surface,
         lemma=lemma,
         sense=kept[0],
-        depends_on=_referenced(builder, page, kept[0], marked, chain)
-        + _composed(builder, page, kept[0], marked, chain),
+        depends_on=_referenced(builder, page, kept[0], surface, marked, chain)
+        + _composed(builder, page, kept[0], surface, marked, chain),
     )
     return () if index is None else (index,)
 
@@ -2190,8 +2203,17 @@ def mark_occurrence(sentence: str, spans: tuple[tuple[int, int], ...]) -> str:
     """
     if not spans:
         return sentence
-    out, cursor = [], 0
+    #: Spans that touch are one stretch of text and get one bracket: an
+    #: unspaced compound is several tokens written as one word, and `⟨出⟩⟨て⟩`
+    #: shows the model two words where the sentence has one.
+    joined: list[tuple[int, int]] = []
     for start, end in spans:
+        if joined and joined[-1][1] == start:
+            joined[-1] = (joined[-1][0], end)
+        else:
+            joined.append((start, end))
+    out, cursor = [], 0
+    for start, end in joined:
         if not 0 <= cursor <= start < end <= len(sentence):
             return sentence
         out += [sentence[cursor:start], "⟨", sentence[start:end], "⟩"]

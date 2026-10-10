@@ -22,7 +22,7 @@ from decker.cards import Card
 from decker.console import VERBOSE, console, log
 from decker.glosses import Gloss
 from decker.glosses import build as build_glosses
-from decker.languages import respellings
+from decker.languages import respellings, unspaced
 from decker.nlp import pipeline
 from decker.terms import Term, extract
 from decker.translation import SOURCE_LANG
@@ -87,10 +87,19 @@ def run(
         )
         log(f"[decker] {len(vocabulary)} distinct spellings to look for",
             level=VERBOSE)
+    #: A language written without spaces has titles without them too, and a
+    #: compound among them is reachable only through the runs of tokens it is
+    #: written as; see `wiktionary.build_index`.
+    runs = (
+        wiktionary.runs_of(sentences)
+        if vocabulary is not None and unspaced(target_lang)
+        else None
+    )
     index = build_index(
         target_lang,
         edition=edition,
         vocabulary=vocabulary,
+        runs=runs,
         refresh_titles=refresh_titles,
     )
     #: Term extraction is fast per sentence and slow over a series, and it is
@@ -304,6 +313,7 @@ def build_index(
     *,
     edition: str | None = None,
     vocabulary: set[str] | None = None,
+    runs: set[str] | None = None,
     refresh_titles: bool = False,
 ) -> TitleIndex:
     """Build the title index, parsing its titles as ``target_lang``."""
@@ -311,5 +321,6 @@ def build_index(
         edition or MOTHER_EDITION,
         lang=target_lang,
         vocabulary=vocabulary,
+        runs=runs,
         refresh=refresh_titles,
     )

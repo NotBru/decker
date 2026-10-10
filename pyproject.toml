@@ -10,6 +10,8 @@ dependencies = [
     "matplotlib>=3.11.2",
     "ollama>=0.6.2",
     "stanza>=1.14.0",
+    "sudachidict-core>=20260723.1",
+    "sudachipy>=0.7.0",
 ]
 
 [project.urls]

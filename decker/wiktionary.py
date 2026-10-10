@@ -21,6 +21,7 @@ import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import stanza
 
@@ -28,7 +29,7 @@ from decker import trees
 from decker.console import VERBOSE, console, log
 from decker.languages import joiner_of
 from decker.reach import BLIPS, http_gate
-from decker.nlp import pipeline
+from decker.nlp import parser_tag, pipeline
 from decker.trees import Node
 
 DUMP_URL = (
@@ -161,6 +162,7 @@ def build_index(
     *,
     lang: str,
     vocabulary: set[str] | None = None,
+    runs: set[str] | None = None,
     refresh: bool = False,
 ) -> TitleIndex:
     """Build the title index for ``edition``.
@@ -169,6 +171,14 @@ def build_index(
     offer. When given, only titles that could conceivably match are kept and
     parsed, which is what makes a run over one text cheap; pass ``None`` to
     build the whole index the design's one-time setup describes.
+
+    ``runs`` is given for a language written without spaces, where a title
+    has none to say it is a phrase: the spellings of the text's runs of
+    adjacent tokens (:func:`runs_of`). A title among them that no single token
+    spells is parsed like a multi-word one, so `事務所` -- `事務` and `所` to
+    the parser -- matches the two tokens it is written as. The whole index
+    leaves such titles single-word: parsing every unspaced title an edition
+    has is not a cost a one-time setup should hide.
     """
     path = dump_path(edition, refresh=refresh)
     joiner = joiner_of(lang)
@@ -191,6 +201,8 @@ def build_index(
                     pending.append(title)
             elif vocabulary is None or _spelled(title, joiner) in vocabulary:
                 index.words.add(title)
+            elif runs is not None and title in runs:
+                pending.append(title)
             if read % _BAR_STEP == 0:
                 console.advance(int(_BAR_STEP / _TITLES_PER_BYTE))
     log(f"[decker] {read} titles read", level=VERBOSE, kind="detail")
@@ -242,8 +254,13 @@ def _reachable(title: str, vocabulary: set[str]) -> bool:
 def _parse_titles(
     titles: list[str], *, lang: str, edition: str
 ) -> Iterator[tuple[str, Node]]:
-    """Parse multi-word titles into pattern trees, reusing the on-disk cache."""
-    cache_path = cache_dir() / f"phrases-{edition}-{lang}.jsonl"
+    """Parse multi-word titles into pattern trees, reusing the on-disk cache.
+
+    The cache is the parser's as much as the language's: a tree is only good
+    for matching against sentences the same tokenizer cut.
+    """
+    tag = parser_tag(lang)
+    cache_path = cache_dir() / f"phrases-{edition}-{lang}{'-' + tag if tag else ''}.jsonl"
     cached = _load_parsed(cache_path)
     missing = [title for title in titles if title not in cached]
     if missing:
@@ -301,6 +318,34 @@ def _load_parsed(path: Path) -> dict[str, Node | None]:
             data = record["d"]
             parsed[record["t"]] = trees.from_json(data) if data else None
     return parsed
+
+
+#: The most adjacent tokens a run is made of. Sudachi's shortest units cut a
+#: compound into its morphemes, and a four-kanji compound with an ending on it
+#: -- `行方不明者` is `行方`, `不明`, `者` -- is the long case; eight leaves room
+#: for kana-written parts without making runs a cost worth measuring.
+LONGEST_RUN = 8
+
+
+def runs_of(sentences: Iterable[Any], *, longest: int = LONGEST_RUN) -> set[str]:
+    """The spellings a run of adjacent tokens has, written without spaces.
+
+    Every run of two to ``longest`` tokens, as written and with its last token
+    in its lemma -- a compound inflects at its end, so `出回った` is also
+    `出回る`, the form its title is written in.
+    """
+    found: set[str] = set()
+    for sentence in sentences:
+        words = list(sentence.words)
+        for start in range(len(words)):
+            written = words[start].text
+            for end in range(start + 1, min(start + longest, len(words))):
+                last = words[end]
+                found.add(written + last.text)
+                if last.lemma:
+                    found.add(written + last.lemma)
+                written += last.text
+    return found
 
 
 def vocabulary_of(sentence_trees: Iterable[Node]) -> set[str]:

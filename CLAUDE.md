@@ -16,7 +16,7 @@ document per topic, each one saying up front that the human docs outrank it. Kee
 the code changes.
 
 - [Term extraction](docs/execution/term-extraction.md) — v1's choices about titles, matching and
-  gaps.
+  gaps, and Japanese: cut by Sudachi, and compounds matched in a language without spaces.
 - [Definition fetching](docs/execution/definition-fetching.md) — where the data comes from, how
   glosses and their dependencies are made, and sense disambiguation.
 - [Deck building](docs/execution/deck-building.md) — cards, translation, shuffling and the Anki

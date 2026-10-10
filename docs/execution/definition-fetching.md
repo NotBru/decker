@@ -74,10 +74,34 @@ design wins and the code is wrong.
   any sense in the block let `ir`, whose tenth definition mentions the past participle of reflexive
   verbs, hand `reflexive` to its neighbours.
 
-  A referenced word is glossed at one sense: the one its pointer relies on, asked for on its own
-  prompt. `patita` depends on `pata` as "paw, foot, leg", not on all eight of its senses. Resolution
-  recurses, and the chain of titles being resolved is carried down so a pair defined in terms of each
-  other cannot loop.
+  A referenced word is glossed at one sense, asked for on its own prompt: `patita` depends on
+  `pata` as "paw, foot, leg", not on all eight of its senses, since each kept sense is a card pair
+  the dependent card waits behind. Resolution recurses, and the chain of titles being resolved is
+  carried down so a pair defined in terms of each other cannot loop.
+
+  **Which sense is a question about the occurrence, not about the pointer.** It was asked as "the
+  ONE sense that the description relies on", and an inflection's pointer relies on no sense at
+  all: `stem form of 出る` says nothing about which 出る. On the first page of Gokurakugai,
+  `出てください` is a telephone being asked to be answered, Wiktionary's fifth sense of 出る, and
+  the deck taught the first, *to leave a place*. So the prompt now carries the passage with the
+  occurrence marked, says how the word asked about relates to it — the definition that points at
+  it, the sum an etymology names it in, or the figurative sense a plain one is wanted under — and
+  asks which sense of it the marked occurrence carries there. One prompt for all three kinds, with
+  one sentence of relation each (`disambiguation.RELATIONS`).
+
+  **The answer can only be one number.** These questions were decoded under the same schema as
+  the occurrence's own, a list, and "exactly one" in the prompt did not hold a 4B to it: over the
+  volume, 276 of 804 came back with every sense listed, and `keep` took the first in page order for
+  each without saying so. That is how `下さる` became *to give* and `出る` *to leave*. The schema
+  for them is now `{"sense": integer}` (`SCHEMA_ONE`), which the output is decoded under rather than
+  asked for. The first sense still stands where there is no answer — no model reachable, or a number
+  not on the list — which is what a run without a model has always taught.
+
+  Neither change makes a small model read a telephone call out of `もータオさんいんなら出てくださ
+  いよお`; the phone is in the picture, and in `あい、…事務所っす`, the way the office answers. Asked
+  the new prompt, `qwen3.5:latest` chose *to answer*; `qwen3.5:4b`, `gemma4:latest` and `qwen3:14b`
+  chose *to leave*, and `gpt-oss:20b` with thinking off said nothing. The prompt now puts the right
+  sense in front of the model with what it needs to choose it; the rest is the model.
 
 - The other half of a dependency comes from the etymology, not the definition: where an etymology
   states a sum of terms **in the language being taught** — `descargar` is `des- +‎ cargar`,

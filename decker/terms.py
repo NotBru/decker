@@ -8,7 +8,7 @@ from typing import Any
 
 from decker import trees
 from decker.console import VERBOSE, log
-from decker.languages import joiner_of, respellings
+from decker.languages import joiner_of, respellings, spacer_of, unspaced
 from decker.wiktionary import TitleIndex
 
 
@@ -101,6 +101,12 @@ def extract(
     """
     matches: dict[frozenset[int], set[str]] = {}
     respell = (lambda label: respellings(label, lang)) if lang else None
+    #: A phrase may skip tokens where words are spaced -- `gave himself up` is
+    #: `give up` -- but not where they are not: an unspaced title is a word,
+    #: and its pieces are written side by side or it is not there. Without
+    #: this a compound's parse matches any two tokens that happen to hang off
+    #: each other the same way.
+    adjacent = not unspaced(lang)
     for root in trees.sentence_tree(
         sentence, join_particles=join_particles, respell=respell
     ):
@@ -109,7 +115,7 @@ def extract(
                 matches.setdefault(_covered_by_label(node, title), set()).add(title)
             for title, tree in index.phrases_rooted_at(node.labels):
                 covered = trees.match(tree, node)
-                if covered is not None:
+                if covered is not None and (adjacent or _contiguous(covered)):
                     matches.setdefault(covered, set()).add(title)
 
     words = {word.id: word for word in sentence.words}
@@ -153,6 +159,11 @@ def extract(
             seen.add(term.surface)
             terms.append(term)
     return terms
+
+
+def _contiguous(covered: frozenset[int]) -> bool:
+    """Whether ``covered`` is a run of adjacent token ids."""
+    return max(covered) - min(covered) + 1 == len(covered)
 
 
 def _covered_by_label(node: trees.Node, label: str) -> frozenset[int]:
@@ -220,8 +231,17 @@ def _term(
 ) -> Term:
     ids = tuple(sorted(covered))
     tokens = [words[token_id] for token_id in ids]
-    surface = " ".join(word.text for word in tokens)
-    lemma = " ".join(word.lemma or word.text for word in tokens)
+    spacer = spacer_of(lang)
+    surface = spacer.join(word.text for word in tokens)
+    if spacer:
+        lemma = spacer.join(word.lemma or word.text for word in tokens)
+    else:
+        #: An unspaced compound inflects at its end, so only the last token's
+        #: lemma is the compound's: `出回ったら` is `出` and `回る`, the
+        #: dictionary's `出回る`, and every token's lemma would be `出る回る`.
+        lemma = "".join(word.text for word in tokens[:-1]) + (
+            tokens[-1].lemma or tokens[-1].text
+        )
     term = Term(
         surface=surface,
         lemma=lemma,
