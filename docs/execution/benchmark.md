@@ -16,8 +16,11 @@ cannot tell its subjects apart has stopped being one. Bru's call: more sentences
 
 ## What it is
 
-`tools/benchmark/checks.json`: **24 sentences over four languages**, and **48 checks** (plus the Japanese block below) — twelve per
-language, doubled from 24 on Bru's instruction, 2026-09-17.
+`tools/benchmark/checks.json`: **160 sentences over ten languages, and 211 checks** — sixteen
+sentences a language since 2026-10-11, eight of Wikipedia and eight written to be hard, at Bru's
+instruction to make sure the benchmark tells models apart (below, *Sixteen sentences, ten
+languages*). The checks are uneven by design, 14 to 34 a language: a check is kept where a reader can
+settle the ambiguity, not to fill a quota.
 
 | | why it is in there |
 |---|---|
@@ -25,6 +28,15 @@ language, doubled from 24 on Bru's instruction, 2026-09-17.
 | German | Germanic, heavy compounding, and nouns that are also names (`Wolf`, `Regen`) |
 | Russian | Cyrillic, heavy inflection, and a vocabulary of clean homographs (`соль`, `есть`) |
 | Chinese | no spaces, classifiers, and a section that covers a family of lects |
+| Japanese | no spaces, two scripts, and particles whose sense is their whole meaning |
+| Hebrew | Semitic, an abjad written without vowels, and clitics fused to the word |
+| Turkish | Turkic and agglutinative: the case a suffix marks is often the question |
+| Greek | its own alphabet, and articles and pronouns that share their forms |
+| Hindi | Indo-Aryan, Devanagari, and postpositions with a dozen senses each |
+| Finnish | Uralic, fifteen cases, and a copula that is also the perfect's auxiliary |
+
+The first four were the whole benchmark from 2026-09-15 to 2026-10-10, and what follows about them
+describes how their first half was built.
 
 The sentences are Wikipedia lead text, CC BY-SA 4.0, and each language block names the articles it
 was taken from. They were pulled by index from the samples the ten-language survey used, so no
@@ -67,7 +79,103 @@ OLLAMA_HOST=... DECKER_WIKTIONARY_HOST=... \
 Concepts and rules are off, so the glosses are word senses and nothing else. It exits non-zero when
 a check fails, which is the only respect in which it behaves like a test.
 
-## Japanese, 2026-10-10: thirteen sentences of speech
+## Sixteen sentences, ten languages, 2026-10-11
+
+Bru's instruction: make sure the benchmark discriminates, keep the four languages, add ones as
+varied as possible, sixteen sentences each — eight from Wikipedia and eight written adversarially —
+and iterate over the adversarial ones until they break between models.
+
+**Why it was not discriminating.** On the old set the best and worst models were two to four checks
+apart in a language, and two models only ever differ on the checks one passes and the other fails. With
+three to five of those, one lucky answer reverses a ranking. Telling two models apart takes a margin of
+roughly twice the square root of the checks they disagree on; at 10–20 % disagreement that is about
+250 checks for a five-point gap.
+
+**The five added languages** are Hebrew, Turkish, Greek, Hindi and Finnish: Semitic, Turkic,
+Hellenic, Indo-Aryan and Uralic, and four scripts the first five did not have. Korean and Arabic were
+passed over because Stanza's lemmas for them (morphemes joined by `+`, vocalised Arabic) do not match
+Wiktionary titles, so their checks would mostly have come back absent. Hindi had never been run through
+decker before and worked.
+
+**Japanese moved to Wikipedia like the rest.** The thirteen lines written for 2026-10-10 became
+candidates for its adversarial half. Its eight Wikipedia sentences (雨, パン, 茶道, イヌ, 寿司, 囲碁,
+サクラ, 野球) separated the models far more than the written lines had: on them alone `qwen3.5:4b`
+passed 7 of 24, `gemma3:4b` 9, `NVIDIA-Nemotron-Nano-9B-v2-Japanese` 11, `qwen3.5:latest` 15,
+`gemma4:latest` and `qwen3:14b` 17. Nemotron was pulled onto fesat for that comparison
+(`hf.co/mradermacher/NVIDIA-Nemotron-Nano-9B-v2-Japanese-GGUF:Q4_K_M`, 7.0 GB at runtime and 4.0 GB of
+it on the card). A model tuned for Japanese did not do better at choosing English senses for Japanese
+words: it kept 231 glosses where the others kept 141–181, and took 599 s where `gemma4:latest` took 61.
+
+**How the adversarial half was found.** For each language I wrote twelve to fourteen candidates, each
+built around a word whose first or commonest sense is wrong in that context: `Bank am Ufer` (a bench,
+not a sandbank), `коса до пояса` (a braid, not a scythe), `कल बहुत बारिश हुई थी` (yesterday, read off
+the tense), `Tuli sammui` (the fire went out, not "came"). Every sense question was then recorded for
+four models (`qwen3.5:4b`, `gemma4:latest`, `gemma3:4b`, `qwen3.5:latest`), and a candidate was kept
+where they split and the right answer was clear from the sentence. Most rejections fell into two
+kinds:
+
+- **Every model agreed.** `partido`, `batería`, `cura`, `Kiefer`, `Birne`, `Лук`, `kuja`: the context
+  was too easy for all four.
+- **The word was never asked about.** `长`, `花`, `背`, `刮` in Chinese were absorbed into compound titles;
+  `わいた` and `いってない` reached the wrong page through Sudachi's cut; Turkish `çalan` was never
+  glossed. A check there would only ever be absent.
+
+Spanish, Chinese and Turkish needed a second round, and Turkish a third, before eight sentences in
+each split the models. Wikipedia sentences were treated the same way: candidates were read for
+ambiguities where the models disagreed, and the check was kept where a reader can settle it.
+
+**One bias, stated plainly.** The adversarial sentences were kept *because* they split those four
+models, so their gaps on that half are partly by construction. `qwen3:14b` and Nemotron took no part
+in the selection, so their scores are the cleaner test.
+
+**A check can now name an occurrence.** A surface is often in a block several times with different
+senses: `で` is the copula in `保存食であった` and *by means of* in `二人で`, and `कल` is tomorrow in one
+Hindi sentence and yesterday in the next. A check with `at` (`保存食⟨で⟩`) is scored on the senses
+kept for that one occurrence, read off the question asked about it, whose passage marks the occurrence
+the same way. It also reaches a form asked under its lemma: `pegó` is asked as `pegar`.
+
+**Three old checks were dropped.** `姑娘`, `世界` and `民間` came back absent because compound matching
+(commit cd40eab) now glosses `灰姑娘`, `全世界` and `民間故事` whole. That is correct, and the checks were
+measuring a cut the pipeline no longer makes.
+
+## What it says, 2026-10-11, on the 211 checks
+
+Every model was asked every question afresh (`--refresh`), one after another on fesat, so the wall
+clock is a cold one. The scores are from a rescore against the final file, since six checks were given
+an `at` after the first model had run. That rescore asked nothing new.
+
+| model | passed | es | de | ru | zh | ja | he | tr | el | hi | fi | glosses | cold |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `qwen3:14b` | **153** | 21 | 19 | 20 | 14 | 22 | 10 | 11 | 9 | 13 | 14 | 1,751 | 6,929 s |
+| `qwen3.5:latest` (9B) | 147 | 22 | 18 | 18 | 15 | 23 | 8 | 8 | 12 | 10 | 13 | 1,728 | 5,161 s |
+| `gemma4:latest` | 144 | 20 | 21 | 19 | 15 | 21 | 7 | 11 | 9 | 10 | 11 | **1,672** | 1,648 s |
+| `qwen3.5:4b` | 116 | 19 | 20 | 17 | 13 | 12 | 7 | 4 | 8 | 6 | 10 | 1,722 | **1,634 s** |
+| Nemotron 9B Japanese | 103 | 15 | 16 | 13 | 9 | 16 | 4 | 6 | 7 | 6 | 11 | 2,201 | 10,405 s |
+| `gemma3:4b` | 91 | 10 | 8 | 14 | 8 | 13 | 6 | 8 | 5 | 7 | 12 | 1,949 | 1,444 s |
+| *checks* | 211 | 25 | 25 | 22 | 21 | 34 | 14 | 15 | 18 | 16 | 21 | | |
+
+(`qwen3:14b` has one absent check and Nemotron two, so their denominators are 210 and 209.)
+
+**It discriminates now.** 37 checks are passed by all six and 16 failed by all six; the other 158 split
+them. Counting, for each pair of models, the checks only one of them passes:
+
+- `gemma4:latest` against `qwen3.5:4b`: 56 to 28. Same wall clock, fewer glosses, and the gap is
+  three times what noise would give (z ≈ 3.1).
+- `qwen3.5:latest` against `qwen3.5:4b`: 47 to 16 (z ≈ 3.9). `qwen3:14b` against it: 55 to 18
+  (z ≈ 4.3).
+- The top three are within noise of each other: `qwen3:14b` against `qwen3.5:latest` 37 to 31,
+  against `gemma4:latest` 30 to 21; `qwen3.5:latest` against `gemma4:latest` 36 to 33.
+- `gemma3:4b` and Nemotron are last, and Nemotron keeps the most senses of any model measured.
+
+**What it says about the default.** The 48 checks had `qwen3.5:4b` one behind the 9B and two ahead of
+`gemma4:latest`, which is why the default stayed where it was on 2026-09-17. On 211 checks
+`gemma4:latest` passes 28 more than `qwen3.5:4b`, at the same cold wall clock and with 3 % fewer
+glosses. The 4B's losses are concentrated in the five new languages and Japanese: Turkish 4 of 15,
+Hindi 6 of 16, Japanese 12 of 34. The one model clearly better than `gemma4:latest` would be
+`qwen3:14b`, and it is not clearly better: nine more checks for 4.2× the time. The default is not
+changed here. That is Bru's call, and the README names it.
+
+## Japanese, 2026-10-10: thirteen sentences of speech (since replaced)
 
 The fifth block is not Wikipedia. It was written to recreate, in lines of its own, the ambiguities
 the Gokurakugai deck got wrong — a manga's speech is copyrighted and stays out of the repository —

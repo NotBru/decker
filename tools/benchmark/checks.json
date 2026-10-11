@@ -1,16 +1,26 @@
 {
- "what": "Known-answer checks for sense disambiguation: 37 sentences, five languages, 63 checks, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory.",
+ "what": "Known-answer checks for sense disambiguation: 160 sentences, 10 languages, 211 checks, one check per ambiguity that a reader of the passage can settle. Run with tools/benchmark/run.py. A check is a surface plus what its kept senses must and must not say; it is written against the sense list the page actually carries, not from memory. A check with `at` is scored on the one occurrence whose marked passage contains it.",
  "languages": {
   "es": {
    "lang": "es",
-   "source": "es.wikipedia.org, leads of «Cenicienta» and «Perro» (CC BY-SA 4.0)",
+   "source": "es.wikipedia.org, leads of «Cenicienta» and «Perro» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
    "sentences": [
     "La Cenicienta es un cuento de hadas que cuenta con varias versiones, orales y escritas, antiguas y modernas, procedentes de varios lugares del mundo; especialmente del continente eurasiático.",
     "La primera versión escrita y publicada es la del italiano Giambattista Basile \"La Gatta Cenerentola\" , que bebe de la tradición juliana; en esa zona, se habla el napolitano en el que está escrito el cuento de Basile, el cual forma parte de la obra Pentamerón, que fue publicado póstumamente en 1634.",
     "El perro , llamado perro doméstico o can, y en algunos lugares coloquialmente llamado chucho, tuso, choco, entre otros; es un mamífero carnívoro de la familia de los cánidos, que constituye una especie del género Canis.",
     "Junto con el gato, es el animal de compañía más popular del mundo, recibiendo el título de «el mejor amigo del hombre».",
     "Su tamaño , su forma y su pelaje es muy diverso y varía según la raza.",
-    "Su longevidad media es de diez a trece años, dependiendo de la raza."
+    "Su longevidad media es de diez a trece años, dependiendo de la raza.",
+    "Posee un oído y un olfato muy desarrollados, y este último es su principal órgano sensorial.",
+    "La versión de los hermanos Grimm varía sin embargo en muchos detalles de la italiana y de la francesa, lo que no es extraño si se tiene en cuenta que cada país europeo tenía su propia tradición oral del personaje.",
+    "Se le pegó el arroz y tuvo que tirar la olla entera.",
+    "La muñeca le dolía después de tantas horas escribiendo a mano.",
+    "Ese chico tiene mucha cara: siempre pide dinero y nunca devuelve nada.",
+    "La sierra estaba cubierta de nieve en abril.",
+    "Ponte el abrigo, que hace frío.",
+    "Llevamos tres años viviendo en este piso.",
+    "Juan sacó un nueve en el examen de matemáticas.",
+    "Anoche se fue la luz en todo el barrio."
    ],
    "checks": [
     {
@@ -155,19 +165,174 @@
      ],
      "must_not": [],
      "why": "que bebe de la tradición: the figurative sense, which the plain one is taught under"
+    },
+    {
+     "surface": "si",
+     "at": "extraño ⟨si⟩ se",
+     "must": [
+      "if, whether"
+     ],
+     "must_not": [
+      "contradiction"
+     ],
+     "why": "no es extraño si se tiene en cuenta: if"
+    },
+    {
+     "surface": "se",
+     "at": "si ⟨se⟩ tiene",
+     "must": [
+      "impersonal"
+     ],
+     "must_not": [
+      "reflexive"
+     ],
+     "why": "si se tiene en cuenta: the impersonal se"
+    },
+    {
+     "surface": "personaje",
+     "must": [
+      "character in a film"
+     ],
+     "must_not": [
+      "eccentric"
+     ],
+     "why": "tradición oral del personaje: a character in a story"
+    },
+    {
+     "surface": "pegar",
+     "at": "⟨pegó⟩",
+     "must": [
+      "to stick"
+     ],
+     "must_not": [
+      "hit",
+      "glue",
+      "paste"
+     ],
+     "why": "se le pegó el arroz: the rice stuck to the pot"
+    },
+    {
+     "surface": "tirar",
+     "at": "⟨tirar⟩ la olla",
+     "must": [
+      "throw out"
+     ],
+     "must_not": [
+      "knock over",
+      "shoot",
+      "pull"
+     ],
+     "why": "tirar la olla: throw it away"
+    },
+    {
+     "surface": "muñeca",
+     "must": [
+      "wrist"
+     ],
+     "must_not": [
+      "doll"
+     ],
+     "why": "la muñeca le dolía de escribir: the wrist"
+    },
+    {
+     "surface": "cara",
+     "at": "⟨cara⟩:",
+     "must": [
+      "gall, nerve"
+     ],
+     "must_not": [
+      "(anatomy) face",
+      "feminine singular of caro"
+     ],
+     "why": "tiene mucha cara: nerve, not a face"
+    },
+    {
+     "surface": "sierra",
+     "must": [
+      "mountain range"
+     ],
+     "must_not": [
+      "saw (tool)"
+     ],
+     "why": "la sierra cubierta de nieve: mountains"
+    },
+    {
+     "surface": "poner",
+     "at": "⟨Ponte⟩",
+     "must": [
+      "to don"
+     ],
+     "must_not": [
+      "to begin",
+      "to set"
+     ],
+     "why": "ponte el abrigo: put on clothing"
+    },
+    {
+     "surface": "piso",
+     "must": [
+      "flat, apartment"
+     ],
+     "must_not": [
+      "storey"
+     ],
+     "why": "llevamos tres años en este piso: a flat"
+    },
+    {
+     "surface": "sacar",
+     "at": "⟨sacó⟩ un nueve",
+     "must": [
+      "to derive"
+     ],
+     "must_not": [
+      "pull out",
+      "photograph",
+      "(reflexive)"
+     ],
+     "why": "sacó un nueve en el examen: got a grade"
+    },
+    {
+     "surface": "ir",
+     "at": "se ⟨fue⟩ la luz",
+     "must": [
+      "go out (lights)"
+     ],
+     "must_not": [
+      "(intransitive) to go (away"
+     ],
+     "why": "se fue la luz: the power went out"
+    },
+    {
+     "surface": "luz",
+     "at": "la ⟨luz⟩ en todo",
+     "must": [
+      "electric power"
+     ],
+     "must_not": [],
+     "why": "se fue la luz en todo el barrio: the power, not light"
     }
    ]
   },
   "de": {
    "lang": "de",
-   "source": "de.wikipedia.org, leads of „Aschenputtel“, „Haushund“ and „Regen“ (CC BY-SA 4.0)",
+   "source": "de.wikipedia.org, leads of „Aschenputtel“, „Haushund“ and „Regen“ (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
    "sentences": [
     "Seine wilde Stammform ist der Wolf, dem er als Unterart zugeordnet wird.",
     "Hund und Wolf sind nicht durch eine Artenschranke getrennt und können daher miteinander fortpflanzungsfähige Nachkommen zeugen.",
     "Im engeren Sinn bezeichnet man als Haushund die Hunde, die überwiegend im Wohnbereich des Menschen gehalten werden, und kennzeichnet damit also eine Haltungsform.",
     "Regen bezeichnet ein Wetterereignis und die am häufigsten auftretende Form von Niederschlag.",
     "Regen besteht aus Wasser, das als Dampf in Wolken gespeichert war und nach dem Kondensieren in Tropfen zur Erdoberfläche herunter fällt.",
-    "Fester Niederschlag, z. B. Hagel, Graupel oder Schnee, besteht aus gefrorenem Wasser und Kondensationskeimen und tritt auch gemischt mit Regen auf."
+    "Fester Niederschlag, z. B. Hagel, Graupel oder Schnee, besteht aus gefrorenem Wasser und Kondensationskeimen und tritt auch gemischt mit Regen auf.",
+    "Historisch wurde ein Hund, der zur Bewachung des Hauses gehalten wird, als Haushund bezeichnet.",
+    "Der Dingo ist ebenfalls ein Haushund, wird jedoch provisorisch als eigenständige Unterart des Wolfes geführt.",
+    "Die Bank am Ufer war nass vom Regen.",
+    "Kannst du mir die Mutter für diese Schraube geben?",
+    "Der Leiter der Abteilung stand selbst auf der Leiter und strich die Decke.",
+    "Mit diesem Zug verlor sie die Dame und bald darauf das Spiel.",
+    "Der Strauß legt die größten Eier aller Vögel.",
+    "Sie hat das Steuer übernommen, als er müde wurde.",
+    "Das Gericht schmeckte stark nach Knoblauch.",
+    "Sie ist sauer, weil er schon wieder zu spät kam."
    ],
    "checks": [
     {
@@ -314,19 +479,173 @@
       "informal"
      ],
      "why": "können Nachkommen zeugen: to be able to"
+    },
+    {
+     "surface": "der",
+     "at": "Hund, ⟨der⟩ zur",
+     "must": [
+      "who; that; which"
+     ],
+     "must_not": [
+      "definite article",
+      "inflection of der"
+     ],
+     "why": "ein Hund, der …: the relative pronoun"
+    },
+    {
+     "surface": "zu",
+     "at": "⟨zur⟩ Bewachung",
+     "must": [
+      "for the purpose"
+     ],
+     "must_not": [
+      "towards",
+      "at, on"
+     ],
+     "why": "zur Bewachung: for the purpose of guarding"
+    },
+    {
+     "surface": "Haus",
+     "at": "⟨Hauses⟩",
+     "must": [
+      "house, building"
+     ],
+     "must_not": [
+      "home (in various"
+     ],
+     "why": "zur Bewachung des Hauses: the building"
+    },
+    {
+     "surface": "halten",
+     "at": "⟨gehalten⟩",
+     "must": [
+      "to keep"
+     ],
+     "must_not": [
+      "to stop",
+      "to hold (an object"
+     ],
+     "why": "gehalten wird: kept, as an animal is"
+    },
+    {
+     "surface": "werden",
+     "at": "gehalten ⟨wird⟩",
+     "must": [
+      "passive voice"
+     ],
+     "must_not": [
+      "future tense",
+      "would",
+      "to happen"
+     ],
+     "why": "gehalten wird: the passive, not the future"
+    },
+    {
+     "surface": "Bank",
+     "must": [
+      "bench"
+     ],
+     "must_not": [
+      "collection of material",
+      "financial"
+     ],
+     "why": "die Bank am Ufer, nass vom Regen: a bench by the water, not a sandbank"
+    },
+    {
+     "surface": "Mutter",
+     "must": [
+      "nut (for a bolt)"
+     ],
+     "must_not": [
+      "mother"
+     ],
+     "why": "die Mutter für diese Schraube: a nut"
+    },
+    {
+     "surface": "Decke",
+     "must": [
+      "ceiling"
+     ],
+     "must_not": [
+      "blanket"
+     ],
+     "why": "auf der Leiter strich die Decke: the ceiling"
+    },
+    {
+     "surface": "Zug",
+     "must": [
+      "(turn based games) move"
+     ],
+     "must_not": [
+      "pull",
+      "train"
+     ],
+     "why": "mit diesem Zug verlor sie die Dame: a move"
+    },
+    {
+     "surface": "Strauß",
+     "must": [
+      "ostrich"
+     ],
+     "must_not": [
+      "bouquet"
+     ],
+     "why": "der Strauß legt Eier: the bird"
+    },
+    {
+     "surface": "Steuer",
+     "must": [
+      "helm",
+      "steering wheel"
+     ],
+     "must_not": [
+      "tax"
+     ],
+     "why": "das Steuer übernommen, als er müde wurde: the wheel"
+    },
+    {
+     "surface": "Gericht",
+     "must": [
+      "dish"
+     ],
+     "must_not": [
+      "court",
+      "judgement"
+     ],
+     "why": "das Gericht schmeckte nach Knoblauch: a dish"
+    },
+    {
+     "surface": "sauer",
+     "must": [
+      "upset"
+     ],
+     "must_not": [
+      "sour"
+     ],
+     "why": "sauer, weil er zu spät kam: annoyed"
     }
    ]
   },
   "ru": {
    "lang": "ru",
-   "source": "ru.wikipedia.org, leads of «Собака», «Дождь», «Хлеб» and «Золушка» (CC BY-SA 4.0)",
+   "source": "ru.wikipedia.org, leads of «Собака», «Дождь», «Хлеб» and «Золушка» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
    "sentences": [
     "С зоологической точки зрения, собака — плацентарное млекопитающее отряда хищных семейства псовых.",
     "Домашняя собака была описана как самостоятельный биологический вид Canis familiaris Линнеем в 1758 году; в настоящее время данное научное название признаётся организациями, такими как Американское общество маммологов.",
     "Дождь — атмосферные осадки, выпадающие из облаков в виде капель жидкости со средним диаметром от 0,5 до 6—7 мм.",
     "Рецептура хлеба часто содержит соль, сахар и жиры.",
     "Хлеб можно есть отдельно; его также употребляют со сливочным, арахисовым или подсолнечным маслом, вареньем, марга",
-    "Хозяин купил ей изящные кожаные позолоченные сандалии."
+    "Хозяин купил ей изящные кожаные позолоченные сандалии.",
+    "Пока Родопис купалась в реке, сокол (этим соколом был бог Гор) украл её сандалию и унёс фараону.",
+    "Зёрна служат и для украшения.",
+    "Ключ от квартиры я оставил у соседки.",
+    "Мы долго шли вдоль ручья к ключу, который бил из-под скалы.",
+    "Коса у неё доходила до пояса.",
+    "Мир между странами длился недолго.",
+    "Замок на двери совсем заржавел.",
+    "Он сдал экзамен с первого раза.",
+    "На этой неделе у нас пост, мяса не едим.",
+    "Глава компании подписал договор."
    ],
    "checks": [
     {
@@ -474,19 +793,141 @@
       "to maintain"
      ],
      "why": "рецептура содержит соль: to contain, not to keep or support"
+    },
+    {
+     "surface": "Пока",
+     "must": [
+      "so long as, while"
+     ],
+     "must_not": [
+      "bye"
+     ],
+     "why": "Пока Родопис купалась: while"
+    },
+    {
+     "surface": "её",
+     "at": "украл ⟨её⟩",
+     "must": [
+      "(possessive)"
+     ],
+     "must_not": [
+      "accusative"
+     ],
+     "why": "украл её сандалию: her sandal, the possessive"
+    },
+    {
+     "surface": "Ключ",
+     "must": [
+      "key"
+     ],
+     "must_not": [
+      "spring, source",
+      "clue",
+      "wrench"
+     ],
+     "why": "ключ от квартиры: a door key"
+    },
+    {
+     "surface": "ключ",
+     "at": "⟨ключу⟩",
+     "must": [
+      "spring, source"
+     ],
+     "must_not": [
+      "clue",
+      "wrench",
+      "clef"
+     ],
+     "why": "к ключу, который бил из-под скалы: a spring"
+    },
+    {
+     "surface": "Коса",
+     "must": [
+      "braid"
+     ],
+     "must_not": [
+      "scythe",
+      "spit, sandbank"
+     ],
+     "why": "коса до пояса: a braid"
+    },
+    {
+     "surface": "Мир",
+     "must": [
+      "peace"
+     ],
+     "must_not": [
+      "universe"
+     ],
+     "why": "мир между странами: peace"
+    },
+    {
+     "surface": "Замок",
+     "must": [
+      "lock (fastener"
+     ],
+     "must_not": [
+      "castle",
+      "keystone"
+     ],
+     "why": "замок на двери: a lock"
+    },
+    {
+     "surface": "с",
+     "at": "экзамен ⟨с⟩",
+     "must": [
+      "from, off"
+     ],
+     "must_not": [
+      "with"
+     ],
+     "why": "с первого раза: from, not with"
+    },
+    {
+     "surface": "пост",
+     "must": [
+      "fast (period"
+     ],
+     "must_not": [
+      "office, appointment",
+      "slang",
+      "picket"
+     ],
+     "why": "пост, мяса не едим: a fast"
+    },
+    {
+     "surface": "Глава",
+     "must": [
+      "head, chief (title)"
+     ],
+     "must_not": [
+      "chapter",
+      "cupola"
+     ],
+     "why": "глава компании: the head"
     }
    ]
   },
   "zh": {
-   "lang": "zh-hans",
-   "source": "zh.wikipedia.org, leads of 《灰姑娘》 and 《犬》 (CC BY-SA 4.0)",
+   "lang": "zh",
+   "source": "zh.wikipedia.org, leads of 《灰姑娘》 and 《犬》 (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
    "sentences": [
     "《灰姑娘》（義大利語：Cenerentola；法語：Cendrillon）是一則民間故事，描寫一名貧苦的少女突然迎來機運，最後透過聯姻登上王位。",
     "该故事於全世界各處流傳著上百種版本，其中以1697年《鹅妈妈的故事》和1812年《格林童話》中的版本流傳最廣。",
     "犬（學名：Canis lupus familiaris），通稱狗，又称家犬，一种常见的犬科哺乳动物，是狼（學名：Canis lupus）的一个亚種。",
     "狗是人類最早驯化的一个物种。",
     "狗的壽命最多可超過二十年，平均則為十數年，與貓的平均壽命相近。",
-    "DNA分析显示狗不单单是狼的近亲，更是各地不同狼亚种的混血后代。"
+    "DNA分析显示狗不单单是狼的近亲，更是各地不同狼亚种的混血后代。",
+    "各种狗的形状、大小、毛色都有显著不同。",
+    "狗与人之间已经高度演化出互利共生关系，是人类社会最重要的役用动物。",
+    "他把作业落在家里了。",
+    "这道题我不会。",
+    "我们昨天晚上下了一盘棋。",
+    "这个月的工资还没发。",
+    "我们班有四十个学生。",
+    "我们打了一辆出租车去机场。",
+    "这个字怎么念？",
+    "我的手机没电了。"
    ],
    "checks": [
     {
@@ -525,20 +966,6 @@
      "why": "貧苦的少女: a young woman"
     },
     {
-     "surface": "姑娘",
-     "must": [
-      "girl",
-      "maiden"
-     ],
-     "must_not": [
-      "concubine",
-      "sister-in-law",
-      "nun",
-      "wife"
-     ],
-     "why": "灰姑娘: the girl"
-    },
-    {
      "surface": "版本",
      "must": [
       "version"
@@ -573,19 +1000,6 @@
      "why": "平均則為十數年: the average"
     },
     {
-     "surface": "世界",
-     "must": [
-      "world"
-     ],
-     "must_not": [
-      "Buddhism",
-      "tarot",
-      "Northern Wu",
-      "Hokkien"
-     ],
-     "why": "全世界各處: the world"
-    },
-    {
      "surface": "狗",
      "must": [
       "dog"
@@ -598,17 +1012,6 @@
       "zodiac"
      ],
      "why": "通稱狗: the animal"
-    },
-    {
-     "surface": "民間",
-     "must": [
-      "folk"
-     ],
-     "must_not": [
-      "non-governmental",
-      "among the common people"
-     ],
-     "why": "民間故事: a folk tale"
     },
     {
      "surface": "法語",
@@ -633,171 +1036,499 @@
       "period (in history)"
      ],
      "why": "超過二十年: years of life"
+    },
+    {
+     "surface": "大小",
+     "must": [
+      "size (of dresses"
+     ],
+     "must_not": [
+      "big and small",
+      "old and young"
+     ],
+     "why": "形状、大小、毛色: size"
+    },
+    {
+     "surface": "有",
+     "at": "都⟨有⟩显著",
+     "must": [
+      "to have; to possess",
+      "there is"
+     ],
+     "must_not": [
+      "certain extent",
+      "Placed before a verb",
+      "many; much"
+     ],
+     "why": "都有显著不同: have"
+    },
+    {
+     "surface": "高度",
+     "must": [
+      "highly"
+     ],
+     "must_not": [
+      "height; altitude"
+     ],
+     "why": "高度演化: highly"
+    },
+    {
+     "surface": "最",
+     "must": [
+      "most; -est"
+     ],
+     "must_not": [
+      "the best"
+     ],
+     "why": "最重要: most"
+    },
+    {
+     "surface": "落",
+     "at": "⟨落⟩在家里",
+     "must": [
+      "leave behind"
+     ],
+     "must_not": [
+      "to fall",
+      "finish",
+      "omit"
+     ],
+     "why": "把作业落在家里: left it behind"
+    },
+    {
+     "surface": "道",
+     "at": "这⟨道⟩题",
+     "must": [
+      "Classifier for questions"
+     ],
+     "must_not": [
+      "a way, method",
+      "a path"
+     ],
+     "why": "这道题: the classifier for questions"
+    },
+    {
+     "surface": "下",
+     "at": "晚上⟨下⟩了",
+     "must": [
+      "to move (in chess)"
+     ],
+     "must_not": [
+      "to finish",
+      "to use; to start",
+      "to go down"
+     ],
+     "why": "下了一盘棋: play a game of chess"
+    },
+    {
+     "surface": "没发",
+     "at": "⟨没发⟩",
+     "must": [
+      "to issue",
+      "to distribute"
+     ],
+     "must_not": [
+      "to become",
+      "to depart",
+      "initiate"
+     ],
+     "why": "工资还没发: not yet paid out"
+    },
+    {
+     "surface": "班",
+     "at": "我们⟨班⟩",
+     "must": [
+      "group; party; class"
+     ],
+     "must_not": [
+      "Classifier for a group"
+     ],
+     "why": "我们班有四十个学生: our class"
+    },
+    {
+     "surface": "打",
+     "at": "我们⟨打⟩了",
+     "must": [
+      "to get; to f"
+     ],
+     "must_not": [
+      "to hit",
+      "to buy",
+      "to send or c",
+      "to fight"
+     ],
+     "why": "打了一辆出租车: got a taxi"
+    },
+    {
+     "surface": "字",
+     "at": "这个⟨字⟩怎么",
+     "must": [
+      "character, especially"
+     ],
+     "must_not": [
+      "pronunciation"
+     ],
+     "why": "这个字怎么念: this character"
+    },
+    {
+     "surface": "没电",
+     "at": "⟨没电⟩",
+     "must": [
+      "electric power"
+     ],
+     "must_not": [
+      "battery",
+      "telephone call"
+     ],
+     "why": "手机没电了: out of power"
     }
    ]
   },
   "ja": {
    "lang": "ja",
-   "source": "written for this benchmark, not taken from any text: colloquial lines that recreate the ambiguities a manga deck got wrong (Gokurakugai, 2026-10-10), whose own lines are copyrighted and stay out of the repository",
+   "source": "ja.wikipedia.org, leads of 「雨」「パン」「茶道」「イヌ」「寿司」「囲碁」「サクラ」「野球」 (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
    "sentences": [
+    "雨（あめ、英語: rain）とは、大気から水の滴が落下する現象で、降水現象および天気の一種。",
+    "甘いおやつ用のパン（菓子パン）もある。",
+    "茶道（さどう/ちゃどう）は、湯を沸かし、茶を練（ね）るか点（た）てる、あるいは淹れ、茶を振る舞う日本伝統の行為（茶の儀式）。",
+    "ヒトが最も早くに家畜化した動物と考えられており、猟犬や番犬・牧羊犬・軍用犬・警察犬・盲導犬として広く使役され、ネコと並ぶ代表的な愛玩動物（ペット）として世界中で広く飼われている。",
+    "元々は、寿司は米飯と魚を発酵させた保存食であった（なれずし等）。",
+    "囲碁（いご）とは、交互に盤上に石を置いて行き自分の石で囲んだ領域の広さを競う、2人で行うボードゲームの一種。",
+    "一般的に俳句等で春を表現する季語に用いられ桜色と表現される白色や淡紅色から濃紅色の花を咲かせる。",
+    "「フィールド」や「野球場」、「スタジアム」と呼ばれる場所で行われる。",
     "電話鳴ってるよ。ちょっと出てくれる？",
-    "この温泉、まさに極楽だなあ。",
     "金ならやるから、もう帰れ。",
-    "僕はもう子供じゃないってば。",
-    "春になったら、みんなで花見に行こう。",
     "負けたらジュースおごりな。",
-    "寝る前に部屋の電気を消してね。",
-    "この店、味はいいけど高いんだよな。",
-    "金がないから、今月は外食なし。",
     "彼女に振られて、ずっと落ち込んでる。",
     "この絵、うまいね。",
     "その話、乗った！",
-    "タバコ切れちゃった。"
+    "タバコ切れちゃった。",
+    "風邪をひいて会社を休んだ。"
    ],
    "checks": [
     {
-     "surface": "出る",
+     "surface": "で",
+     "at": "現象⟨で⟩",
      "must": [
-      "to answer (the phone or door)"
+      "conjunctive form of だ"
      ],
      "must_not": [
-      "to leave a place",
-      "to go out",
-      "semen"
+      "using"
+     ],
+     "why": "現象で: the copula's conjunctive form, not by means of"
+    },
+    {
+     "surface": "水",
+     "at": "から⟨水⟩の",
+     "must": [
+      "water"
+     ],
+     "must_not": [
+      "fluid",
+      "flood"
+     ],
+     "why": "大気から水の滴: water, not a fluid in general"
+    },
+    {
+     "surface": "甘い",
+     "must": [
+      "sweet"
+     ],
+     "must_not": [
+      "indulgent",
+      "careless"
+     ],
+     "why": "甘いおやつ: sweet, not indulgent"
+    },
+    {
+     "surface": "用",
+     "at": "おやつ⟨用⟩",
+     "must": [
+      "for the use of"
+     ],
+     "must_not": [
+      "errand"
+     ],
+     "why": "おやつ用のパン: the suffix for the use of, not an errand"
+    },
+    {
+     "surface": "練（ね）る",
+     "at": "⟨練（ね）る⟩",
+     "must": [
+      "knead"
+     ],
+     "must_not": [
+      "polish",
+      "march"
+     ],
+     "why": "茶を練る: thick tea is kneaded, not polished"
+    },
+    {
+     "surface": "か",
+     "at": "る⟨か⟩点",
+     "must": [
+      "disjunction"
+     ],
+     "must_not": [
+      "interrogative",
+      "suggestions"
+     ],
+     "why": "練るか点てる: or, between two verbs"
+    },
+    {
+     "surface": "振る舞う",
+     "must": [
+      "treat to food"
+     ],
+     "must_not": [
+      "behave"
+     ],
+     "why": "茶を振る舞う: treat to tea, not behave"
+    },
+    {
+     "surface": "沸かし",
+     "must": [
+      "boil water"
+     ],
+     "must_not": [
+      "pests",
+      "melt metal",
+      "excite"
+     ],
+     "why": "湯を沸かし: boil water",
+     "at": "湯を⟨沸かし⟩"
+    },
+    {
+     "surface": "早く",
+     "at": "最も⟨早く⟩",
+     "must": [],
+     "must_not": [
+      "quickly"
+     ],
+     "why": "最も早くに: early, not quickly"
+    },
+    {
+     "surface": "られ",
+     "at": "考え⟨られ⟩",
+     "must": [
+      "passive"
+     ],
+     "must_not": [
+      "potential"
+     ],
+     "why": "考えられており: the passive, not the potential"
+    },
+    {
+     "surface": "使役",
+     "must": [
+      "setting to work"
+     ],
+     "must_not": [
+      "causative"
+     ],
+     "why": "広く使役され: set to work, not the causative of grammar"
+    },
+    {
+     "surface": "で",
+     "at": "世界中⟨で⟩",
+     "must": [
+      "indicating a location"
+     ],
+     "must_not": [
+      "using"
+     ],
+     "why": "世界中で: where, not by what means"
+    },
+    {
+     "surface": "と",
+     "at": "米飯⟨と⟩",
+     "must": [
+      "used to join nouns"
+     ],
+     "must_not": [
+      "companion",
+      "transformation"
+     ],
+     "why": "米飯と魚: and, joining two nouns"
+    },
+    {
+     "surface": "で",
+     "at": "保存食⟨で⟩",
+     "must": [
+      "conjunctive form of だ"
+     ],
+     "must_not": [
+      "using"
+     ],
+     "why": "保存食であった: the copula's conjunctive form, not by means of"
+    },
+    {
+     "surface": "石",
+     "at": "盤上に⟨石⟩",
+     "must": [
+      "go stone"
+     ],
+     "must_not": [
+      "a stone",
+      "transistor"
+     ],
+     "why": "盤上に石を置いて: a go stone"
+    },
+    {
+     "surface": "自分",
+     "must": [
+      "oneself"
+     ],
+     "must_not": [
+      "first-person"
+     ],
+     "why": "自分の石: one's own, not the pronoun I"
+    },
+    {
+     "surface": "て",
+     "at": "置い⟨て⟩",
+     "must": [],
+     "must_not": [
+      "reason or cause"
+     ],
+     "why": "置いて行き: not a reason or cause"
+    },
+    {
+     "surface": "や",
+     "at": "白色⟨や⟩",
+     "must": [
+      "nonexhaustive list"
+     ],
+     "must_not": [
+      "upon"
+     ],
+     "why": "白色や淡紅色: a list, not (immediately) upon"
+    },
+    {
+     "surface": "られ",
+     "at": "用い⟨られ⟩",
+     "must": [
+      "passive"
+     ],
+     "must_not": [
+      "potential"
+     ],
+     "why": "季語に用いられ: the passive, not the potential"
+    },
+    {
+     "surface": "れる",
+     "at": "表現さ⟨れる⟩",
+     "must": [
+      "passive"
+     ],
+     "must_not": [
+      "honorific",
+      "potential"
+     ],
+     "why": "桜色と表現される: the passive, not an honorific"
+    },
+    {
+     "surface": "春",
+     "must": [
+      "spring"
+     ],
+     "must_not": [
+      "New Year",
+      "sexual"
+     ],
+     "why": "春を表現する季語: spring, not the New Year"
+    },
+    {
+     "surface": "や",
+     "at": "」⟨や⟩「",
+     "must": [
+      "nonexhaustive list"
+     ],
+     "must_not": [
+      "upon"
+     ],
+     "why": "「フィールド」や「野球場」: a list, not (immediately) upon"
+    },
+    {
+     "surface": "と",
+     "at": "」⟨と⟩呼",
+     "must": [
+      "describing the detail"
+     ],
+     "must_not": [
+      "companion",
+      "join nouns"
+     ],
+     "why": "「スタジアム」と呼ばれる: the quotative, not and or with"
+    },
+    {
+     "surface": "れる",
+     "at": "行わ⟨れる⟩",
+     "must": [
+      "passive"
+     ],
+     "must_not": [
+      "potential"
+     ],
+     "why": "行われる: the passive, not the potential"
+    },
+    {
+     "surface": "出る",
+     "at": "⟨出て⟩くれる",
+     "must": [
+      "answer"
+     ],
+     "must_not": [
+      "to leave"
      ],
      "why": "電話…出てくれる: answer the phone"
     },
     {
-     "surface": "極楽",
-     "must": [
-      "heaven, paradise"
-     ],
-     "must_not": [
-      "red-light district",
-      "Amitabha",
-      "place name",
-      "surname"
-     ],
-     "why": "温泉、まさに極楽: paradise, figuratively"
-    },
-    {
      "surface": "やる",
+     "at": "なら⟨やる⟩",
      "must": [
       "to give"
      ],
      "must_not": [
       "to do (something)",
-      "to have sex",
-      "to kill",
-      "to send somebody"
+      "to have sex"
      ],
      "why": "金ならやる: give the money"
     },
     {
-     "surface": "僕",
-     "must": [
-      "I; me"
-     ],
-     "must_not": [
-      "servant",
-      "low social status",
-      "civil servant"
-     ],
-     "why": "僕はもう子供じゃない: the pronoun"
-    },
-    {
-     "surface": "春",
-     "must": [
-      "spring (season)"
-     ],
-     "must_not": [
-      "sexual intercourse",
-      "adolescence",
-      "New Year",
-      "lust"
-     ],
-     "why": "春になったら…花見: the season"
-    },
-    {
      "surface": "負け",
+     "at": "⟨負け⟩たら",
      "must": [
       "負ける"
      ],
      "must_not": [
       "defeat; loss"
      ],
-     "why": "負けたら…おごり: the verb's stem, not the noun defeat"
+     "why": "負けたら: the verb's stem, not the noun defeat"
     },
     {
-     "surface": "電気",
+     "surface": "彼女",
+     "at": "⟨彼女⟩に振",
      "must": [
-      "electric light"
+      "girlfriend"
      ],
      "must_not": [
-      "electricity"
+      "third-person",
+      "second-person"
      ],
-     "why": "部屋の電気を消して: the light"
+     "why": "彼女に振られて: dumped by a girlfriend"
     },
     {
-     "surface": "消す",
+     "surface": "落ちる",
+     "at": "⟨落ち⟩込ん",
      "must": [
-      "to turn off"
+      "to fall"
      ],
      "must_not": [
-      "to erase",
-      "to kill"
+      "sign off",
+      "fail an examination"
      ],
-     "why": "電気を消して: switch the light off"
-    },
-    {
-     "surface": "味",
-     "must": [
-      "flavor, taste"
-     ],
-     "must_not": [
-      "clever",
-      "mysterious",
-      "(go)",
-      "body part"
-     ],
-     "why": "この店、味はいい: the food's taste"
-    },
-    {
-     "surface": "高い",
-     "must": [
-      "expensive"
-     ],
-     "must_not": [
-      "high, tall",
-      "superior"
-     ],
-     "why": "味はいいけど高い: the price"
-    },
-    {
-     "surface": "金",
-     "must": [
-      "money"
-     ],
-     "must_not": [
-      "gold (Au)",
-      "Friday",
-      "metal",
-      "gold general"
-     ],
-     "why": "金がないから外食なし: money"
-    },
-    {
-     "surface": "振る",
-     "must": [
-      "to reject someone"
-     ],
-     "must_not": [
-      "to wave",
-      "to sprinkle",
-      "to throw away",
-      "furigana"
-     ],
-     "why": "彼女に振られて: dumped"
+     "why": "落ち込んでる: falling, not signing off"
     },
     {
      "surface": "うまい",
@@ -805,11 +1536,22 @@
       "skillful"
      ],
      "must_not": [
-      "delicious",
-      "profitable",
-      "foolish"
+      "delicious"
      ],
      "why": "この絵、うまい: skilfully drawn"
+    },
+    {
+     "surface": "話",
+     "at": "その⟨話⟩",
+     "must": [
+      "a topic",
+      "negotiation"
+     ],
+     "must_not": [
+      "story, tale",
+      "talking, speaking"
+     ],
+     "why": "その話、乗った: that proposal"
     },
     {
      "surface": "乗る",
@@ -819,7 +1561,7 @@
      "must_not": [
       "to get on/ride"
      ],
-     "why": "その話、乗った: I'm in"
+     "why": "その話、乗った: go along with it"
     },
     {
      "surface": "切れ",
@@ -828,10 +1570,1091 @@
      ],
      "must_not": [
       "sharpness",
-      "cloth",
+      "cloth"
+     ],
+     "why": "タバコ切れ: out of cigarettes"
+    },
+    {
+     "surface": "休ん",
+     "at": "⟨休ん⟩",
+     "must": [
+      "to be absent"
+     ],
+     "must_not": [
+      "to sleep",
+      "to rest"
+     ],
+     "why": "会社を休んだ: absent from work, not resting"
+    }
+   ]
+  },
+  "he": {
+   "lang": "he",
+   "source": "he.wikipedia.org, leads of «סינדרלה», «כלב» and «גשם» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
+   "sentences": [
+    "סינדרלה, או לכלוכית בשמה העברי, היא המעשייה הנפוצה בעולם.",
+    "מקור המעשייה איננו ידוע בבירור; יש המחשיבים את הסיפור היווני על רודופיס לגרסה הקדומה ביותר של הסיפור שהועלתה על הכתב.",
+    "הסיפור עובד לשלל סרטים לאורך השנים, בהם הגרסה המצוירת של דיסני.",
+    "כלב הבית התפתח מהזאב כתוצאה מביות שנמשך לאורך 14,000 שנים.",
+    "כלבים קטנים מאריכים חיים יותר מכלבים גדולים.",
+    "כלבים בויתו למגוון צרכים כגון ציד, רועים, שמירה, חברות, טיפול, סיוע ושיטור.",
+    "כלבים מתקשרים באמצעות קול, באמצעים ויזואליים ובאמצעות ריח.",
+    "גשם נוצר מהתעבות אדי מים לטיפות מים מיקרוסקופיות ולאחר מכן התלכדותן לטיפות גדולות יותר, הכבדות מספיק כדי ליפול ארצה.",
+    "הלכתי לספר כי השיער שלי ארוך מדי.",
+    "הקרן השקיעה מיליונים בחברות הזנק.",
+    "קרן שמש נכנסה מבעד לחלון.",
+    "תישאר פה, אני כבר חוזר.",
+    "בבית השני של השיר יש שורה יפה במיוחד.",
+    "הוא היה ערב להלוואה של אחיו.",
+    "היא עלתה לארץ לפני עשר שנים.",
+    "המורה תפסה אותו מעתיק במבחן."
+   ],
+   "checks": [
+    {
+     "surface": "יש",
+     "at": "בבירור; ⟨יש⟩",
+     "must": [
+      "there is or are"
+     ],
+     "must_not": [
+      "someone/something has"
+     ],
+     "why": "יש המחשיבים: there are those who"
+    },
+    {
+     "surface": "ביותר",
+     "at": "הקדומה ⟨ביותר⟩",
+     "must": [
+      "(with a definite adjective) Most"
+     ],
+     "must_not": [
+      "Quite"
+     ],
+     "why": "הקדומה ביותר: the most"
+    },
+    {
+     "surface": "עבד",
+     "at": "⟨עובד⟩",
+     "must": [
+      "עיבד"
+     ],
+     "must_not": [
+      "to work, labor",
+      "to work, operate"
+     ],
+     "why": "הסיפור עובד לסרטים: was adapted, the defective spelling of עיבד"
+    },
+    {
+     "surface": "כן",
+     "at": "⟨מכן⟩",
+     "must": [
+      "thus, so"
+     ],
+     "must_not": [
+      "yes"
+     ],
+     "why": "לאחר מכן: thereafter"
+    },
+    {
+     "surface": "כדי",
+     "at": "מספיק ⟨כדי⟩",
+     "must": [
+      "in order"
+     ],
+     "must_not": [
+      "sufficient"
+     ],
+     "why": "מספיק כדי ליפול: enough to fall"
+    },
+    {
+     "surface": "ליפול",
+     "at": "⟨ליפול⟩",
+     "must": [
+      "To fall: to be pulled downward"
+     ],
+     "must_not": [
+      "To be dropped"
+     ],
+     "why": "ליפול ארצה: fall by gravity"
+    },
+    {
+     "surface": "ארץ",
+     "at": "⟨ארצה⟩",
+     "must": [
+      "ground, soil"
+     ],
+     "must_not": [
+      "country, land",
+      "Earth (the third"
+     ],
+     "why": "ליפול ארצה: to the ground"
+    },
+    {
+     "surface": "סיפר",
+     "at": "⟨לספר⟩ כי",
+     "must": [
+      "cut the hair"
+     ],
+     "must_not": [
+      "to tell (a story)"
+     ],
+     "why": "הלכתי לספר כי השיער ארוך: the barber, not telling"
+    },
+    {
+     "surface": "קרן",
+     "at": "⟨הקרן⟩ השקיעה",
+     "must": [
+      "fund"
+     ],
+     "must_not": [
+      "ray, beam",
+      "horn"
+     ],
+     "why": "הקרן השקיעה מיליונים: a fund"
+    },
+    {
+     "surface": "קרן",
+     "at": "⟨קרן⟩ שמש",
+     "must": [
+      "ray, beam"
+     ],
+     "must_not": [
+      "fund",
+      "horn"
+     ],
+     "why": "קרן שמש: a ray of sunlight"
+    },
+    {
+     "surface": "בית",
+     "at": "⟨בבית⟩ השני",
+     "must": [
+      "stanza",
+      "verse (part of a song)"
+     ],
+     "must_not": [
+      "house",
+      "household"
+     ],
+     "why": "בבית השני של השיר: the second stanza"
+    },
+    {
+     "surface": "ערב",
+     "at": "היה ⟨ערב⟩",
+     "must": [
+      "cosigner",
+      "to guarantee"
+     ],
+     "must_not": [
+      "evening",
+      "the day before"
+     ],
+     "why": "ערב להלוואה: a guarantor"
+    },
+    {
+     "surface": "עלתה",
+     "at": "⟨עלתה⟩",
+     "must": [
+      "make aliyah"
+     ],
+     "must_not": [
+      "To ascend",
+      "To come, appear"
+     ],
+     "why": "עלתה לארץ: immigrated to Israel"
+    },
+    {
+     "surface": "תפסה",
+     "at": "⟨תפסה⟩",
+     "must": [
+      "to catch",
+      "to apprehend"
+     ],
+     "must_not": [
+      "comprehend"
+     ],
+     "why": "תפסה אותו מעתיק: caught him copying"
+    }
+   ]
+  },
+  "tr": {
+   "lang": "tr",
+   "source": "tr.wikipedia.org, leads of «Külkedisi», «Köpek» and «Yağmur» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
+   "sentences": [
+    "Masalda kıskanç üvey annesi ve üvey kız kardeşleri tarafından kötü davranılan bir genç kız, ona yardım eden bir iyilik perisi ve onunla evlenip Külkedisi'nin tüm hayatını değiştiren yakışıklı bir prens anlatılır.",
+    "Bilinen en eski Külkedisi öyküsü, 9. yüzyıldan kalma bir Çin masalıdır.",
+    "Diğer masallarda bunun yerine altın ayakkabı, gümüş ayakkabı ya da yüzük tasvir edilir.",
+    "Binbir Gece Masalları'nda da öykü ayakkabı yerine halhal kullanılarak anlatılmıştır.",
+    "Bozkurdun alt türlerinden biri olan köpek, tilki ve çakallarla da yakın akrabalardır.",
+    "Köpekler 12 binyıldan daha uzun bir süreden beri insanoğlunun av partneri, koruyucusu ve arkadaşı olmuştur.",
+    "İlk köpekler keskin görme ve koku duyusuna sahip avcı köpekleridir.",
+    "Yağmur, su döngüsünün önemli bir bileşenidir ve Dünya'daki tatlı suyun çoğunun birikmesinden sorumludur.",
+    "Köyün yanından küçük bir çay akıyor.",
+    "Dolu yağınca arabanın camı kırıldı.",
+    "Ocak ayında doğdum.",
+    "Annem ocağı yakıp çayı demledi.",
+    "Otobüse binmeden önce bilet aldık.",
+    "Bu yemeğin tadı tuzu yok.",
+    "Babam geçen yıl sigarayı bıraktı.",
+    "Aradım ama telefonu açmadı."
+   ],
+   "checks": [
+    {
+     "surface": "yerine",
+     "at": "bunun ⟨yerine⟩",
+     "must": [
+      "instead of"
+     ],
+     "must_not": [
+      "possessive dative"
+     ],
+     "why": "bunun yerine: instead"
+    },
+    {
+     "surface": "alt",
+     "must": [
+      "under"
+     ],
+     "must_not": [
+      "bottom"
+     ],
+     "why": "alt türlerinden: a subspecies"
+    },
+    {
+     "surface": "olmak",
+     "at": "biri ⟨olan⟩",
+     "must": [
+      "to be, to have or occupy"
+     ],
+     "must_not": [
+      "to have, own",
+      "to become",
+      "to happen"
+     ],
+     "why": "biri olan köpek: the dog, which is one of"
+    },
+    {
+     "surface": "av",
+     "must": [
+      "hunting",
+      "hunt"
+     ],
+     "must_not": [
+      "prey"
+     ],
+     "why": "av partneri: a hunting partner"
+    },
+    {
+     "surface": "arkadaşı",
+     "must": [
+      "possessive of arkadaş"
+     ],
+     "must_not": [
+      "accusative"
+     ],
+     "why": "insanoğlunun arkadaşı: mankind's friend"
+    },
+    {
+     "surface": "görme",
+     "must": [
+      "verbal noun of görmek"
+     ],
+     "must_not": [
+      "negative imperative"
+     ],
+     "why": "keskin görme: keen sight"
+    },
+    {
+     "surface": "çay",
+     "at": "bir ⟨çay⟩ akıyor",
+     "must": [
+      "small river, a brook"
+     ],
+     "must_not": [
+      "tea ("
+     ],
+     "why": "bir çay akıyor: a brook flows"
+    },
+    {
+     "surface": "Dolu",
+     "must": [
+      "hail"
+     ],
+     "must_not": [
+      "full"
+     ],
+     "why": "dolu yağınca: when hail fell"
+    },
+    {
+     "surface": "Ocak",
+     "must": [
+      "January"
+     ],
+     "must_not": [
+      "stove",
+      "quarry"
+     ],
+     "why": "ocak ayında: in January"
+    },
+    {
+     "surface": "ocağı",
+     "must": [
+      "accusative singular of ocak"
+     ],
+     "must_not": [
+      "possessive"
+     ],
+     "why": "ocağı yakıp: lit the stove, the accusative"
+    },
+    {
+     "surface": "ocak",
+     "at": "⟨ocağı⟩ yakıp",
+     "must": [
+      "stove, oven"
+     ],
+     "must_not": [
+      "home, family",
+      "January"
+     ],
+     "why": "ocağı yakıp çayı demledi: the stove"
+    },
+    {
+     "surface": "binmeden",
+     "at": "⟨binmeden⟩",
+     "must": [
+      "binmek"
+     ],
+     "must_not": [
+      "thousand"
+     ],
+     "why": "otobüse binmeden: before boarding"
+    },
+    {
+     "surface": "tuzu",
+     "must": [
+      "possessive of tuz"
+     ],
+     "must_not": [
+      "accusative"
+     ],
+     "why": "tadı tuzu yok: its salt, the possessive"
+    },
+    {
+     "surface": "bırakmak",
+     "at": "⟨bıraktı⟩",
+     "must": [
+      "to quit, to leave, to stop using"
+     ],
+     "must_not": [
+      "to abandon",
+      "to let go"
+     ],
+     "why": "sigarayı bıraktı: quit smoking"
+    },
+    {
+     "surface": "açmak",
+     "at": "telefonu ⟨açmadı⟩",
+     "must": [
+      "(transitive) to open"
+     ],
+     "must_not": [
+      "turn on",
+      "start running"
+     ],
+     "why": "telefonu açmadı: did not pick up"
+    }
+   ]
+  },
+  "el": {
+   "lang": "el",
+   "source": "el.wikipedia.org, lead of «Σταχτοπούτα» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
+   "sentences": [
+    "Η Σταχτοπούτα είναι κλασικό παραμύθι που αφηγείται τις περιπέτειες μιας κοπέλας, την οποία κακομεταχειρίζονται η κακιά μητριά και οι αδερφές της.",
+    "Έγινε ευρύτερα γνωστό από την έκδοση των αδελφών Γκριμ στα Παιδικά και σπιτικά παραμύθια το 1812.",
+    "Το κεντρικό πρόσωπο του παραμυθιού είναι η Σταχτοπούτα, κόρη ενός πλούσιου εμπόρου.",
+    "Κάποιο βράδυ, την επισκέπτεται η νεράιδα-νονά της και της δίνει ένα φόρεμα, μια άμαξα κι ένα ζευγάρι γυάλινα γοβάκια, προκειμένου να πάει στον χορό του Πρίγκηπα.",
+    "Ο πρίγκιπας εντυπωσιάζεται και την επόμενη μέρα, όταν η άγνωστη εμφανίζεται πάλι στο παλάτι.",
+    "Το παραμύθι έχει γνωρίσει αρκετές παραλλαγές, που διαφέρουν σε ορισμένες λεπτομέρειες της πλοκής.",
+    "Έχει διασκευαστεί σε μπαλέτο από τον Σεργκέι Προκόφιεφ και τον Γιόχαν Στράους και αρκετές φορές σε όπερα από τον Ροσσίνι και άλλους συνθέτες.",
+    "Οι αδελφές της προσπαθούν με κόπους και βάσανα να φορέσουν το γοβάκι, προκειμένου να κερδίσουν τον πρίγκιπα, μάταια όμως.",
+    "Η γάτα κοιμάται πάνω στο γραφείο μου.",
+    "Ο γιατρός μού έγραψε αντιβιοτικά.",
+    "Έχει πολλή κίνηση στον δρόμο σήμερα.",
+    "Το φύλλο της πίτας πρέπει να είναι λεπτό.",
+    "Πέρασε τις εξετάσεις με άριστα.",
+    "Ο χρόνος περνάει γρήγορα όταν διαβάζεις.",
+    "Ο Νίκος είναι καλό παιδί, θα σε βοηθήσει.",
+    "Πιάσαμε κουβέντα με τον οδηγό του ταξί."
+   ],
+   "checks": [
+    {
+     "surface": "της",
+     "at": "αδερφές ⟨της⟩",
+     "must": [
+      "(possessive) her"
+     ],
+     "must_not": [
+      "genitive singular of ο",
+      "indirect object"
+     ],
+     "why": "οι αδερφές της: her sisters"
+    },
+    {
+     "surface": "γίνομαι",
+     "at": "⟨Έγινε⟩",
+     "must": [
+      "to become"
+     ],
+     "must_not": [
+      "to happen"
+     ],
+     "why": "έγινε γνωστό: became known"
+    },
+    {
+     "surface": "Κάποιο",
+     "must": [
+      "neuter singular"
+     ],
+     "must_not": [
+      "accusative masculine"
+     ],
+     "why": "κάποιο βράδυ: βράδυ is neuter"
+    },
+    {
+     "surface": "ένα",
+     "at": "δίνει ⟨ένα⟩",
+     "must": [
+      "a, an: neuter"
+     ],
+     "must_not": [
+      "masculine"
+     ],
+     "why": "ένα φόρεμα: a dress, neuter"
+    },
+    {
+     "surface": "έχω",
+     "at": "παραμύθι ⟨έχει⟩",
+     "must": [
+      "auxiliary verb"
+     ],
+     "must_not": [
+      "to have/hold",
+      "to be (have/hold"
+     ],
+     "why": "έχει γνωρίσει: the perfect auxiliary"
+    },
+    {
+     "surface": "έχω",
+     "at": "⟨Έχει⟩ διασκευ",
+     "must": [
+      "auxiliary verb"
+     ],
+     "must_not": [
+      "to have/hold",
+      "to be (have/hold"
+     ],
+     "why": "έχει διασκευαστεί: the perfect auxiliary"
+    },
+    {
+     "surface": "από",
+     "at": "μπαλέτο ⟨από⟩",
+     "must": [
+      "(cause): by"
+     ],
+     "must_not": [
+      "(source, origin)",
+      "(position)"
+     ],
+     "why": "διασκευαστεί … από τον Προκόφιεφ: by, the agent"
+    },
+    {
+     "surface": "φορές",
+     "must": [
+      "accusative plural"
+     ],
+     "must_not": [
+      "nominative plural",
+      "vocative"
+     ],
+     "why": "αρκετές φορές: several times, the accusative"
+    },
+    {
+     "surface": "βάσανο",
+     "must": [
+      "torment"
+     ],
+     "must_not": [
+      "ball and chain"
+     ],
+     "why": "με κόπους και βάσανα: with toil and torment"
+    },
+    {
+     "surface": "γραφείο",
+     "must": [
+      "desk"
+     ],
+     "must_not": [
+      "office"
+     ],
+     "why": "η γάτα κοιμάται στο γραφείο μου: a desk"
+    },
+    {
+     "surface": "γράφω",
+     "at": "⟨έγραψε⟩",
+     "must": [
+      "to write"
+     ],
+     "must_not": [
+      "to record",
+      "ticket"
+     ],
+     "why": "ο γιατρός μού έγραψε αντιβιοτικά: wrote a prescription"
+    },
+    {
+     "surface": "κίνηση",
+     "must": [
+      "traffic"
+     ],
+     "must_not": [
+      "blink",
+      "activity",
+      "flow"
+     ],
+     "why": "πολλή κίνηση στον δρόμο: traffic"
+    },
+    {
+     "surface": "φύλλο",
+     "must": [
+      "filo"
+     ],
+     "must_not": [
+      "leaf (of plant",
+      "sheet (paper)"
+     ],
+     "why": "το φύλλο της πίτας: filo pastry"
+    },
+    {
+     "surface": "με",
+     "at": "εξετάσεις ⟨με⟩",
+     "must": [
+      "with"
+     ],
+     "must_not": [
+      "me (1st person",
+      "by"
+     ],
+     "why": "με άριστα: with top marks"
+    },
+    {
+     "surface": "σε",
+     "at": "θα ⟨σε⟩",
+     "must": [
+      "you (2nd person"
+     ],
+     "must_not": [
+      "to, at, by"
+     ],
+     "why": "θα σε βοηθήσει: you"
+    },
+    {
+     "surface": "πιάνω",
+     "at": "⟨Πιάσαμε⟩",
+     "must": [
+      "start, take up"
+     ],
+     "must_not": [
+      "perceive",
+      "with one's hands"
+     ],
+     "why": "πιάσαμε κουβέντα: struck up a conversation"
+    },
+    {
+     "surface": "με",
+     "at": "κουβέντα ⟨με⟩",
+     "must": [
+      "with"
+     ],
+     "must_not": [
+      "me (1st person"
+     ],
+     "why": "κουβέντα με τον οδηγό: with the driver"
+    },
+    {
+     "surface": "χρόνος",
+     "must": [
+      "(abstract) time"
+     ],
+     "must_not": [
+      "year",
+      "tense"
+     ],
+     "why": "ο χρόνος περνάει γρήγορα: time"
+    }
+   ]
+  },
+  "hi": {
+   "lang": "hi",
+   "source": "hi.wikipedia.org, leads of «कुत्ता», «वर्षा», «रोटी», «चाय», «हिमालय» and «दीपावली» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
+   "sentences": [
+    "कुत्ता या श्वान भेड़िया कुल की एक प्रजाति है।",
+    "यह मनुष्य के पालतू पशुओं में से एक महत्त्वपूर्ण प्राणी है।",
+    "इसकी मादा को कुतिया और शावक को पिल्ला कहते हैं।",
+    "पृथ्वी के सतह से जल वाष्पित होकर ऊपर उठता है और ठण्डा होकर पानी की बूंदों के रूप में पुनः धरती पर गिरता है।",
+    "यह आटे एवं पानी के मिश्रण को गूंध कर उससे बनी लोई को बेलकर एवं आँच पर सेंक कर बनाई जाती है।",
+    "यह चाय के पौधों की पत्तियों से बनता है।",
+    "हिमालय को 'पर्वतराज' भी कहते हैं जिसका अर्थ है पर्वतों का राजा।",
+    "यह कार्तिक मास की अमावस्या को मनाया जाता है और भारत के सबसे बड़े और सर्वाधिक महत्वपूर्ण त्योहारों में से एक है।",
+    "कल मैं दिल्ली जाऊँगा।",
+    "कल बहुत बारिश हुई थी।",
+    "उसने मुझे खाने के बाद एक मीठा आम दिया।",
+    "यह गाँवों में एक आम समस्या है।",
+    "शादी में उसने बहुत सारा सोना पहना था।",
+    "मुझे अब सोना है, कल सुबह जल्दी उठना है।",
+    "मेरा भाई उत्तर दिशा में रहता है।",
+    "बस छूट गई, अब पैदल जाना पड़ेगा।"
+   ],
+   "checks": [
+    {
+     "surface": "कुल",
+     "must": [
+      "(taxonomy) family"
+     ],
+     "must_not": [
+      "herd",
+      "kinship group",
+      "lineage"
+     ],
+     "why": "भेड़िया कुल: the wolf family, taxonomically"
+    },
+    {
+     "surface": "की",
+     "at": "कुल ⟨की⟩",
+     "must": [
+      "(kā): of"
+     ],
+     "must_not": [
+      "made of",
+      "karnā"
+     ],
+     "why": "कुल की एक प्रजाति: of"
+    },
+    {
+     "surface": "होना",
+     "at": "प्रजाति ⟨है⟩",
+     "must": [
+      "to be (used to indicate"
+     ],
+     "must_not": [
+      "to exist",
+      "to be born"
+     ],
+     "why": "एक प्रजाति है: the copula"
+    },
+    {
+     "surface": "पृथ्वी",
+     "must": [
+      "Earth (the third planet"
+     ],
+     "must_not": [
+      "Mother Earth"
+     ],
+     "why": "पृथ्वी के सतह: the Earth's surface"
+    },
+    {
+     "surface": "रूप",
+     "must": [
+      "outward appearance, form"
+     ],
+     "must_not": [
+      "mode, manner",
+      "colour"
+     ],
+     "why": "बूंदों के रूप में: in the form of drops"
+    },
+    {
+     "surface": "को",
+     "at": "मिश्रण ⟨को⟩",
+     "must": [
+      "accusative"
+     ],
+     "must_not": [
+      "intended purpose",
+      "dative"
+     ],
+     "why": "मिश्रण को गूंध कर: the object kneaded"
+    },
+    {
+     "surface": "को",
+     "at": "अमावस्या ⟨को⟩",
+     "must": [
+      "at the time of"
+     ],
+     "must_not": [
+      "intended purpose",
+      "accusative"
+     ],
+     "why": "अमावस्या को मनाया: on the new-moon day"
+    },
+    {
+     "surface": "जाना",
+     "at": "मनाया ⟨जाता⟩",
+     "must": [
+      "passive voice"
+     ],
+     "must_not": [
+      "to go, leave",
+      "to know"
+     ],
+     "why": "मनाया जाता है: is celebrated, the passive"
+    },
+    {
+     "surface": "कल",
+     "at": "⟨कल⟩ मैं",
+     "must": [
+      "tomorrow"
+     ],
+     "must_not": [
+      "yesterday"
+     ],
+     "why": "कल … जाऊँगा: tomorrow, by the future tense"
+    },
+    {
+     "surface": "कल",
+     "at": "⟨कल⟩ बहुत",
+     "must": [
+      "yesterday"
+     ],
+     "must_not": [
+      "tomorrow"
+     ],
+     "why": "कल … हुई थी: yesterday, by the past tense"
+    },
+    {
+     "surface": "आम",
+     "at": "मीठा ⟨आम⟩",
+     "must": [
+      "mango"
+     ],
+     "must_not": [
+      "common, ordinary"
+     ],
+     "why": "एक मीठा आम दिया: a mango"
+    },
+    {
+     "surface": "आम",
+     "at": "एक ⟨आम⟩ समस्या",
+     "must": [
+      "common, ordinary"
+     ],
+     "must_not": [
+      "mango"
+     ],
+     "why": "एक आम समस्या: a common problem"
+    },
+    {
+     "surface": "सोना",
+     "at": "सारा ⟨सोना⟩",
+     "must": [
+      "gold"
+     ],
+     "must_not": [
+      "to sleep"
+     ],
+     "why": "सोना पहना था: wore gold"
+    },
+    {
+     "surface": "सोना",
+     "at": "अब ⟨सोना⟩",
+     "must": [
+      "to sleep"
+     ],
+     "must_not": [
+      "gold"
+     ],
+     "why": "मुझे अब सोना है, सुबह जल्दी उठना है: to sleep"
+    },
+    {
+     "surface": "उत्तर",
+     "at": "भाई ⟨उत्तर⟩",
+     "must": [
+      "north"
+     ],
+     "must_not": [
+      "reply, answer"
+     ],
+     "why": "उत्तर दिशा में: in the north"
+    },
+    {
+     "surface": "बस",
+     "at": "⟨बस⟩ छूट",
+     "must": [
+      "bus"
+     ],
+     "must_not": [
+      "enough",
+      "merely"
+     ],
+     "why": "बस छूट गई: the bus left"
+    }
+   ]
+  },
+  "fi": {
+   "lang": "fi",
+   "source": "fi.wikipedia.org, leads of «Tuhkimo», «Koira», «Sade» and «Sauna» (CC BY-SA 4.0); the second half are written for this benchmark (adversarial: a context that settles a word whose first or commonest sense is wrong), kept where they split the models measured",
+   "sentences": [
+    "Tuhkimo on tunnettu kansansatu epäoikeudenmukaisuudesta ja sisarkateudesta.",
+    "Koira on ihmisen kesyttämistä eläimistä vanhin.",
+    "Kesyyntymisen alkuaikoina koirasta on ollut hyötyä varoittavana vahtina sekä jätteensyöjänä.",
+    "Koiraa on käytetty ja käytetään edelleenkin myös vetoapuna, paimenena ja metsästyksessä.",
+    "Monet ihmiset pitävät koiria lemmikkeinä, ja koira onkin Euroopan toiseksi yleisin kotieläin kesykissan jälkeen.",
+    "Sade on pilvistä putoavaa vettä eri olomuodoissaan.",
+    "Jos lämmin, kostea ilma alkaa nousta ja siten jäähtyä, se saavuttaa kastepisteen ja osa vesihöyrystä alkaa tiivistyä vedeksi.",
+    "Sauna lämmitetään kiukaalla, joka on kiviä sisältävä uuni.",
+    "Pihalla kasvaa korkea kuusi.",
+    "Hänellä on kuusi lasta.",
+    "Tuli sammui yöllä, ja aamulla mökissä oli kylmä.",
+    "Kitaran kieli katkesi kesken kappaleen.",
+    "Hän otti vielä palan kakkua.",
+    "Hän pitää kahvista enemmän kuin teestä.",
+    "Isä ajoi partansa ennen juhlia.",
+    "Vene ylitti järven selän ennen myrskyä."
+   ],
+   "checks": [
+    {
+     "surface": "olla",
+     "at": "Tuhkimo ⟨on⟩",
+     "must": [
+      "(copulative) to be (indicating"
+     ],
+     "must_not": [
+      "occupy a place",
+      "to have"
+     ],
+     "why": "Tuhkimo on kansansatu: the copula"
+    },
+    {
+     "surface": "olla",
+     "at": "Koira ⟨on⟩ ihmisen",
+     "must": [
+      "(copulative) to be (indicating"
+     ],
+     "must_not": [
+      "to have; to own",
+      "occupy a place"
+     ],
+     "why": "koira on vanhin: the copula"
+    },
+    {
+     "surface": "olla",
+     "at": "koirasta ⟨on⟩",
+     "must": [
+      "(auxiliary) to have"
+     ],
+     "must_not": [
+      "to own",
+      "occupy a place",
+      "(copulative)"
+     ],
+     "why": "on ollut: the perfect auxiliary"
+    },
+    {
+     "surface": "olla",
+     "at": "Koiraa ⟨on⟩",
+     "must": [
+      "(auxiliary) to have"
+     ],
+     "must_not": [
+      "to own",
+      "occupy a place",
+      "(copulative)"
+     ],
+     "why": "on käytetty: the perfect auxiliary"
+    },
+    {
+     "surface": "hyötyä",
+     "must": [
+      "partitive singular of hyöty"
+     ],
+     "must_not": [
+      "to profit"
+     ],
+     "why": "on ollut hyötyä: of use, the noun"
+    },
+    {
+     "surface": "-kin",
+     "must": [
+      "(with a verb)"
+     ],
+     "must_not": [
+      "even (implying",
+      "(with a nonverb)"
+     ],
+     "why": "koira onkin: and indeed it is"
+    },
+    {
+     "surface": "toiseksi",
+     "must": [
+      "translative singular of toinen"
+     ],
+     "must_not": [
+      "secondly"
+     ],
+     "why": "toiseksi yleisin: second most common"
+    },
+    {
+     "surface": "Sade",
+     "must": [
+      "precipitation"
+     ],
+     "must_not": [
+      "female given name"
+     ],
+     "why": "sade on pilvistä putoavaa vettä eri olomuodoissaan: precipitation in every form"
+    },
+    {
+     "surface": "olla",
+     "at": "Sade ⟨on⟩",
+     "must": [
+      "(copulative) to be (indicating"
+     ],
+     "must_not": [
+      "(there) be",
+      "occupy a place"
+     ],
+     "why": "sade on vettä: the copula"
+    },
+    {
+     "surface": "pilvistä",
+     "must": [
+      "elative plural of pilvi"
+     ],
+     "must_not": [
+      "pilvinen"
+     ],
+     "why": "pilvistä putoavaa: falling from clouds"
+    },
+    {
+     "surface": "alkaa",
+     "at": "ilma ⟨alkaa⟩",
+     "must": [
+      "start (doing)"
+     ],
+     "must_not": [],
+     "why": "alkaa nousta: begins to rise"
+    },
+    {
+     "surface": "kivi",
+     "at": "⟨kiviä⟩",
+     "must": [
+      "stone, rock",
+      "piece of stone"
+     ],
+     "must_not": [
+      "construction materials",
+      "central processing"
+     ],
+     "why": "kiviä sisältävä uuni: stones in the stove"
+    },
+    {
+     "surface": "kuusi",
+     "at": "korkea ⟨kuusi⟩",
+     "must": [
+      "spruce"
+     ],
+     "must_not": [
+      "six"
+     ],
+     "why": "korkea kuusi kasvaa: a spruce"
+    },
+    {
+     "surface": "olla",
+     "at": "Hänellä ⟨on⟩",
+     "must": [
+      "to have; to own"
+     ],
+     "must_not": [
+      "(copulative)"
+     ],
+     "why": "hänellä on kuusi lasta: has"
+    },
+    {
+     "surface": "Tuli",
+     "must": [
+      "fire (reaction",
+      "fire (instance"
+     ],
+     "must_not": [
+      "past indicative of tulla"
+     ],
+     "why": "tuli sammui: the fire went out"
+    },
+    {
+     "surface": "kieli",
+     "at": "Kitaran ⟨kieli⟩",
+     "must": [
+      "string"
+     ],
+     "must_not": [
+      "tongue (organ",
+      "language"
+     ],
+     "why": "kitaran kieli katkesi: a guitar string"
+    },
+    {
+     "surface": "kappaleen",
+     "at": "⟨kappaleen⟩",
+     "must": [
+      "track, song"
+     ],
+     "must_not": [
+      "paragraph",
+      "object (thing"
+     ],
+     "why": "kesken kappaleen: in the middle of the song"
+    },
+    {
+     "surface": "pala",
+     "at": "⟨palan⟩",
+     "must": [
       "piece, bit"
      ],
-     "why": "タバコ切れ: out of cigarettes, read through the form 切れ"
+     "must_not": [
+      "snack",
+      "palaa"
+     ],
+     "why": "palan kakkua: a piece of cake"
+    },
+    {
+     "surface": "pitää",
+     "at": "Hän ⟨pitää⟩ kahvista",
+     "must": [
+      "to like"
+     ],
+     "must_not": [
+      "to hold",
+      "to keep"
+     ],
+     "why": "pitää kahvista: likes coffee"
+    },
+    {
+     "surface": "ajaa",
+     "must": [
+      "to shave"
+     ],
+     "must_not": [
+      "to drive, ride",
+      "to drive away"
+     ],
+     "why": "ajoi partansa: shaved"
+    },
+    {
+     "surface": "selkä",
+     "must": [
+      "open water"
+     ],
+     "must_not": [
+      "back (the rear"
+     ],
+     "why": "järven selän: the open lake"
     }
    ]
   }

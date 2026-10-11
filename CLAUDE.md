@@ -44,7 +44,7 @@ the code changes.
   nine Spanish sources with concepts and rules on and off: the curves, and what they settle.
 - [Words Wiktionary has no entry for](docs/execution/unknown-words.md) — misspellings looked up,
   foreign words explained or dropped, and the fabrications the first prompt produced.
-- [The benchmark](docs/execution/benchmark.md) — 37 sentences, five languages, known answers: what
+- [The benchmark](docs/execution/benchmark.md) — 160 sentences, ten languages, known answers: what
   sense disambiguation is checked against, and why the five-sentence one stopped discriminating.
 - [Manga as a source](docs/execution/manga.md) — a mokuro `.mbz` archive read for its speech: why
   a block is the sentence and its lines are not, the reading order that came free, and the bubbles
@@ -183,7 +183,7 @@ Nothing asserts on decker's own functions, and checking work still means running
 from a scratchpad, on the smallest input that shows the thing.
 
 What does live in the repository, at Bru's instruction on 2026-09-15, is
-`tools/benchmark/` — 37 sentences in Spanish, German, Russian, Chinese and Japanese with known answers for the
+`tools/benchmark/` — 160 sentences in ten languages, half Wikipedia and half written to be hard, with known answers for the
 one stage whose output is a judgement rather than a computation:
 
 ```

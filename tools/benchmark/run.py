@@ -7,7 +7,9 @@ What it measures is sense disambiguation and nothing else: for each language it
 runs the pipeline over that language's sentences -- concepts and rules off, so
 the glosses are word senses -- and asks of each check whether the senses kept
 for one surface say what a reader of the passage would say, and do not say what
-they would not.
+they would not. A check that names an occurrence with `at` is scored on the
+senses kept for that occurrence alone, read off the question that was asked
+about it.
 
 Three outcomes, not two. A check whose term was never glossed is **absent**
 rather than failed: it says nothing about the model, and it says quite a lot
@@ -15,8 +17,11 @@ about the run, since a benchmark whose terms stop being extracted is measuring
 nothing. Term extraction changing under it is exactly the failure this has to
 be able to report.
 
-The sentences are Wikipedia lead text, CC BY-SA 4.0, and each language block
-names the articles it came from.
+Each language has sixteen sentences: eight of Wikipedia lead text, CC BY-SA
+4.0, from the articles its block names, and eight written for the benchmark to
+be hard -- a context that settles a word whose first or commonest sense is the
+wrong one -- and kept because they split the models measured. The method is in
+`docs/execution/benchmark.md`.
 """
 
 from __future__ import annotations
@@ -29,10 +34,28 @@ import time
 from contextlib import redirect_stderr
 from pathlib import Path
 
+from decker import disambiguation, pages, pipeline
 from decker import glosses as G
-from decker import pages, pipeline
 
 HERE = Path(__file__).parent
+
+#: Every sense question of the run, as (surface, passage, kept definitions). A
+#: passage marks the occurrence it asks about -- `保存食⟨で⟩あった` -- which is
+#: how a check with `at` is scored on one occurrence rather than on every
+#: sense its surface kept anywhere in the block: `で` the copula and `で` *by
+#: means of* can sit in the same block, and a gloss does not say where it was
+#: met.
+_ASKED: list[tuple[str, str, list[str]]] = []
+_keep = disambiguation.Disambiguator.keep
+
+
+def _recorded(self, senses, **kwargs):
+    kept = _keep(self, senses, **kwargs)
+    _ASKED.append((kwargs["surface"], kwargs["sentence"], [s.definition for s in kept]))
+    return kept
+
+
+disambiguation.Disambiguator.keep = _recorded
 
 
 def main(model: str, out: str | None, refresh: bool = False) -> int:
@@ -44,6 +67,7 @@ def main(model: str, out: str | None, refresh: bool = False) -> int:
     started = time.time()
     for key, block in bench.items():
         text = " ".join(block["sentences"])
+        _ASKED.clear()
         #: The run's own reporting is not the measurement, and it is long.
         with redirect_stderr(io.StringIO()):
             sentences = pipeline.run(text, target_lang=block["lang"], edition="en")
@@ -61,7 +85,12 @@ def main(model: str, out: str | None, refresh: bool = False) -> int:
 
         outcomes = []
         for check in block["checks"]:
-            senses = kept.get(check["surface"].casefold())
+            if "at" in check:
+                asked = [kept for surface, passage, kept in _ASKED
+                         if surface == check["surface"] and check["at"] in passage]
+                senses = [d for kept in asked for d in kept] if asked else None
+            else:
+                senses = kept.get(check["surface"].casefold())
             if senses is None:
                 outcomes.append(("absent", check["surface"], check["why"], ""))
                 continue
