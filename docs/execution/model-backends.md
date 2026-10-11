@@ -115,7 +115,11 @@ passes the recall checks for free, so the count is the honest signal.
 qwen3:1.7b is the cautionary row: it barely discriminates, and every extra kept sense is another
 gloss and another call, so it is slower overall despite being faster per call.
 
-### qwen3.5:4b, and why it is now the default
+### qwen3.5:4b, and why it was the default until 2026-10-11
+
+On 2026-10-11 the ten-language, 211-check benchmark put `gemma4:latest` 28 checks ahead of it at the
+same wall clock, and the default moved back to gemma4 — see `benchmark.md` and the table in
+`decker/ollama.py`. What follows is the measurement that made it the default.
 
 Measured 2026-09-13 on a shorter input — four sentences, laptop CPU, same cached pages for both
 models, on AC, and the output was byte-identical across two `--refresh-answers` runs, so these

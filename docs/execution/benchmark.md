@@ -175,6 +175,8 @@ Hindi 6 of 16, Japanese 12 of 34. The one model clearly better than `gemma4:late
 `qwen3:14b`, and it is not clearly better: nine more checks for 4.2× the time. The default is not
 changed here. That is Bru's call, and the README names it.
 
+Bru's call, the same day: `gemma4:latest` is the default.
+
 ## Japanese, 2026-10-10: thirteen sentences of speech (since replaced)
 
 The fifth block is not Wikipedia. It was written to recreate, in lines of its own, the ambiguities

@@ -30,27 +30,29 @@ from decker.reach import BLIPS, Gate
 #: clock, it is the learner. So the default is the model that answers the most
 #: questions right and hands the learner the fewest cards for doing it.
 #:
-#: Measured cold -- every answer re-asked -- on the 24-sentence, four-language
-#: benchmark in `tools/benchmark/`, which is the one that discriminates; the
-#: five-sentence Spanish one gave all four models 8/9 and could not:
+#: Measured cold -- every answer re-asked -- on the 160-sentence, ten-language
+#: benchmark in `tools/benchmark/`, half Wikipedia and half written to split
+#: the models, on fesat's GTX 2060, 2026-10-11:
 #:
-#:     model            passed  glosses   cold wall   s/gloss
-#:     qwen3:14b          23/24      412      1,142s     2.77
-#:     qwen3.5:4b         22/24      404        288s     0.71
-#:     gemma4:latest      21/24      398        373s     0.94
-#:     gemma3:4b          16/24      500        293s     0.59
+#:     model            passed   glosses   cold wall
+#:     qwen3:14b       153/211     1,751      6,929s
+#:     qwen3.5:latest  147/211     1,728      5,161s
+#:     gemma4:latest   144/211     1,672      1,648s
+#:     qwen3.5:4b      116/211     1,722      1,634s
+#:     gemma3:4b        91/211     1,949      1,444s
 #:
-#: `qwen3.5:4b` is faster than `gemma4:latest` and answers one more question
-#: right, for six more glosses in four hundred; and it fits the laptop, 3.3 GB
-#: against 9.6, which is the one thing choosing gemma4 had cost. `qwen3:14b`
-#: buys one further answer for four times the wall clock and 9.3 GB, which is
-#: still inside the ceiling and is what `--model` is for.
+#: `gemma4:latest` answers 28 more questions than `qwen3.5:4b` in the same wall
+#: clock and with the fewest glosses of any; the two bigger models are within
+#: noise of it at three and four times the time. It costs the laptop: 9.6 GB on
+#: disk against 3.3, so a CPU-only run in the container names `--model
+#: qwen3.5:4b`.
 #:
-#: This is the second change in two days: gemma4:latest was made the default on
-#: the older benchmark, where all four models scored alike and the tie was
-#: broken on gloss count alone. A benchmark that could tell them apart undid
-#: that reasoning, which is the point of having built it.
-DEFAULT_MODEL = "qwen3.5:4b"
+#: This is the third change. gemma4 was the default on a five-sentence
+#: benchmark where every model scored alike; `qwen3.5:4b` replaced it on 24
+#: checks where it led by one; 211 checks reversed that by 28. Each benchmark
+#: that could tell the models apart better undid the last choice, which is the
+#: point of building them.
+DEFAULT_MODEL = "gemma4:latest"
 
 #: Ollama has no authentication, so it is never exposed beyond a loopback or a
 #: tunnel. The fallback is ollama's own default; a host reached through a

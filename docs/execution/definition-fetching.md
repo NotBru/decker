@@ -304,7 +304,7 @@ design wins and the code is wrong.
   puerta` this cut `la` from eleven senses to the article alone and `correr` from thirteen to
   three.
 
-- The default model is `qwen3.5:4b`, on the criterion in `model-backends.md`: inside a
+- The default model is `gemma4:latest` since 2026-10-11 (`qwen3.5:4b` before it), on the criterion in `model-backends.md`: inside a
   ten-second-a-card ceiling the scarce resource is the learner, not the clock, so the default is the
   model that answers the most questions right for the fewest cards. Measured cold on the
   four-language benchmark, it passes 22 of 24 checks in 288 s where `gemma4:latest` passes 21 in

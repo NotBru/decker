@@ -80,7 +80,7 @@ never opens a connection.
 ### The model
 
 Disambiguation, the morphological rules and translation all ask a local model, named by `--model`
-or `$DECKER_MODEL` (default `qwen3.5:4b`), on the host at `--ollama-host` or `$OLLAMA_HOST`
+or `$DECKER_MODEL` (default `gemma4:latest`), on the host at `--ollama-host` or `$OLLAMA_HOST`
 (default `http://localhost:11434`).
 
 Without a reachable host a run does not fail. It keeps every sense, leaves the cards in
