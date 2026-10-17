@@ -111,7 +111,8 @@ archive's metadata lists them, which is already reading order. The deck's title 
 metadata (`Gokurakugai 0001`) since the file is named after the volume number alone.
 
 Sense disambiguation, and translation when `--mother-lang` is not `en`, need
-an ollama host (`--ollama-host`, or `OLLAMA_HOST`); without one the run degrades and says so.
+an ollama host (`--ollama-host`, or `OLLAMA_HOST`); one that does not answer, the default
+included, is waited for and never gone without.
 Stanza models, Wiktionary title dumps, parsed titles, fetched pages, model answers and audio are
 cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
 

@@ -101,10 +101,6 @@ _IN_FLIGHT_LOCK = threading.Lock()
 #: question is simply asked again, which is what would have happened anyway.
 IN_FLIGHT_TIMEOUT = 120.0
 
-#: Hosts that have answered at least once this run. Losing one of those is an
-#: outage, whatever the run was or was not told.
-_ANSWERED: set[str] = set()
-
 #: One gate per host, shared by every stage that asks it: disambiguation,
 #: rules, translation and the unknown-word questions all hold on the same
 #: outage and it is logged once, not once a stage.
@@ -112,7 +108,7 @@ _GATES: dict[str, Gate] = {}
 _GATES_LOCK = threading.Lock()
 
 
-def _gate(host: str) -> Gate:
+def _gate(host: str, named: bool = True) -> Gate:
     with _GATES_LOCK:
         if host not in _GATES:
             def probe(host: str = host) -> bool:
@@ -121,7 +117,12 @@ def _gate(host: str) -> Gate:
                 ollama.Client(host=host, timeout=10).list()
                 return True
 
-            _GATES[host] = Gate(f"ollama at {host}", probe)
+            #: A default nobody named is most often a shell that forgot
+            #: OLLAMA_HOST, so its wait says how to name the right one.
+            name = f"ollama at {host}" + (
+                "" if named else " (the default: name another with --ollama-host or OLLAMA_HOST)"
+            )
+            _GATES[host] = Gate(name, probe)
         return _GATES[host]
 
 
@@ -168,15 +169,9 @@ class Session:
     def _host(self) -> str:
         return self.host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST
 
-    def _relied_on(self) -> bool:
-        """Whether losing this host is an outage to wait out, not a missing model.
-
-        It is when the run was told to use it -- ``--ollama-host`` or
-        ``OLLAMA_HOST`` -- and when it has answered once already this run.
-        """
-        return bool(self.host or os.environ.get("OLLAMA_HOST")) or (
-            self._host() in _ANSWERED
-        )
+    def _named(self) -> bool:
+        """Whether the run was told which host to use, rather than defaulting."""
+        return bool(self.host or os.environ.get("OLLAMA_HOST"))
 
     def client(self):
         if self._client is None:
@@ -226,13 +221,12 @@ class Session:
                 answer = json.loads(response["message"]["content"])
                 break
             except Exception as error:  # ollama down, model missing, bad JSON
-                #: Unreachable is not an answer: a host this run was told to
-                #: use, or one that has already answered, is waited for and
-                #: the question asked again, so a dropped tunnel costs time
-                #: and never a sense. Only a host nobody named that never
-                #: answered is gone without, which is the run with no model.
-                if _unreachable(error) and self._relied_on() and blips < BLIPS:
-                    if not _gate(self._host()).wait(_reason(error)):
+                #: Unreachable is not an answer: whichever host the run uses,
+                #: named or the default, is waited for and the question asked
+                #: again, so a dropped tunnel or a forgotten OLLAMA_HOST costs
+                #: time and never a sense. There is no run without a model.
+                if _unreachable(error) and blips < BLIPS:
+                    if not _gate(self._host(), self._named()).wait(_reason(error)):
                         blips += 1
                     started = time.monotonic()
                     continue
@@ -240,7 +234,6 @@ class Session:
                 count("model.failed")
                 self._released(path)
                 return None
-        _ANSWERED.add(self._host())
         #: Added up rather than only printed: the difference between a cold run
         #: and a warm one is the whole difference in wall clock, and a total on
         #: the screen says which this is without waiting for the run to end.

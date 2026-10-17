@@ -83,9 +83,11 @@ Disambiguation, the morphological rules and translation all ask a local model, n
 or `$DECKER_MODEL` (default `gemma4:latest`), on the host at `--ollama-host` or `$OLLAMA_HOST`
 (default `http://localhost:11434`).
 
-Without a reachable host a run does not fail. It keeps every sense, leaves the cards in
-English, and says so — so read stderr before trusting a deck. It also reports any prose that
-reached a card untranslated, and silence there means everything did:
+Without a reachable host a run does not go on without it. It says which host it cannot reach and
+waits, the default one as much as a named one, and carries on unchanged once it answers. An answer
+that cannot be used still costs the deck — every sense kept, a card left in English — and says so,
+so read stderr before trusting a deck. It also reports any prose that reached a card untranslated,
+and silence there means everything did:
 
 ```
 [decker] 57 glosses

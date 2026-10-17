@@ -72,10 +72,20 @@ needs. Any other host is asked for `/`, and any status under 500 counts as "ther
 
 ## When a run still degrades
 
-Only when nobody asked for the remote. If there is no `--ollama-host` and no `OLLAMA_HOST`, and
-the default `localhost:11434` has never answered during this run, the run goes without a model, as
-the README says. The logic is that a machine with no ollama on it has not *lost* anything. But once
-that default host has answered, losing it is an outage like any other.
+Never for want of a host. Until 2026-10-17 there was one exception: with no `--ollama-host` and no
+`OLLAMA_HOST`, a default `localhost:11434` that had not answered during the run was taken to mean a
+machine with no ollama on it, and the run went without a model. That was the wrong reading of the
+commonest case. In the devcontainer the tunnel is at `172.17.0.1:11435` and nothing listens on the
+default, so a shell that has not exported `OLLAMA_HOST` built a Japanese deck that kept the first
+sense of every word reached through a form-of: なった pointed at なる, and なる was taught as "to be
+achieved", Wiktionary's first sense, not "to become". Bru had meant there to be no such fallback. Now
+every host is waited for, the default included. Its wait line names it as the default and says how
+to name another, so a forgotten `OLLAMA_HOST` shows up as a run that is visibly waiting, not as a
+deck that is quietly worse.
+
+A run that should go without a model asks for it: `--no-disambiguate`, `--no-rules` and
+`--no-translate` turn off the stages that ask one. What still degrades is an *answer* that cannot be
+used: a model the host does not hold, or a reply that is not JSON.
 
 ## What it costs
 

@@ -131,5 +131,5 @@ The stage re-runs extraction and definition over the subtitle file, because a ca
 hash of its inflected form and Wiktionary's own definition, and nothing short of the definitions
 reproduces it. With pages cached that is the parse plus the glossing: **2m15s** for the 6h38m
 Russian file (184k characters, 6,158 sentences, 6,528 glosses) on this machine, of which 99 seconds
-is Stanza. No network, no model: disambiguation degrades as it does everywhere else, and a timeline
+is Stanza. Without its model it waits for the host as every run does, and a timeline
 run should be given the same stage flags the deck was built with or the gap count will be noise.

@@ -764,10 +764,9 @@ design wins and the code is wrong.
   with `think=False`. A client that rejects the argument is asked again without it, and not asked
   with it again for the rest of the run.
 
-- When ollama answers something unusable, or there is no model at all -- no host named and the
-  default one never answered -- the gloss keeps every sense and a warning is printed once. A named
-  host that cannot be reached, or one that has answered earlier in the run, is waited for instead
-  and the question asked again ([When a remote stops answering](connectivity.md)). The design says disambiguation *must* happen, so this is a degraded run,
+- When ollama answers something unusable, the gloss keeps every sense and a warning is printed
+  once. A host that cannot be reached, named or the default, is waited for instead and the question
+  asked again ([When a remote stops answering](connectivity.md)). The design says disambiguation *must* happen, so this is a degraded run,
   not a supported mode; `--no-disambiguate` is the way to ask for it deliberately.
 
 - The occurrence being judged is bracketed in the sentence the model is shown — `—Vaya, ⟨vaya⟩ a
