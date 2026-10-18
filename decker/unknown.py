@@ -80,9 +80,8 @@ however ordinary it looks on the page.
 - "name": the name of a person, place, group, shop or thing in the text --
   a character, a street, a company -- whatever language it comes from. Write
   "explanation": one plain sentence in {source} that starts with the name
-  written in Latin letters, says what kind of name it is, and says whom or
-  what it names as far as the passage shows -- who speaks to them or of them
-  -- without inventing more.
+  written in Latin letters and says what kind of name it is -- a given name,
+  a family name, a place, a shop -- and nothing more.
 - "foreign": a word of another language. Name that language in
   "language". Then answer "widely_known": true if a reader of {language} would
   recognise it unaided -- an everyday borrowing, a household name -- false if
@@ -97,6 +96,11 @@ however ordinary it looks on the page.
   words run together by a bad split, or something you cannot place. Nothing to
   teach.
 
+**An explanation says what the word is, never what happens in the text.** The
+passage is there for you to judge the word by; the card is read before the
+story is, so it names no character, event or place of the story and says
+nothing about who speaks, to whom, or why.
+
 Prefer "unrecognizable" to a guess. An explanation you are not sure of is worse
 than no card: the learner cannot tell the two apart.
 
@@ -108,6 +112,11 @@ The word: {surface}
 Answer with the kind, and the other fields that kind asks for.
 """
 
+#: No context in an explanation, by Bru's instruction of 2026-10-18: the
+#: name prompt had asked for "whom or what it names as far as the passage
+#: shows", and `タオ` came back as the man who answers the office's phone --
+#: a card that tells the story before the reader has read it.
+#:
 #: What a card says when the model wrote its explanation. A foreign word has no
 #: Wiktionary entry at all -- that is why it is here -- so the card cannot
 #: credit one, and must not look as though it does.

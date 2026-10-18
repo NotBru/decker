@@ -19,7 +19,7 @@ So: one model call per distinct entry-less surface, asking which of four things 
 | answer | what happens |
 |---|---|
 | `misspelling` | the word that was meant is looked up and glossed, and the card is fronted with *that* spelling — a card teaching the text's typo would teach the typo; a word drawn out for effect (`すげー`, `けどぉ`) counts, corrected to the word without the stretch |
-| `name` | a person, place, group or thing in the text, whatever its language — taught with one sentence that starts with the name in Latin letters and says whom it names, as far as the passage shows |
+| `name` | a person, place, group or thing in the text, whatever its language — taught with one sentence that starts with the name in Latin letters and says what kind of name it is, and nothing about the story |
 | `foreign`, widely known | dropped; `pizza` in a German text needs no card |
 | `foreign`, not known | taught, with the model's one-sentence explanation |
 | `native` | a word of the language the dictionary lacks — regional, rare, very new — taught the same way |
@@ -97,6 +97,13 @@ stays foreign; neither says what a reader needs, which is that the word is *some
 asks for the name romanized first because the first wording, "giving it in Latin letters", came back
 as "Tao is a name in Latin letters, here written in katakana as the name of a character speaking" —
 and Tao is spoken *to*.
+
+**No spoilers.** The first wording asked for whom a name names "as far as the passage shows", and
+`タオ` came back as the man who answers the office's phone. Bru, the same day: no context in an
+explanation. The prompt now says an explanation says what the word is and never what happens in the
+text — no character, event or place of the story, nothing about who speaks to whom — since the card
+is read before the story. `タオ` is now "Tao is a given name, used here for a character." The
+passage is still sent: it is what the kind of word is judged by.
 
 The drawn-out clause was tuned on one bubble and not past it: `よお` at the end of
 `出てくださいよお` is a stretched `よ`, and Haiku corrects it to `よう` with or without the sentence
