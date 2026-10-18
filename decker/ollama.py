@@ -90,6 +90,11 @@ BACKEND: str | None = None
 #: million input tokens: a run is on the order of a million, so a dime.
 DEFAULT_MODELS = {"ollama": DEFAULT_MODEL, "anthropic": "claude-haiku-5-5"}
 
+#: Dollars per million tokens in and out, for the hosted models whose price
+#: is known, so a run can say what it cost. Haiku 5.5's holds for prompts up to
+#: 100K tokens, which every prompt decker writes is.
+PRICES = {"claude-haiku-5-5": (0.10, 0.50)}
+
 
 def current_backend() -> str:
     """The backend a run uses when it is not told one."""
@@ -195,6 +200,20 @@ def _unreachable(error: BaseException) -> bool:
     except ImportError:
         return False
     return isinstance(error, httpx.TransportError)
+
+
+def spending() -> str | None:
+    """What this run spent on a metered backend, in a line, if anything."""
+    stats = console.stats
+    tokens_in, tokens_out = stats["tokens.in"], stats["tokens.out"]
+    if not tokens_in:
+        return None
+    line = f"{tokens_in:,} tokens in, {tokens_out:,} out"
+    models = {name.removeprefix("tokens.model.") for name in stats.counts
+              if name.startswith("tokens.model.") and stats[name]}
+    if len(models) == 1 and (price := PRICES.get(next(iter(models)))):
+        line += f", ${(tokens_in * price[0] + tokens_out * price[1]) / 1e6:.2f}"
+    return line
 
 
 def _closed(schema: object) -> object:
@@ -503,6 +522,11 @@ class Session:
             response = self.client().messages.create(
                 **arguments, output_config={"format": shape, "effort": "low"}
             )
+        #: Tallied because a hosted backend is metered: the run's last line
+        #: says what it spent.
+        count("tokens.in", response.usage.input_tokens)
+        count("tokens.out", response.usage.output_tokens)
+        count(f"tokens.model.{self.model}", 1)
         if response.stop_reason == "refusal":
             raise ValueError(f"{self.model} declined to answer")
         return "".join(block.text for block in response.content if block.type == "text")

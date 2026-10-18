@@ -27,6 +27,15 @@ COMMANDS = ("extract", "define", "deck", "index", "timeline")
 
 def main(argv: list[str] | None = None) -> int:
     try:
+        return _guarded(argv)
+    finally:
+        #: Whether the run finished or stopped: the tokens were spent either way.
+        if spent := ollama.spending():
+            console.log(f"[decker] {spent}", level=console.QUIET)
+
+
+def _guarded(argv: list[str] | None = None) -> int:
+    try:
         return _main(argv)
     except anki.Unreadable as unreadable:
         #: Before anything was built, since both flags that read a deck read
