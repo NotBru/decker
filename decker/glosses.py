@@ -1796,7 +1796,8 @@ def _no_entry(
     unknowns = builder.unknowns
     if unknowns is None or not unknowns.enabled:
         log(
-            f"no {builder.lang} entry ({', '.join(term.entries)})",
+            f"no {builder.lang} entry ({', '.join(term.entries)})" if term.entries
+            else "no Wiktionary page of that name",
             word=term.surface, level=VERBOSE, kind="missing",
         )
         return
@@ -1840,6 +1841,13 @@ def _no_entry(
                 "by the model",
                 word=term.surface, level=VERBOSE, kind="fixed",
             )
+        return
+
+    if verdict.is_name:
+        index = builder.add_unknown(term.surface, verdict.explanation, unknowns.model)
+        if index is not None:
+            log("a name; explained by the model",
+                word=term.surface, level=VERBOSE, kind="fixed")
         return
 
     if verdict.kind == "foreign":

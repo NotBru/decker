@@ -18,7 +18,8 @@ So: one model call per distinct entry-less surface, asking which of four things 
 
 | answer | what happens |
 |---|---|
-| `misspelling` | the word that was meant is looked up and glossed, and the card is fronted with *that* spelling — a card teaching the text's typo would teach the typo |
+| `misspelling` | the word that was meant is looked up and glossed, and the card is fronted with *that* spelling — a card teaching the text's typo would teach the typo; a word drawn out for effect (`すげー`, `けどぉ`) counts, corrected to the word without the stretch |
+| `name` | a person, place, group or thing in the text, whatever its language — taught with one sentence that starts with the name in Latin letters and says whom it names, as far as the passage shows |
 | `foreign`, widely known | dropped; `pizza` in a German text needs no card |
 | `foreign`, not known | taught, with the model's one-sentence explanation |
 | `native` | a word of the language the dictionary lacks — regional, rare, very new — taught the same way |
@@ -77,6 +78,34 @@ reading of that bug is that the fallback should have spotted a typo. It is not a
 it is right: `е` for `ё` is how Russian is printed. The disagreement is between the text's spelling
 and the dictionary's, which is a fact to look up and not a judgement to make. The stage is the last
 resort, so a wrong answer here is worth reading as a question about the stage before it.
+
+## Words with no page at all, and names (2026-10-18)
+
+Until this date only a term that matched *some* title reached the stage — a page that exists, with no
+section in the language. A word that matched no title was never a term: it was not glossed, not
+asked about, and not mentioned even at `-vv`. On Gokurakugai that was `タオ`, the name of the man
+the first page is calling for, while the `さん` after it was carded; and 74 other surfaces —
+`アルマ`, `ユキ`, `西雪` and the other names; `すげー`, `ずーっと` and every other drawn-out word;
+`メシ`, `テメエ`, `臭え`; `獣人`, `手描き`; the sound effects. That is the silent drop Bru ruled out
+(no degraded runs, 2026-10-18), so term extraction now makes each run of untitled tokens a term with
+no entries, and it comes here like any other entry-less term. The cost on that volume is 106 more
+occurrences, 75 distinct, so 75 calls: a fraction of a cent on Haiku.
+
+`name` is the answer that made this worth doing. Asked before it existed, a model files a name under
+`foreign` (`タオ` is Chinese) or `native`, and the old prompt told it outright that a foreign name
+stays foreign; neither says what a reader needs, which is that the word is *somebody*. The prompt
+asks for the name romanized first because the first wording, "giving it in Latin letters", came back
+as "Tao is a name in Latin letters, here written in katakana as the name of a character speaking" —
+and Tao is spoken *to*.
+
+The drawn-out clause was tuned on one bubble and not past it: `よお` at the end of
+`出てくださいよお` is a stretched `よ`, and Haiku corrects it to `よう` with or without the sentence
+saying "the word with the stretch taken out". よお/よう is a real spelling ambiguity, and a prompt
+tuned until one example passes is a prompt fitted to that example.
+
+Nothing is dropped by part of speech on the way: the parser tagged `っす` as a symbol in one
+sentence, and a rule dropping symbols would have thrown away a word. Punctuation and numbers are
+still dropped at extraction, the numbers with a line naming them.
 
 ## What it does not fix
 

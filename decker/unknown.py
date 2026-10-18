@@ -51,7 +51,7 @@ SCHEMA = {
     "properties": {
         "kind": {
             "type": "string",
-            "enum": ["misspelling", "foreign", "native", "unrecognizable"],
+            "enum": ["misspelling", "name", "foreign", "native", "unrecognizable"],
         },
         "correction": {"type": "string"},
         "language": {"type": "string"},
@@ -68,13 +68,22 @@ A word of the text has no {language} entry in Wiktionary. Say which of these it
 is, judging it in the passage it appears in.
 
 **A word printed inside a {language} text is not thereby a {language} word.** A
-quoted title, a foreign name, a word of another language used as itself: all of
-those stay foreign, however ordinary they look on the page.
+quoted title or a word of another language used as itself stays foreign,
+however ordinary it looks on the page.
 
-- "misspelling": a {language} word spelled or capitalized wrongly. Put the word
-  that was meant in "correction", spelled as a dictionary would. Only when the
+- "misspelling": a {language} word spelled or capitalized wrongly, or drawn out
+  for effect -- a vowel stretched, a letter repeated, the way speech is written
+  in comics and chat. Put the word that was meant in "correction", spelled as a
+  dictionary would; for a drawn-out word, that is the word with the stretch
+  taken out, not another word that happens to look like it. Only when the
   passage would accept that word in that place.
-- "foreign": a word or name of another language. Name that language in
+- "name": the name of a person, place, group, shop or thing in the text --
+  a character, a street, a company -- whatever language it comes from. Write
+  "explanation": one plain sentence in {source} that starts with the name
+  written in Latin letters, says what kind of name it is, and says whom or
+  what it names as far as the passage shows -- who speaks to them or of them
+  -- without inventing more.
+- "foreign": a word of another language. Name that language in
   "language". Then answer "widely_known": true if a reader of {language} would
   recognise it unaided -- an everyday borrowing, a household name -- false if
   not. When false, write "explanation": one plain sentence in {source} saying
@@ -136,6 +145,16 @@ class Verdict:
         as an unfamiliar foreign word is.
         """
         return self.kind == "native" and bool(self.explanation)
+
+    @property
+    def is_name(self) -> bool:
+        """A name in the text, which a reader needs to tell from a word.
+
+        Added with untitled words, 2026-10-18: a name is the commonest word
+        with no page at all, and a reader who meets `タオさん` needs to know
+        `タオ` is somebody before `さん` means anything.
+        """
+        return self.kind == "name" and bool(self.explanation)
 
 
 @dataclass
@@ -207,7 +226,7 @@ def _read(answer: dict | None) -> Verdict | None:
     if not isinstance(answer, dict):
         return None
     kind = answer.get("kind")
-    if kind not in ("misspelling", "foreign", "native", "unrecognizable"):
+    if kind not in ("misspelling", "name", "foreign", "native", "unrecognizable"):
         return None
     return Verdict(
         kind=kind,

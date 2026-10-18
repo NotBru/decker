@@ -141,6 +141,22 @@ def extract(
         and not covered <= numerals
         and not any(covered < other for other in matches)
     ]
+    #: A word no title covers is a term too, with no entries. Before
+    #: 2026-10-18 it was simply never one: `タオ`, a character's name, has no
+    #: page, so it reached neither the deck nor the unknown-words stage nor a
+    #: line of the log, while the `さん` after it was carded. Now it goes to
+    #: the stage that asks what a word with no entry is. Neighbouring words
+    #: with no title are one term, since that is what a name of several words
+    #: looks like. Not even a token the parser calls a symbol is dropped here:
+    #: it tagged `っす` one, and whether a token is a word is the model's call.
+    covered_somewhere = set().union(*matches) if matches else set()
+    for run in _runs(
+        word.id for word in sentence.words
+        if word.id not in covered_somewhere
+        and word.id not in punctuation | numerals
+    ):
+        matches[run] = set()
+        kept.append(run)
     kept.sort(key=min)
 
     joiner = joiner_of(lang)
@@ -161,6 +177,17 @@ def extract(
             seen.add(term.surface)
             terms.append(term)
     return terms
+
+
+def _runs(ids) -> list[frozenset[int]]:
+    """Token ids grouped into runs of consecutive ones."""
+    runs: list[list[int]] = []
+    for one in sorted(ids):
+        if runs and one == runs[-1][-1] + 1:
+            runs[-1].append(one)
+        else:
+            runs.append([one])
+    return [frozenset(run) for run in runs]
 
 
 def _contiguous(covered: frozenset[int]) -> bool:

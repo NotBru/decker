@@ -254,6 +254,13 @@ wins and the code is wrong.
   `長ェ` into `長` + `ェ`, so the error is in the cut, before any form is chosen. Nothing here is
   built yet; the fallback and the grammar-word rule are the candidates.
 
+## Words no title covers
+
+A token no title covers becomes a term with no entries, and neighbouring ones are one term, since
+that is what a name of several words looks like; punctuation and numbers aside, nothing is dropped
+here. Before 2026-10-18 such a token was not a term at all and vanished without a line — see
+[Words Wiktionary has no entry for](unknown-words.md), which is where they go now.
+
 ## Known gaps
 
 All four below are **accepted for v1**, in the order they should be taken up afterwards. The
