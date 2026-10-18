@@ -86,19 +86,8 @@ BACKEND_VARIABLE = "DECKER_BACKEND"
 BACKEND: str | None = None
 
 #: Each backend's default, since a tag one serves is a name the other has
-#: never heard of. Claude Haiku 5.5 is Anthropic's cheapest tier, at $0.10 per
-#: million input tokens: a run is on the order of a million, so a dime.
+#: never heard of. Claude Haiku 5.5 is Anthropic's cheapest tier.
 DEFAULT_MODELS = {"ollama": DEFAULT_MODEL, "anthropic": "claude-haiku-5-5"}
-
-#: Dollars per million tokens in and out, for the hosted models whose price
-#: is known, so a run can say what it cost. Haiku 5.5's holds for prompts up to
-#: 100K tokens, which every prompt decker writes is.
-PRICES = {
-    "claude-haiku-5-5": (0.10, 0.50),
-    "claude-sonnet-5-5": (2.00, 10.00),
-    "claude-opus-5-5": (4.00, 20.00),
-    "claude-fable-5-1": (10.00, 50.00),
-}
 
 
 def current_backend() -> str:
@@ -208,17 +197,17 @@ def _unreachable(error: BaseException) -> bool:
 
 
 def spending() -> str | None:
-    """What this run spent on a metered backend, in a line, if anything."""
+    """What this run spent on a metered backend, in tokens, if anything.
+
+    Tokens and never dollars: a price decker printed would be a table kept in
+    the code or a file kept by hand, and either goes stale without a word. The
+    provider's console is where the bill is.
+    """
     stats = console.stats
     tokens_in, tokens_out = stats["tokens.in"], stats["tokens.out"]
     if not tokens_in:
         return None
-    line = f"{tokens_in:,} tokens in, {tokens_out:,} out"
-    models = {name.removeprefix("tokens.model.") for name in stats.counts
-              if name.startswith("tokens.model.") and stats[name]}
-    if len(models) == 1 and (price := PRICES.get(next(iter(models)))):
-        line += f", ${(tokens_in * price[0] + tokens_out * price[1]) / 1e6:.2f}"
-    return line
+    return f"{tokens_in:,} tokens in, {tokens_out:,} out"
 
 
 def _closed(schema: object) -> object:
@@ -543,7 +532,6 @@ class Session:
         #: says what it spent.
         count("tokens.in", response.usage.input_tokens)
         count("tokens.out", response.usage.output_tokens)
-        count(f"tokens.model.{self.model}", 1)
         if response.stop_reason == "refusal":
             raise ValueError(f"{self.model} declined to answer")
         return "".join(block.text for block in response.content if block.type == "text")

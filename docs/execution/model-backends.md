@@ -95,7 +95,7 @@ design above. What was decided while building it:
   argument.
 - **The default model follows the backend.** `--model` no longer has a parse-time default:
   `$DECKER_MODEL` if set, else `gemma4:latest` on ollama and **`claude-haiku-5-5`** on Anthropic —
-  the cheapest tier, $0.10 / $0.50 per million tokens, so a run of ~10⁶ input tokens is about a dime.
+  the cheapest tier (on 2026-10-18, $0.10 / $0.50 per million tokens, so a run was about a dime).
   A `$DECKER_MODEL` left over from ollama is a 404, and the warning lists what the API serves, which
   is the same answer `_held` gives for an untagged ollama model.
 - **The schema is closed, nothing else.** `_closed` adds `additionalProperties: false` to every
@@ -111,6 +111,12 @@ design above. What was decided while building it:
   are spent, go to a gate named "the Anthropic API", probed by listing one model. A missing or wrong
   key, a refusal, or an unknown model is an answer: the run stops, naming the backend, the model and
   — for an unknown model — what the API does serve.
+
+- **Tokens, never dollars.** A run on a metered backend ends with what it spent in tokens, finished
+  or stopped. For a few hours it also printed dollars from a table of prices in the code; Bru struck
+  it the same day — a price list in the code, or one kept by hand, goes stale without a word, and the
+  bill is the provider's to report. The dollar figures below were worked out by hand from that day's
+  price page and are dated with it.
 
 ### Haiku 5.5 on Gokurakugai 0001, against gemma4, 2026-10-18
 
