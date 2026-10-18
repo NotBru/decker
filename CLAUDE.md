@@ -113,6 +113,9 @@ metadata (`Gokurakugai 0001`) since the file is named after the volume number al
 Sense disambiguation, and translation when `--mother-lang` is not `en`, need
 an ollama host (`--ollama-host`, or `OLLAMA_HOST`); one that does not answer, the default
 included, is waited for and never gone without.
+`--backend anthropic` (or `DECKER_BACKEND`) asks Anthropic's API instead, `claude-haiku-5-5` unless
+`--model` says otherwise, with the key in `ANTHROPIC_API_KEY`; it sends the source's sentences there,
+which is why it is never the default — see [Model backends](docs/execution/model-backends.md).
 Stanza models, Wiktionary title dumps, parsed titles, fetched pages, model answers and audio are
 cached under `~/.cache/decker` (`DECKER_CACHE_DIR` overrides).
 

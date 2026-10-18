@@ -13,7 +13,11 @@ from decker import (
     shuffling, subtitles, timeline,
 )
 from decker.wiktionary import USER_AGENT
-from decker.ollama import DEFAULT_HOST, DEFAULT_MODEL, MODEL_VARIABLE, default_model
+from decker import ollama
+from decker.ollama import (
+    BACKEND_VARIABLE, BACKENDS, DEFAULT_HOST, DEFAULT_MODELS, MODEL_VARIABLE,
+    default_model,
+)
 from decker.translation import SOURCE_LANG
 
 #: Every stage runs in one go; the subcommands below stop the pipeline early.
@@ -256,6 +260,12 @@ def _main(argv: list[str] | None = None) -> int:
     _add_language_arguments(index)
 
     arguments = parser.parse_args(argv)
+    if getattr(arguments, "backend", None):
+        ollama.BACKEND = arguments.backend
+    if ollama.current_backend() not in BACKENDS:
+        parser.error(f"${BACKEND_VARIABLE} must be one of {', '.join(BACKENDS)}")
+    if hasattr(arguments, "model") and not arguments.model:
+        arguments.model = default_model()
     console.configure(
         getattr(arguments, "verbose", 0),
         getattr(arguments, "quiet", False),
@@ -304,7 +314,10 @@ def _headline(arguments: argparse.Namespace) -> str:
         parts.append(f"{arguments.target_lang} → "
                      f"{getattr(arguments, 'mother_lang', SOURCE_LANG)}")
     if getattr(arguments, "model", None) or getattr(arguments, "source", None):
-        parts.append(getattr(arguments, "model", None) or default_model())
+        model = getattr(arguments, "model", None) or default_model()
+        if ollama.current_backend() != "ollama":
+            model = f"{model} on {ollama.current_backend()}"
+        parts.append(model)
     if getattr(arguments, "source", None):
         parts.append(_document_title(arguments.source))
     return " · ".join(parts)
@@ -398,11 +411,20 @@ def _add_source_arguments(parser: argparse.ArgumentParser) -> None:
 def _add_definition_arguments(parser: argparse.ArgumentParser) -> None:
     """What definition fetching needs: a model, and what to do without one."""
     parser.add_argument(
-        "--model",
-        default=default_model(),
+        "--backend",
+        choices=BACKENDS,
         help=(
-            "ollama model used to choose senses and translate "
-            f"(default: ${MODEL_VARIABLE}, else {DEFAULT_MODEL})"
+            "who serves the model; anything but ollama sends the source's "
+            f"sentences to that service (default: ${BACKEND_VARIABLE}, else ollama)"
+        ),
+    )
+    parser.add_argument(
+        "--model",
+        help=(
+            "model used to choose senses and translate (default: "
+            f"${MODEL_VARIABLE}, else "
+            + ", ".join(f"{model} on {name}" for name, model in DEFAULT_MODELS.items())
+            + ")"
         ),
     )
     parser.add_argument(

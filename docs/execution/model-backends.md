@@ -83,6 +83,38 @@ thing to get wrong makes that worse, so:
   the tags an ollama host holds. "The model is unavailable" reads identically whether a tunnel is
   down, a key is missing or a tag was never pulled, and those are three different fixes.
 
+## The Anthropic backend, as built (2026-10-18)
+
+The first hosted backend, and so far the only one; the OpenAI-compatible one is still only the
+design above. What was decided while building it:
+
+- **`--backend anthropic`, or `DECKER_BACKEND=anthropic`.** Its own flag, per the section above;
+  `--ollama-host` is ignored by it. `pages.HOST`'s pattern: the CLI sets `ollama.BACKEND`, and a
+  `Session` built anywhere — the four stages, the benchmark — reads it, so no stage learned a new
+  argument.
+- **The default model follows the backend.** `--model` no longer has a parse-time default:
+  `$DECKER_MODEL` if set, else `gemma4:latest` on ollama and **`claude-haiku-5-5`** on Anthropic —
+  the cheapest tier, $0.10 / $0.50 per million tokens, so a run of ~10⁶ input tokens is about a dime.
+  A `$DECKER_MODEL` left over from ollama is a 404, and the warning lists what the API serves, which
+  is the same answer `_held` gives for an untagged ollama model.
+- **The schema is closed, nothing else.** `_closed` adds `additionalProperties: false` to every
+  object, which Anthropic's decoder requires and ollama does not care about; it goes in as
+  `output_config.format`.
+- **Thinking off, with a retreat.** Haiku 5.5 takes `thinking: disabled` at its default effort. The
+  current Opus and Sonnet reject it, and a 400 that names thinking switches the run, once, to
+  thinking left on at `effort: low` — the same once-per-run shape as `gpt-oss:20b`'s on ollama.
+- **No temperature.** The current models reject anything but their own sampling, so answers are not
+  deterministic the way ollama's are at zero. The answer cache is what keeps a second run's answers
+  the first one's; `--refresh-answers` on this backend can change a deck.
+- **What is waited out.** Connection errors, and the 5xx/429 left once the client's own eight retries
+  are spent, go to a gate named "the Anthropic API", probed by listing one model. A missing or wrong
+  key, a refusal, or an unknown model is an answer: one warning, naming the backend, and the stage's
+  usual fallback.
+
+Not yet measured: it was built with no key in the environment, so the request was checked as far as
+the 401 and no further. The first run with a key is the benchmark,
+`DECKER_BACKEND=anthropic uv run python tools/benchmark/run.py claude-haiku-5-5`.
+
 ## What this costs in privacy, stated plainly
 
 [A local Wiktionary](local-wiktionary.md) exists in large part because "the model runs on hardware

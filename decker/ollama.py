@@ -1,11 +1,17 @@
-"""One local model, asked one short question at a time.
+"""One model, asked one short question at a time.
 
-Both stages that need a model -- sense disambiguation, and translation when
-the mother language is not the one the edition writes in -- talk to ollama the
-same way: a prompt whose fixed instructions come first, an answer under a JSON
-schema, the model's own reasoning turned off, and one warning for the whole
-run when the host cannot be reached. That shape lives here; the prompts live
-with the stage that writes them.
+Every stage that needs a model -- sense disambiguation, rules, unknown words,
+and translation when the mother language is not the one the edition writes in
+-- asks it the same way: a prompt whose fixed instructions come first, an
+answer under a JSON schema, the model's own reasoning turned off, and one
+warning for the whole run when it cannot be had. That shape lives here; the
+prompts live with the stage that writes them.
+
+The model is served by a backend: ollama, the default and the only one that
+keeps the text on hardware Bru owns, or Anthropic's API when a run names it.
+A backend is how a call is sent and what to list when it fails; everything
+else -- the answer cache, the waiting, the warning -- is shared. See
+docs/execution/model-backends.md.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from decker.console import DETAIL, console, count, log
@@ -66,10 +72,32 @@ DEFAULT_HOST = "http://localhost:11434"
 #: that is not there.
 MODEL_VARIABLE = "DECKER_MODEL"
 
+#: Who serves the model. Named in its own right, never read off the model's
+#: name: the same name can be served by several providers, and `--ollama-host`
+#: keeps meaning ollama and nothing else. ollama is the default because it is
+#: the one that sends no sentence anywhere; a hosted backend is used only by a
+#: run that asks for it.
+BACKENDS = ("ollama", "anthropic")
+BACKEND_VARIABLE = "DECKER_BACKEND"
+
+#: Set from `--backend`, the way `pages.HOST` is set from `--wiktionary-host`;
+#: the environment is read when it is not.
+BACKEND: str | None = None
+
+#: Each backend's default, since a tag one serves is a name the other has
+#: never heard of. Claude Haiku 5.5 is Anthropic's cheapest tier, at $0.10 per
+#: million input tokens: a run is on the order of a million, so a dime.
+DEFAULT_MODELS = {"ollama": DEFAULT_MODEL, "anthropic": "claude-haiku-5-5"}
+
+
+def current_backend() -> str:
+    """The backend a run uses when it is not told one."""
+    return BACKEND or os.environ.get(BACKEND_VARIABLE) or "ollama"
+
 
 def default_model() -> str:
     """The model a run uses when it is not told one."""
-    return os.environ.get(MODEL_VARIABLE) or DEFAULT_MODEL
+    return os.environ.get(MODEL_VARIABLE) or DEFAULT_MODELS[current_backend()]
 
 
 def _said_something(response) -> bool:
@@ -126,21 +154,62 @@ def _gate(host: str, named: bool = True) -> Gate:
         return _GATES[host]
 
 
+def _anthropic_gate() -> Gate:
+    with _GATES_LOCK:
+        if "anthropic" not in _GATES:
+            def probe() -> bool:
+                import anthropic
+
+                anthropic.Anthropic(timeout=10, max_retries=0).models.list(limit=1)
+                return True
+
+            _GATES["anthropic"] = Gate("the Anthropic API", probe)
+        return _GATES["anthropic"]
+
+
 def _unreachable(error: BaseException) -> bool:
     """Whether a failed call never reached a model that could answer it.
 
     ollama's client turns a refused connection into the builtin
     `ConnectionError`; a reset, a hang-up mid-answer or a timeout arrive as
-    httpx's own transport errors. Anything else -- a 404 for a model the host
-    does not hold, a reply that is not JSON -- was an answer, however useless.
+    httpx's own transport errors. Anthropic's are its connection errors, and
+    the 5xx and 429 it still returns once the client's own retries are spent:
+    an overloaded API will answer later, the way a dropped tunnel will.
+    Anything else -- a 404 for a model the host does not hold, a missing key,
+    a reply that is not JSON -- was an answer, however useless.
     """
     if isinstance(error, (ConnectionError, TimeoutError)):
         return True
+    try:
+        import anthropic
+    except ImportError:
+        pass
+    else:
+        if isinstance(error, (anthropic.APIConnectionError,
+                              anthropic.InternalServerError,
+                              anthropic.RateLimitError)):
+            return True
     try:
         import httpx
     except ImportError:
         return False
     return isinstance(error, httpx.TransportError)
+
+
+def _closed(schema: object) -> object:
+    """A schema with every object closed, which Anthropic's decoder requires.
+
+    The stages write one plain schema for every backend; ollama takes it as it
+    is, and this is the whole of the adaptation the other one needs.
+    """
+    if isinstance(schema, dict):
+        closed = {key: _closed(value) for key, value in schema.items()}
+        if closed.get("type") == "object":
+            closed.setdefault("additionalProperties", False)
+        return closed
+    if isinstance(schema, list):
+        return [_closed(value) for value in schema]
+    return schema
 
 
 def _reason(error: BaseException) -> str:
@@ -149,9 +218,10 @@ def _reason(error: BaseException) -> str:
 
 @dataclass
 class Session:
-    """A model on an ollama host, and what to say when it is not there."""
+    """A model on a backend, and what to say when it is not there."""
 
     model: str = DEFAULT_MODEL
+    #: The ollama host; the other backends have no use for one.
     host: str | None = None
     #: Ask again even when the answer is already on disk.
     refresh: bool = False
@@ -160,6 +230,9 @@ class Session:
     what: str = "the model"
     #: What happens instead, named in the same warning.
     fallback: str = ""
+
+    #: Which backend serves `model`; the run's, unless a caller says otherwise.
+    backend: str = field(default_factory=current_backend)
 
     def __post_init__(self) -> None:
         self._client = None
@@ -175,10 +248,23 @@ class Session:
 
     def client(self):
         if self._client is None:
-            import ollama
+            if self.backend == "anthropic":
+                import anthropic
 
-            self._client = ollama.Client(host=self._host())
+                #: More retries than the client's two: a run is thousands of
+                #: calls, and an overloaded API is backed off from here before
+                #: it is waited out at the gate.
+                self._client = anthropic.Anthropic(max_retries=8)
+            else:
+                import ollama
+
+                self._client = ollama.Client(host=self._host())
         return self._client
+
+    def _gate(self) -> Gate:
+        if self.backend == "anthropic":
+            return _anthropic_gate()
+        return _gate(self._host(), self._named())
 
     def ask(self, prompt: str, schema: dict) -> dict | None:
         """The model's answer to one prompt, decoded, or ``None`` if it has none.
@@ -217,16 +303,15 @@ class Session:
         blips = 0
         while True:
             try:
-                response = self._chat(prompt, schema)
-                answer = json.loads(response["message"]["content"])
+                answer = json.loads(self._answer(prompt, schema))
                 break
-            except Exception as error:  # ollama down, model missing, bad JSON
+            except Exception as error:  # backend down, model missing, bad JSON
                 #: Unreachable is not an answer: whichever host the run uses,
                 #: named or the default, is waited for and the question asked
                 #: again, so a dropped tunnel or a forgotten OLLAMA_HOST costs
                 #: time and never a sense. There is no run without a model.
                 if _unreachable(error) and blips < BLIPS:
-                    if not _gate(self._host(), self._named()).wait(_reason(error)):
+                    if not self._gate().wait(_reason(error)):
                         blips += 1
                     started = time.monotonic()
                     continue
@@ -306,8 +391,11 @@ class Session:
             return
         self._warned = True
         tail = f"; {self.fallback}" if self.fallback else ""
-        log(f"[decker] {self.what} unavailable ({reason}){self._held()}{tail}",
-            kind="error")
+        #: The backend is named because "unavailable" reads the same whether a
+        #: tunnel is down, a key is missing or a tag was never pulled, and
+        #: those are three different fixes.
+        log(f"[decker] {self.what} unavailable from {self.backend} "
+            f"({reason}){self._held()}{tail}", kind="error")
 
     def _held(self) -> str:
         """What the host does have, when it does not have what was asked for.
@@ -319,6 +407,12 @@ class Session:
         asked for once, on the way to a warning that was already going to be
         printed.
         """
+        if self.backend == "anthropic":
+            try:
+                names = [model.id for model in self.client().models.list()]
+            except Exception:  # no key, or no network; the warning says which
+                return ""
+            return f"; the API serves {', '.join(sorted(names))}" if names else ""
         try:
             response = self.client().list()
         except Exception:  # the host is unreachable; the warning says so
@@ -338,8 +432,61 @@ class Session:
             return ""
         return f"; the host holds {', '.join(sorted(names))}"
 
+    def _answer(self, prompt: str, schema: dict) -> str:
+        """The text of one answer, from whichever backend serves the model."""
+        if self.backend == "anthropic":
+            return self._message(prompt, schema)
+        response = self._chat(prompt, schema)
+        return response["message"]["content"]
+
+    def _message(self, prompt: str, schema: dict) -> str:
+        """One call to Anthropic's API, thinking off where the model allows it.
+
+        The same reasoning as `_chat`'s, and the same once-per-run retreat:
+        Haiku 5.5 takes thinking disabled at its default effort, but the
+        current Opus and Sonnet refuse it outright, and there the next best
+        thing is thinking left to the model at the lowest effort. No
+        temperature is sent, since the current models reject any but their
+        own; the answer cache is what keeps a second run's answers the first
+        one's.
+        """
+        import anthropic
+
+        arguments = dict(
+            model=self.model,
+            #: An answer is a few values, a translation a paragraph; this is
+            #: room for those and for thinking on the models that insist.
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        shape = {"type": "json_schema", "schema": _closed(schema)}
+        response = None
+        if self._thinkable:
+            try:
+                response = self.client().messages.create(
+                    **arguments,
+                    thinking={"type": "disabled"},
+                    output_config={"format": shape},
+                )
+            except anthropic.BadRequestError as error:
+                if "thinking" not in str(error):
+                    raise
+                self._thinkable = False
+                log(
+                    f"[decker] {self.model} will not answer with its reasoning "
+                    "turned off; leaving it on at low effort for this run",
+                    kind="warn",
+                )
+        if response is None:
+            response = self.client().messages.create(
+                **arguments, output_config={"format": shape, "effort": "low"}
+            )
+        if response.stop_reason == "refusal":
+            raise ValueError(f"{self.model} declined to answer")
+        return "".join(block.text for block in response.content if block.type == "text")
+
     def _chat(self, prompt: str, schema: dict):
-        """One call, with the model's own reasoning turned off if it has any.
+        """One call to ollama, with the model's own reasoning turned off if it has any.
 
         The answer is a few values under a schema, so a chain of thought buys
         nothing and costs the entire call: qwen3:1.7b spent 4222 thinking
