@@ -140,6 +140,15 @@ against their speech bubbles, and neither model wins:
   *てしまう*, which neither sense on the page says, and OCR noise (`午短短短知短う`) is glossed by
   both.
 
+**Page 1 through the larger Claude models, 2026-10-18.** Five bubbles, `--no-rules`, after the
+passage went to one bubble a line. Sonnet 5.5, Opus 5.5 and Fable 5.1 all reject thinking turned
+off and ran at low effort; all three read `出て` as *to answer (the phone or door)*, where Haiku and
+gemma4 read *to leave a place*. They also read `よお` as a stretched `よ`, not `よう`; and `へ` as
+*to, towards*, not *a fart* (which is still wrong: `へいへいー` is cut into `へい · へ · いー`, an
+extraction problem). Opus and Fable read `１話` as a counter for stories, not TV episodes. Cost of
+the page: Haiku $0.002, Sonnet $0.06, Opus $0.12, Fable $0.31 — scaled by Haiku's 2.1M tokens for the
+volume, roughly $8, $15 and $40 a volume.
+
 So on this text Haiku is a peer of gemma4, not an upgrade: about as many right answers, 6% more
 glosses, and a habit of keeping the vulgar sense that a learner's deck should not. What it buys is
 that it needs no GPU box, for a quarter of a dollar a volume. The 211-check benchmark is still the

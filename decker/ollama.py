@@ -93,7 +93,12 @@ DEFAULT_MODELS = {"ollama": DEFAULT_MODEL, "anthropic": "claude-haiku-5-5"}
 #: Dollars per million tokens in and out, for the hosted models whose price
 #: is known, so a run can say what it cost. Haiku 5.5's holds for prompts up to
 #: 100K tokens, which every prompt decker writes is.
-PRICES = {"claude-haiku-5-5": (0.10, 0.50)}
+PRICES = {
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-fable-5-1": (10.00, 50.00),
+}
 
 
 def current_backend() -> str:
