@@ -1704,6 +1704,18 @@ def _candidates(builder: _Builder, term: Term) -> list[Page]:
     ]
 
 
+def utterances(*parts: str) -> str:
+    """Sentences as a prompt shows them: one to a line.
+
+    Joined with spaces until 2026-10-18, which ran a manga's bubbles into one
+    line: `へいへいー もータオさんいんなら⟨出て⟩くださいよお あい極楽街解決事務所っす`
+    reads as one speaker, and the reply that gives the telephone away -- the
+    office answering with its own name -- is lost in it. A line apiece keeps
+    each bubble, or each sentence of prose, a turn of its own.
+    """
+    return "\n".join(part for part in parts if part)
+
+
 def _passage(term: Term, sentence: str, around: tuple[str, str]) -> str:
     """The sentence with this occurrence bracketed, and its neighbours around it.
 
@@ -1712,7 +1724,7 @@ def _passage(term: Term, sentence: str, around: tuple[str, str]) -> str:
     """
     marked = mark_occurrence(sentence, term.spans)
     if term.upos in CONTEXT_FOR:
-        marked = " ".join(part for part in (around[0], marked, around[1]) if part)
+        marked = utterances(around[0], marked, around[1])
     return marked
 
 
@@ -1803,7 +1815,7 @@ def _no_entry(
         return
 
     marked = mark_occurrence(sentence, term.spans)
-    passage = " ".join(part for part in (around[0], marked, around[1]) if part)
+    passage = utterances(around[0], marked, around[1])
     verdict = unknowns.verdict(term.surface, passage, name_of(builder.lang))
     if verdict is None:
         log(
@@ -1925,7 +1937,7 @@ def _referenced(
         index
         for title in builder.references_of(page).get(sense.definition, ())
         if title not in chain
-        and (index := _dependency(builder, title, marked, chain, link)) is not None
+        for index in _dependency(builder, title, marked, chain, link)
     )
 
 
@@ -1964,14 +1976,14 @@ def _composed(
         if title in chain:
             continue
         fresh = title not in builder.by_surface
-        index = _dependency(builder, title, marked, chain, link)
-        if index is None:
+        indexes = _dependency(builder, title, marked, chain, link)
+        if not indexes:
             continue
         if fresh:
             builder.composed.add(title)
             log(f"a component of {page.title!r}", word=title,
                 level=VERBOSE, kind="found")
-        dependencies.append(index)
+        dependencies.extend(indexes)
     return tuple(dependencies)
 
 
@@ -1981,21 +1993,21 @@ def _dependency(
     marked: str,
     chain: frozenset[str],
     link: Link,
-) -> int | None:
-    """Gloss one word another gloss leans on, in the one sense it leans on.
+) -> tuple[int, ...]:
+    """Gloss one word another gloss leans on, in the senses it leans on.
 
     Shared by both kinds of dependency -- the word a definition points at and
     the terms an etymology sums -- because what has to happen to either is the
-    same: the page, one sense of it chosen against the passage the dependent
-    word was met in, and whatever *that* sense depends on in turn.
+    same: the page, its senses chosen against the passage the dependent word
+    was met in -- usually one -- and whatever *those* depend on in turn.
 
-    ``None`` where there is no page, no sense the model will stand behind, or
-    a previously built deck already teaches it: such a dependency is simply
-    not depended upon, the learner having met it.
+    Nothing where there is no page, or a previously built deck already
+    teaches it: such a dependency is simply not depended upon, the learner
+    having met it.
     """
     target = builder.page(title)
     if target is None:
-        return None
+        return ()
     labelled = target.word_senses
     kept = builder.disambiguator.keep(
         tuple(one for _, one in labelled),
@@ -2007,17 +2019,20 @@ def _dependency(
         single=True,
         link=link,
     )
-    if not kept:
-        return None
-    return builder.add(
-        target,
-        surface=title,
-        lemma=title,
-        sense=kept[0],
-        depends_on=_dependencies(
-            builder, target, kept[0], title, title, marked, chain | {title}
-        ),
-    )
+    indexes = []
+    for one in kept:
+        index = builder.add(
+            target,
+            surface=title,
+            lemma=title,
+            sense=one,
+            depends_on=_dependencies(
+                builder, target, one, title, title, marked, chain | {title}
+            ),
+        )
+        if index is not None:
+            indexes.append(index)
+    return tuple(indexes)
 
 
 def _dependencies(
@@ -2119,22 +2134,24 @@ def _plainly(
         single=True,
         link=Link("plain", surface, sense.definition),
     )
-    if not kept:
-        return ()
-    log(
-        f"{sense.definition[:40]!r} is a figure; teaching "
-        f"{kept[0].definition[:40]!r} first",
-        word=surface, level=VERBOSE, kind="found",
-    )
-    index = builder.add(
-        page,
-        surface=surface,
-        lemma=lemma,
-        sense=kept[0],
-        depends_on=_referenced(builder, page, kept[0], surface, marked, chain)
-        + _composed(builder, page, kept[0], surface, marked, chain),
-    )
-    return () if index is None else (index,)
+    indexes = []
+    for one in kept:
+        log(
+            f"{sense.definition[:40]!r} is a figure; teaching "
+            f"{one.definition[:40]!r} first",
+            word=surface, level=VERBOSE, kind="found",
+        )
+        index = builder.add(
+            page,
+            surface=surface,
+            lemma=lemma,
+            sense=one,
+            depends_on=_referenced(builder, page, one, surface, marked, chain)
+            + _composed(builder, page, one, surface, marked, chain),
+        )
+        if index is not None:
+            indexes.append(index)
+    return tuple(indexes)
 
 
 #: Words that mark a definition as describing its word in terms of another,

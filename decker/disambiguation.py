@@ -16,25 +16,22 @@ from decker.pages import Sense
 SCHEMA = {
     "type": "object",
     "properties": {
-        "senses": {"type": "array", "items": {"type": "integer"}},
+        #: At least one: "none of these" is not an answer a gloss can be made
+        #: of, and Haiku gave it on a two-sense page three times running
+        #: before the schema stopped it being expressible.
+        "senses": {"type": "array", "items": {"type": "integer"}, "minItems": 1},
     },
     "required": ["senses"],
 }
 
-#: The shape of a one-sense answer: a number, not a list of them. The list
-#: schema was used for both kinds of question at first, and a prompt saying
-#: "exactly one" did not hold a 4B to it -- on the Gokurakugai volume 276 of 804
-#: one-sense questions came back with every sense listed, and the first in page
-#: order was kept for each without anyone being told. A field that can only
-#: hold one number is a constraint the model's output is decoded under, where
-#: the prompt's wording is only a request.
-SCHEMA_ONE = {
-    "type": "object",
-    "properties": {
-        "sense": {"type": "integer"},
-    },
-    "required": ["sense"],
-}
+#: The follow-up questions -- the word a definition points at, a part an
+#: etymology names, the plain sense under a figure -- were asked for exactly
+#: one sense under `{"sense": integer}` from 2026-09 to 2026-10-18. That came
+#: from a 4B listing every sense on 276 of 804 such questions when "exactly
+#: one" was only the prompt's wording. Bru's call since: a model may answer
+#: more than one, under the same list schema as the occurrence's own question,
+#: since a pointer like `stem form of 出る` can carry two senses of 出る at
+#: once as well as one. The prompt asks for as few as truly apply.
 
 #: Every prompt puts its fixed instructions first and its variable parts last,
 #: so that consecutive calls share as long a common prefix as possible. Ollama
@@ -59,7 +56,9 @@ usually exactly one. Keep more only where the occurrence genuinely carries more
 than one meaning at once, not merely because a sense is nearby or related. If
 none fit, keep the single closest one.
 
-Passage: {sentence}
+Passage, one sentence or speech bubble to a line:
+{sentence}
+
 Term as it appears: {surface}{reading}
 Numbered senses of the Wiktionary page(s) {title}:
 {senses}
@@ -172,16 +171,21 @@ You are helping build language-learning cards from a text in {language}.
 
 You will be shown a short passage with one word in it marked ⟨like this⟩, how
 another word relates to it, and the numbered senses of that other word's
-Wiktionary page(s). Reply with the number of the ONE sense of the other word
-that the marked occurrence carries in this passage -- the meaning a reader has
-to know for the marked word to make sense where it stands. Exactly one number.
+Wiktionary page(s). Reply with the numbers of the senses of the other word
+that the marked occurrence carries in this passage -- the meanings a reader has
+to know for the marked word to make sense where it stands. Each sense you keep
+becomes a flashcard of its own, so keep as few as truly apply -- usually
+exactly one, more only where the occurrence genuinely carries more than one at
+once.
 
-Passage: {sentence}
+Passage, one sentence or speech bubble to a line:
+{sentence}
+
 {relation}
 Numbered senses of the Wiktionary page(s) {title}:
 {senses}
 
-Reply with the number of the ONE sense of "{surface}" that the marked
+Reply with the numbers of the senses of "{surface}" that the marked
 occurrence carries here.
 """
 
@@ -246,10 +250,11 @@ class Disambiguator:
         hint where there is one; a word reached through a definition rather
         than through the text has no occurrence to read, and none.
 
-        ``single`` asks for one sense, through ``link``, under a schema that
-        can only hold one. A model that cannot be reached, or answers with a
-        number that is not on the list, leaves the first sense standing, which
-        is what a page puts first and what a run without a model teaches.
+        ``single`` asks the follow-up question, through ``link``: the senses
+        of a word the marked one depends on, rather than of the marked one.
+        A model that answers with no number on the list is asked again, and
+        the run stops if it still does: keeping every sense, which this did
+        until 2026-10-18, is a degraded deck.
         """
         if not self.enabled or len(senses) <= 1:
             return senses[:1] if single else senses
@@ -266,15 +271,12 @@ class Disambiguator:
             single=single,
             link=link,
         )
-        chosen = self._ask(prompt, single=single)
-        if chosen is None:
-            return senses[:1] if single else senses
-        kept = tuple(
+        chosen = self._ask(prompt, len(senses))
+        return tuple(
             sense
             for number, sense in enumerate(senses, start=1)
             if number in chosen
-        ) or senses
-        return kept[:1] if single else kept
+        )
 
     def question(
         self,
@@ -337,17 +339,26 @@ class Disambiguator:
             return
         self.session.ask(prompt, SCHEMA)
 
-    def _ask(self, prompt: str, *, single: bool = False) -> set[int] | None:
-        answer = self.session.ask(prompt, SCHEMA_ONE if single else SCHEMA)
-        if answer is None:
-            return None
-        try:
-            if single:
-                return {int(answer["sense"])}
-            return {int(number) for number in answer.get("senses", ())}
-        except (KeyError, TypeError, ValueError) as error:  # a schema the model bent
-            self.session.fail(str(error))
-            return None
+    def _ask(self, prompt: str, listed: int) -> set[int]:
+        """The sense numbers the model chose, at least one of them on the list.
+
+        Numbers off the list are ignored; an answer with none on it is not an
+        answer, and is checked before it is cached, so a bad one is asked
+        again rather than remembered.
+        """
+
+        def check(answer: dict) -> None:
+            numbers = answer.get("senses")
+            if not isinstance(numbers, list) or not any(
+                isinstance(number, int) and 1 <= number <= listed
+                for number in numbers
+            ):
+                raise ValueError(
+                    f"answered {numbers!r}, no sense among the {listed} listed"
+                )
+
+        answer = self.session.ask(prompt, SCHEMA, check=check)
+        return {number for number in answer["senses"] if isinstance(number, int)}
 
 
 def _labelled(

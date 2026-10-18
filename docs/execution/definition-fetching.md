@@ -103,6 +103,21 @@ design wins and the code is wrong.
   chose *to leave*, and `gpt-oss:20b` with thinking off said nothing. The prompt now puts the right
   sense in front of the model with what it needs to choose it; the rest is the model.
 
+  **Two changes of 2026-10-18, on Bru's instruction.** The passage is now one sentence or bubble to
+  a line, not one line joined with spaces: `あい極楽街解決事務所っす` read as the same speaker's next
+  words, and it is the office answering the phone. And a follow-up question may keep more than one
+  sense, under the same list schema as the occurrence's own question, with the same "as few as
+  truly apply" wording; every kept sense is a gloss the dependent waits behind. Neither moved
+  `出て`: with the reply on its own line, `claude-haiku-5-5` and `gemma4:latest` both still answer
+  *to leave a place*. Haiku's unknown-word answer for `タオ`, asked over the same three bubbles,
+  says "someone answers a phone line from a 解決事務所" — so the reading is within reach of the model,
+  and not of this question as worded.
+
+  The list schema now has `minItems: 1`. Its first run with the follow-ups on it stopped the run:
+  Haiku answered `[]` to a two-sense question three times, and an answer with no sense on the list is
+  no longer turned into "keep every sense" (no degraded runs, 2026-10-18). An answer like that is
+  checked before it is cached, so it is asked again rather than remembered.
+
 - The other half of a dependency comes from the etymology, not the definition: where an etymology
   states a sum of terms **in the language being taught** — `descargar` is `des- +‎ cargar`,
   `venenoso` is `veneno +‎ -oso` by surface analysis — those terms are glossed and depended upon by

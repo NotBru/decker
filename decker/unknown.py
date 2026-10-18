@@ -100,7 +100,9 @@ however ordinary it looks on the page.
 Prefer "unrecognizable" to a guess. An explanation you are not sure of is worse
 than no card: the learner cannot tell the two apart.
 
-Passage: {passage}
+Passage, one sentence or speech bubble to a line:
+{passage}
+
 The word: {surface}
 
 Answer with the kind, and the other fields that kind asks for.

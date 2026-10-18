@@ -301,8 +301,13 @@ class Session:
             return _anthropic_gate()
         return _gate(self._host(), self._named())
 
-    def ask(self, prompt: str, schema: dict) -> dict:
+    def ask(self, prompt: str, schema: dict, check=None) -> dict:
         """The model's answer to one prompt, decoded; `Unavailable` if it has none.
+
+        ``check`` raises `ValueError` for an answer the schema allows and the
+        caller cannot use -- a sense number not on the list. Such an answer is
+        asked again like one that is not JSON, and is never cached; a cached
+        one that fails it is asked again too.
 
         Answers are kept on disk between runs. Both stages send a prompt that
         is a pure function of what they are asking about, at temperature zero,
@@ -313,7 +318,7 @@ class Session:
         text repeated the whole of its cost and none of its work.
         """
         path = self._remembered(prompt, schema)
-        remembered = self._recall(path)
+        remembered = self._recall(path, check)
         if remembered is not None:
             return remembered
         #: Nobody has this answer yet. Whoever registers the question asks it;
@@ -326,7 +331,7 @@ class Session:
                     _IN_FLIGHT[path.name] = threading.Event()
         if waiting is not None:
             waiting.wait(IN_FLIGHT_TIMEOUT)
-            remembered = self._recall(path)
+            remembered = self._recall(path, check)
             if remembered is not None:
                 return remembered
         #: Timed, because this is where a run's wall clock goes and the whole
@@ -342,6 +347,8 @@ class Session:
                 answer = json.loads(self._answer(prompt, schema))
                 if not isinstance(answer, dict):
                     raise ValueError(f"{self.model} answered {answer!r}, not an object")
+                if check is not None:
+                    check(answer)
                 break
             except Exception as error:  # backend down, model missing, bad JSON
                 #: Unreachable is not an answer: whichever host the run uses,
@@ -372,14 +379,16 @@ class Session:
             self._released(path)
         return answer
 
-    def _recall(self, path: "Path | None") -> dict | None:
+    def _recall(self, path: "Path | None", check=None) -> dict | None:
         """The answer already on disk, or ``None``."""
         if path is None or self.refresh or not path.exists():
             return None
         try:
             answer = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None  # a half-written or unreadable answer is asked again
+            if check is not None:
+                check(answer)
+        except (OSError, ValueError, TypeError, AttributeError):
+            return None  # half-written, unreadable or unusable: asked again
         log(f"[decker]     {self.what}: remembered", level=DETAIL, kind="detail")
         count("model.remembered")
         return answer
@@ -433,9 +442,12 @@ class Session:
         #: The backend is named because "unavailable" reads the same whether a
         #: tunnel is down, a key is missing or a tag was never pulled, and
         #: those are three different fixes.
+        #: What the backend holds is the answer to a model it does not have,
+        #: and noise after any other failure.
+        missing = "not found" in reason.lower() or "not_found" in reason
         raise Unavailable(
             f"{self.what}: {self.model} unavailable from {self.backend} "
-            f"({reason}){self._held()}"
+            f"({reason}){self._held() if missing else ''}"
         )
 
     def _held(self) -> str:
