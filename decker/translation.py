@@ -230,7 +230,6 @@ class Translator:
             host=self.host,
             refresh=self.refresh,
             what="translation",
-            fallback=f"leaving the cards in {SOURCE_LANGUAGE}",
         )
 
     @property

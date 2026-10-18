@@ -62,8 +62,8 @@ needs. Any other host is asked for `/`, and any status under 500 counts as "ther
 
 - **ollama**: the builtin `ConnectionError` (which the client raises for a refused connection, and
   which also covers a reset) and httpx's `TransportError` family (a hang-up mid-answer, a read
-  error, a timeout). A 404 for a model the host does not hold is an *answer*: it degrades the run
-  as before and names the models the host does hold. So does a reply that is not JSON.
+  error, a timeout). A 404 for a model the host does not hold is an *answer*: it stops the run
+  and names the models the host does hold. A reply that is not JSON is asked again twice first.
 - **HTTP**: a connection that cannot be made or is dropped (`URLError`, `TimeoutError`), and a 5xx
   that persists through the usual backoff *and* that the rest of the site shares, which the probe
   decides. A 5xx the site does not share is that page's own and is given up on and counted, as
@@ -84,8 +84,16 @@ to name another, so a forgotten `OLLAMA_HOST` shows up as a run that is visibly 
 deck that is quietly worse.
 
 A run that should go without a model asks for it: `--no-disambiguate`, `--no-rules` and
-`--no-translate` turn off the stages that ask one. What still degrades is an *answer* that cannot be
-used: a model the host does not hold, or a reply that is not JSON.
+`--no-translate` turn off the stages that ask one.
+
+Until 2026-10-18 an *answer* that could not be used — a model the host does not hold, a missing API
+key, a reply that is not JSON — still degraded the run, with one warning line per stage. A run of the
+Anthropic backend with no key kept every sense, 85 glosses where the model gives 19, and exited 0.
+Bru's rule since: no degraded runs, at any cost; if something is missing, the run fails. Such an
+answer now raises `ollama.Unavailable`, and the run stops with status 2 and writes nothing. A reply
+that cannot be read is asked again twice before that, since a hosted model has no temperature to pin
+it and may answer differently. The answers already given are cached, so a rerun after the fix costs
+only the rest.
 
 ## What it costs
 

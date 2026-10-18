@@ -221,7 +221,6 @@ class Disambiguator:
             host=self.host,
             refresh=self.refresh,
             what="sense disambiguation",
-            fallback="keeping every sense",
         )
 
     def keep(
@@ -347,7 +346,7 @@ class Disambiguator:
                 return {int(answer["sense"])}
             return {int(number) for number in answer.get("senses", ())}
         except (KeyError, TypeError, ValueError) as error:  # a schema the model bent
-            self.session.warn(str(error))
+            self.session.fail(str(error))
             return None
 
 

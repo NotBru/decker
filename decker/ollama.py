@@ -3,8 +3,8 @@
 Every stage that needs a model -- sense disambiguation, rules, unknown words,
 and translation when the mother language is not the one the edition writes in
 -- asks it the same way: a prompt whose fixed instructions come first, an
-answer under a JSON schema, the model's own reasoning turned off, and one
-warning for the whole run when it cannot be had. That shape lives here; the
+answer under a JSON schema, the model's own reasoning turned off, and the
+run stopped when it cannot be had -- never a deck built without it. That shape lives here; the
 prompts live with the stage that writes them.
 
 The model is served by a backend: ollama, the default and the only one that
@@ -24,6 +24,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 
 from decker.console import DETAIL, console, count, log
 from decker.reach import BLIPS, Gate
@@ -212,6 +213,24 @@ def _closed(schema: object) -> object:
     return schema
 
 
+#: How many times a question whose answer could not be read is asked again
+#: before the run stops. With no temperature to pin it, a hosted model can
+#: answer the same question differently, so a bent answer is worth a retry.
+ANSWER_TRIES = 3
+
+
+class Unavailable(RuntimeError):
+    """The model could not be had, and the run stops rather than go without.
+
+    Before 2026-10-18 each stage had a fallback -- every sense kept, every
+    inflected form its own card, the cards left in English -- and said so in
+    one line. A run with a missing key finished with 85 glosses where the model
+    gives 19 and exited 0. Bru's rule since: no degraded runs, at any cost; if
+    something is missing, the run fails. The answers already given are cached,
+    so running again costs only what was not yet asked.
+    """
+
+
 def _reason(error: BaseException) -> str:
     return str(error) or type(error).__name__
 
@@ -225,18 +244,15 @@ class Session:
     host: str | None = None
     #: Ask again even when the answer is already on disk.
     refresh: bool = False
-    #: What the run goes without, named in the warning below, so a degraded
-    #: run says which stage lost its model rather than only that one did.
+    #: The stage asking, named when the run stops, so it says which stage
+    #: lost its model rather than only that one did.
     what: str = "the model"
-    #: What happens instead, named in the same warning.
-    fallback: str = ""
 
     #: Which backend serves `model`; the run's, unless a caller says otherwise.
     backend: str = field(default_factory=current_backend)
 
     def __post_init__(self) -> None:
         self._client = None
-        self._warned = False
         self._thinkable = True
 
     def _host(self) -> str:
@@ -266,8 +282,8 @@ class Session:
             return _anthropic_gate()
         return _gate(self._host(), self._named())
 
-    def ask(self, prompt: str, schema: dict) -> dict | None:
-        """The model's answer to one prompt, decoded, or ``None`` if it has none.
+    def ask(self, prompt: str, schema: dict) -> dict:
+        """The model's answer to one prompt, decoded; `Unavailable` if it has none.
 
         Answers are kept on disk between runs. Both stages send a prompt that
         is a pure function of what they are asking about, at temperature zero,
@@ -301,9 +317,12 @@ class Session:
         started = time.monotonic()
         count("model.asked")
         blips = 0
+        tries = 0
         while True:
             try:
                 answer = json.loads(self._answer(prompt, schema))
+                if not isinstance(answer, dict):
+                    raise ValueError(f"{self.model} answered {answer!r}, not an object")
                 break
             except Exception as error:  # backend down, model missing, bad JSON
                 #: Unreachable is not an answer: whichever host the run uses,
@@ -315,10 +334,14 @@ class Session:
                         blips += 1
                     started = time.monotonic()
                     continue
-                self.warn(_reason(error))
-                count("model.failed")
+                tries += 1
+                if isinstance(error, ValueError) and tries < ANSWER_TRIES:
+                    log(f"[decker] {self.what}: {self.model} gave an answer that "
+                        f"could not be read ({_reason(error)}); asking again",
+                        kind="warn")
+                    continue
                 self._released(path)
-                return None
+                self.fail(_reason(error))
         #: Added up rather than only printed: the difference between a cold run
         #: and a warm one is the whole difference in wall clock, and a total on
         #: the screen says which this is without waiting for the run to end.
@@ -385,17 +408,16 @@ class Session:
         except OSError:
             pass
 
-    def warn(self, reason: str) -> None:
-        """Say once that the run is going without this model."""
-        if self._warned:
-            return
-        self._warned = True
-        tail = f"; {self.fallback}" if self.fallback else ""
+    def fail(self, reason: str) -> "NoReturn":
+        """Stop the run: this stage cannot have its model."""
+        count("model.failed")
         #: The backend is named because "unavailable" reads the same whether a
         #: tunnel is down, a key is missing or a tag was never pulled, and
         #: those are three different fixes.
-        log(f"[decker] {self.what} unavailable from {self.backend} "
-            f"({reason}){self._held()}{tail}", kind="error")
+        raise Unavailable(
+            f"{self.what}: {self.model} unavailable from {self.backend} "
+            f"({reason}){self._held()}"
+        )
 
     def _held(self) -> str:
         """What the host does have, when it does not have what was asked for.

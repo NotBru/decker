@@ -36,10 +36,11 @@ answered under a schema*, and that is a smaller commitment than a vendor.
 Session.ask(prompt: str, schema: dict) -> dict | None
 ```
 
-A prompt in, a JSON object under a schema out, `None` when the model cannot be reached, temperature
-zero, and one warning per run. Everything vendor-specific lives in two methods — `_chat`, which
+A prompt in, a JSON object under a schema out, and the run stopped (`Unavailable`, exit 2) when the
+model cannot be had — since 2026-10-18; before, `None` and one warning per run, and the stage's
+fallback. Everything vendor-specific lives in two methods — `_chat`, which
 sends the call, and `_held`, which lists what the host has when the ask fails. So a backend is those
-two methods, and the rest of the file — the disk cache, the warning discipline, the fallback when a
+two methods, and the rest of the file — the disk cache, the stop, the retreat when a
 client rejects an argument — is shared by all three.
 
 Three consequences worth writing down:
@@ -108,8 +109,8 @@ design above. What was decided while building it:
   the first one's; `--refresh-answers` on this backend can change a deck.
 - **What is waited out.** Connection errors, and the 5xx/429 left once the client's own eight retries
   are spent, go to a gate named "the Anthropic API", probed by listing one model. A missing or wrong
-  key, a refusal, or an unknown model is an answer: one warning, naming the backend, and the stage's
-  usual fallback.
+  key, a refusal, or an unknown model is an answer: the run stops, naming the backend, the model and
+  — for an unknown model — what the API does serve.
 
 Not yet measured: it was built with no key in the environment, so the request was checked as far as
 the 401 and no further. The first run with a key is the benchmark,

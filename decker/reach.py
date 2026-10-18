@@ -13,10 +13,10 @@ line that had long scrolled away.
 So connectivity is no longer a reason for a result. A caller that fails to
 reach a remote asks its `Gate` to wait, and the gate holds every thread that
 needs that remote until a probe gets through, logging when it went and when it
-came back. The request is then made again, as if nothing had happened. What
-still degrades a run is the remote *answering* something unusable -- a model
-that is not there, a page that does not exist -- which is a fact about the
-setup rather than about the network, and is reported as before.
+came back. The request is then made again, as if nothing had happened. A remote
+*answering* something unusable -- a model that is not there, a missing key --
+is a fact about the setup rather than about the network, and stops the run;
+a page that does not exist is a fact about the word.
 
 See docs/execution/connectivity.md.
 """

@@ -372,7 +372,6 @@ class Morphology:
             host=self.host,
             refresh=self.refresh,
             what="morphological rules",
-            fallback="a card for every inflected form, and no rule cards",
         )
         self.book = RuleBook.load(self.lang)
 

@@ -34,6 +34,15 @@ def main(argv: list[str] | None = None) -> int:
         #: whole of what the user needs.
         console.log(f"[decker] {unreadable}", level=console.QUIET, kind="error")
         return 2
+    except ollama.Unavailable as unavailable:
+        #: No deck rather than a worse one: see `ollama.Unavailable`.
+        console.log(
+            f"[decker] {unavailable}\n"
+            "[decker] The run stopped here and wrote nothing. Answers already "
+            "given are cached, so running it again costs only the rest.",
+            level=console.QUIET, kind="error",
+        )
+        return 2
     except pages.Refused as refusal:
         #: Loudly, and with a non-zero status: every later fetch would be
         #: refused the same way, and a run that carried on would finish

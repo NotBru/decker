@@ -159,7 +159,6 @@ class Unknowns:
             host=self.host,
             refresh=self.refresh,
             what="unknown words",
-            fallback="dropping every word with no entry, as before",
         )
 
     @property
