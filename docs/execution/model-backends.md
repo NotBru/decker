@@ -112,9 +112,38 @@ design above. What was decided while building it:
   key, a refusal, or an unknown model is an answer: the run stops, naming the backend, the model and
   — for an unknown model — what the API does serve.
 
-Not yet measured: it was built with no key in the environment, so the request was checked as far as
-the 401 and no further. The first run with a key is the benchmark,
-`DECKER_BACKEND=anthropic uv run python tools/benchmark/run.py claude-haiku-5-5`.
+### Haiku 5.5 on Gokurakugai 0001, against gemma4, 2026-10-18
+
+The first real run: the whole volume, `--target-lang ja --teach-script`, the flags `decks/japanese.apkg`
+was built with on `gemma4:latest`, with the Japanese rule book set aside so Haiku wrote its own.
+
+| | gemma4 (tunnel) | Haiku 5.5 |
+|---|---|---|
+| glosses / cards | 1,524 / 2,986 | 1,611 / 3,171 |
+| rules written | 0 (22 reused) | 26 |
+| wall clock | — | ~20 min |
+| cost | the GPU box's power | 2,132,114 tokens in, 28,242 out: **$0.23** |
+
+1,296 glosses are the same in both. Of the 298 terms whose senses differ, about thirty were read
+against their speech bubbles, and neither model wins:
+
+- **Haiku is right where gemma4 is not** mostly where gemma4 floods a page with everything on it:
+  `くだ` (a truncated *ください*) gets nine senses of 管 from gemma4 and one from Haiku; `れん`,
+  `ぼ`, `こっ`, `世の中` and `心` likewise. Haiku also reads idiom better: `ハイハイ` is *yeah, sure*,
+  not a baby crawling; `やった` in `自分でやったんじゃん` is the past of やる, not *hurrah*; `病気だろ`
+  is the slang *you're sick in the head*.
+- **gemma4 is right where Haiku is not** where Haiku keeps senses no reading supports — `こん`
+  (from the OCR-garbled `探してこんだ`) gets fourteen, `着` in `服着てん` seven — and where it picks
+  the provocative sense: `暇` as *divorce*, `春` as *sex*, and `アル` (the name アルマ) as an ethnic
+  slur. `またまた` is *come off it*, which gemma4 has and Haiku reads as *again and again*.
+- **Both are wrong** where the pipeline is: `ちゃう` in `誘拐されちゃう` is the contraction of
+  *てしまう*, which neither sense on the page says, and OCR noise (`午短短短知短う`) is glossed by
+  both.
+
+So on this text Haiku is a peer of gemma4, not an upgrade: about as many right answers, 6% more
+glosses, and a habit of keeping the vulgar sense that a learner's deck should not. What it buys is
+that it needs no GPU box, for a quarter of a dollar a volume. The 211-check benchmark is still the
+way to rank it properly.
 
 ## What this costs in privacy, stated plainly
 
