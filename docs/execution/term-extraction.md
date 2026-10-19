@@ -254,6 +254,54 @@ wins and the code is wrong.
   `長ェ` into `長` + `ェ`, so the error is in the cut, before any form is chosen. Nothing here is
   built yet; the fallback and the grammar-word rule are the candidates.
 
+- **What Sudachi costs the deck, counted** (2026-10-19, against `decks/japanese.apkg`, gemma4).
+  Decker's cut of the volume — 453 sentences, 2,626 words — was laid against Opus 5.5 cutting
+  the same text by reading, at the same short units and with the dictionary form each word
+  means. They differ in 222 forms over the same span and 272 spans cut differently, and most
+  of that is convention: `ん` for `の`, `だ` where UniDic puts the copula in `確かに` or `なら`,
+  full-width digits, `てる` for the `て` of a contracted `ている`, and mode A's short units, which
+  the title index puts back together (`生意気`, `無意味`, `他人事` are all in the deck).
+
+  What is left are errors in the cut. Every suspect was looked up in the deck. **19 cards there
+  exist only because of one**, out of 2,771 terms:
+
+  | in the text | Sudachi | the card | the word |
+  |---|---|---|---|
+  | `へいへいー` | `へい` + `へ` + `いー` | `へ` *to, towards* | `へいへい` |
+  | `ガッツあんな` | `あんな` | *like that* | `ある` + `な` |
+  | `まっ` | `待つ` | `まっ`, an intensifying prefix | `まあ` |
+  | `いんなら` | `忌む` | `いむ` *to detest* | `いる` |
+  | `長ェな` | `長` + `ェ` | `長` *a headman* | `長い` |
+  | `うさんくさっ` | `うさん` + `腐る` | `くさる`, a derogatory auxiliary | `胡散臭い` |
+  | `しっぽ？` | `する` + `っぽい` | `っぽい` *-ish* | `しっぽ`, a tail |
+  | `１４０ｃｍ` | `CM` | *a commercial* | centimetres |
+  | `早っ` | `早る` | *to be impatient* | `早い` |
+  | `良いモン` | `モン` | *Mon, a people of Myanmar* | `物` |
+  | `大三元` | `大三` + `元` | `大三`, a surname | a mahjong hand |
+  | `またぁ` | `ま` + `たぁ` | `ま` *a spatial interval* | `また` |
+  | `こっから` | `こっ` | *a spider* | `ここ` |
+  | `食えたんすか` | `す` | the causative `せる` | `です` |
+  | `ンだこれ`, `吐いてンだろ` | `ン` | the katakana syllable | `何`, `いる` |
+  | `ボられる` | `ボ` + `られる` | the katakana syllable | `ぼる` |
+  | `ぐじゃぐしゃ` | `ぐ` + `じゃ` + `ぐしゃ` | `ぐしゃ` *a fool* | `ぐしゃぐしゃ` |
+  | `じゃねーか` | `ねー` | `ねぇ`, the sentence-final particle | `ない` |
+  | `友達ィ`, `日ィ`, `ぜィ` | `ィ` | the small katakana | a stretched vowel |
+
+  Beside those, an occurrence goes to a card that is right for another one: 12 negative `ねえ`
+  join the card for the particle `ね` that `ねえいい加減` earned, `連れてこう` is `こう` *like this*,
+  `着てんな` is `んな` *no way*, `ありがとうっ` is `ありがと`. And seven words the volume says
+  are not in the deck at all, their pieces taught instead: `へいへい`, `しっぽ`, `長い`,
+  `危ない` (`あっぶね`), `胡散臭い`, `ぐしゃぐしゃ`, `大三元`.
+
+  Opus's cut was wrong nowhere that would change a card, among the differences read. It did
+  silently correct mokuro's misreadings — `剣がし` as `剥がす`, `滅んない` as `減る`, `可笑い` as
+  `可愛い` — which neither cut can fix by cutting and Sudachi took as written. That is a separate
+  source of error, the OCR's, and it is not counted above.
+
+  Most of the 19 are speech a dictionary has no entry for — a stretched vowel, a dropped sound, a
+  stutter — and the rest are short kana or katakana Sudachi read as the wrong word. Less than one
+  term in a hundred, then, but each is a card that teaches something false.
+
 ## Words no title covers
 
 A token no title covers becomes a term with no entries, and neighbouring ones are one term, since
