@@ -1,7 +1,7 @@
 """How far into a deck a viewer has to be to follow a subtitle file.
 
 A deck built from subtitles is studied in one order and watched in another.
-The deck's order is the text's, shuffled inside a week (`shuffling.py`); the
+The deck's order is the text's, shuffled no further than a week (`shuffling.py`); the
 file's order is the clock. This stage puts the two side by side: for every
 timestamp, the words said up to it, and how far into the deck the cards that
 teach them sit.

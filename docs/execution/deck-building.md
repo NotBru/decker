@@ -338,49 +338,64 @@ user's own it is a copyright question too, and the ollama default is what keeps 
 
 ## Shuffling
 
-- The sort keys of a window are that window's own positions, permuted. Sorting by them can therefore
-  move a card around inside its week and nowhere else, which is the design's window without any
-  arithmetic about where a card is allowed to land.
+- **No weeks: each card is keyed, and the deck sorted on the keys** (since 2026-10-19). A card's key
+  is its source position plus a random amount below the window, raised to a random gap of 10–70
+  past its latest dependency's key, and kept within `[position, position + window]`: a card the gap
+  would push past that bound is drawn from between its dependency's key and the bound instead, never
+  pinned to it. Every card whose source position is more than a window before a card's key sorts
+  ahead of it, and every card whose position is past the key sorts behind it, so **no card moves
+  more than one window** — that is a guarantee, not a measurement. Ties sort by card index, and a
+  card never ties with its dependency, whose key is strictly lower.
 
-- **Each window is shuffled and then put in dependency order by swaps** (since 2026-10-19). The
-  sort sees one window's list and nothing else. It reads the list front to back; a card one of whose
-  dependencies is still ahead of it swaps with a card drawn at random from that dependency's place to
-  the end of the list, and the card that comes back is read next. A card that has to wait therefore
-  lands uniformly somewhere after what it waits for, and one card moves for it, not everything in
-  between. Swaps only send a card forward and past its dependency, so with no cycle it ends; a
-  cycle, which cannot be built, stops it after a bounded number of swaps rather than hanging the run.
-  A card whose dependency the source put in a *later* window is carried into the next window before
-  that one is shuffled. One run's glosses never make such an edge (none in Gokurakugai 0001), but the
-  backwards edge `glosses._after` draws could.
+- **A card others wait on takes less of its room.** A card draws its own amount from the first
+  `1 / (height + 1)` of the window, where height is the longest chain waiting below it — 0 for a
+  production card, 1 for its recognition card, 2 for a symbol the word is written with. Drawn from
+  the whole window, a recognition card near its bound left its production card a sliver between the
+  two, and 5.5% of pairs landed adjacent; sharing the room brought that to 0.3%.
 
-- **What it replaced, and why.** Until then the order was a stable topological sort, Kahn's
-  algorithm taking the ready card with the smallest shuffled key: a card waited exactly as long as
-  its dependencies made it wait and not one place longer. That last property was the fault. A
-  production card whose key fell before its recognition card's — a coin flip — became ready with its
-  turn already past, was the smallest key ready, and went out next: **half of all production cards
-  sat directly behind their recognition card** (755 of 1,524 in `decks/japanese.apkg`), and a word
-  directly behind its last symbol the same way. Bru's algorithm, with the swap his: shuffle without
-  regard to order, walk the list, and send a card that is too early to a random place forwards.
+- **What it replaced, twice in a day.** The design's sort was a stable topological sort keyed by
+  positions shuffled inside fixed windows of 140. Its stability was its fault: a production card
+  whose key fell before its recognition card's — a coin flip — was let in the moment the recognition
+  card was placed, so **half of all production cards sat directly behind their recognition card**
+  (755 of 1,524 in `decks/japanese.apkg`). Bru's swap sort fixed that the same morning — walk the
+  shuffled window, and swap a card that is too early with one drawn from past its dependency — but
+  both share a second fault no sort inside a fixed week can avoid: a card cannot wait past the end
+  of its week, so a week's first cards were the ones with nothing to wait for and its last the ones
+  that had waited. Bru asked for a sort with the same structure at a week's start as at its end;
+  that meant dropping the fixed week and keeping the window only as a bound on drift. The design's
+  section 7 still names the topological sort and the windows; rewriting it is Bru's.
 
   Over Gokurakugai 0001's own graph (3,108 cards, 4,239 edges, 1,524 recognition–production pairs),
   200 seeds each, window 140:
 
-  | | toposort | swap sort |
-  |---|---|---|
-  | dependency violations | 0 | 0 |
-  | production directly after recognition | 48.9% | 3.5% |
-  | any dependent directly after its dependency | 22.3% | 1.7% |
-  | median recognition → production gap | 1.8 | 22.6 |
-  | mean distance a card moves from the source's place | 45.7 | 45.4 |
-  | cards outside their source window | 0 | 0 |
-  | time per deck | 3.6 ms | 4.0 ms |
+  | | toposort | swap sort | keyed |
+  |---|---|---|---|
+  | dependency violations | 0 | 0 | 0 |
+  | production directly after recognition | 48.9% | 3.5% | 0.3% |
+  | any dependent directly after its dependency | 22.3% | 1.7% | 0.1% |
+  | median recognition → production gap | 1.8 | 22.6 | 52.2 |
+  | mean / furthest a card moves | 45.7 / 139 | 45.4 / 139 | 33.4 / 85 |
+  | cards that leave their source week | 0 | 0 | 739 |
+  | time per deck | 3.6 ms | 4.1 ms | 6.8 ms |
 
-  An ordered pair dropped at random into a 140-card window is adjacent 1.4% of the time; the swap
-  sort's 3.5% is above that because a recognition card late in its week leaves its production card
-  few places to land. The cost is a lean: dependents sit later in their week and free cards earlier
-  — production cards at a mean place of 84 of 140 against 79 under the toposort, cards with no
-  dependency at 40 against 49 — which is what "after what it waits for" means once it is not "right
-  after".
+  Share of cards that have a dependency, by tenth of each 140-card stretch, start to end:
+
+  | | |
+  |---|---|
+  | source | 78 79 80 79 80 81 79 77 82 79 |
+  | toposort | 54 69 75 78 82 84 86 88 89 91 |
+  | swap sort | 50 63 69 76 80 84 88 92 95 99 |
+  | keyed | 78 79 79 80 79 80 80 79 79 81 |
+
+  An ordered pair dropped at random into 140 places is adjacent 1.4% of the time; the keyed sort is
+  below that because a dependent is put a gap of at least ten past what it waits for, unless the
+  bound leaves less.
+
+- **A dependency the source put after the card that needs it** wins over the bound, as ordering
+  always has: the card is keyed a gap past it, wherever that is. One run's glosses never make such
+  an edge — none in Gokurakugai 0001 — but the backwards edge `glosses._after` draws could, and the
+  keys are computed in dependency order (source order, unless such an edge reorders it) so the
+  dependency's key is known first.
 
 - The seed is a parameter (`--seed`), so a deck can be rebuilt exactly. Without one the shuffle is
   fresh each run, which is what a first build wants.
