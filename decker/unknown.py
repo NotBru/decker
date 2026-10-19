@@ -65,7 +65,9 @@ PROMPT = """\
 You are helping build language-learning cards from a text in {language}.
 
 A word of the text has no {language} entry in Wiktionary. Say which of these it
-is, judging it in the passage it appears in.
+is, judging it in the passage it appears in, where it is marked ⟨like this⟩.
+The marks are added for you; they are not part of the text, and an explanation
+never mentions them.
 
 **A word printed inside a {language} text is not thereby a {language} word.** A
 quoted title or a word of another language used as itself stays foreign,
@@ -99,7 +101,10 @@ however ordinary it looks on the page.
 **An explanation says what the word is, never what happens in the text.** The
 passage is there for you to judge the word by; the card is read before the
 story is, so it names no character, event or place of the story and says
-nothing about who speaks, to whom, or why.
+nothing about who speaks, to whom, or why. Say what the word would mean in a
+dictionary, not what the passage shows it doing. A word the work coins or gives
+a meaning of its own -- a creature, a power, a term of its world -- is explained
+by what it means outside the work, and nothing the work makes of it.
 
 Prefer "unrecognizable" to a guess. An explanation you are not sure of is worse
 than no card: the learner cannot tell the two apart.
@@ -116,6 +121,12 @@ Answer with the kind, and the other fields that kind asks for.
 #: name prompt had asked for "whom or what it names as far as the passage
 #: shows", and `タオ` came back as the man who answers the office's phone --
 #: a card that tells the story before the reader has read it.
+#:
+#: The marks, and a work's own coinages, by the Sonnet run of 2026-10-19: the
+#: prompt never said what ⟨⟩ were, and `タオ`, `アルマ` and `宝来` came back
+#: "shown in angle brackets" in the text; and `マガ`, which is no character,
+#: event or place, came back as the monster the volume makes of 禍 --
+#: reanimated, drinking blood -- three bubbles before the story says so.
 #:
 #: What a card says when the model wrote its explanation. A foreign word has no
 #: Wiktionary entry at all -- that is why it is here -- so the card cannot

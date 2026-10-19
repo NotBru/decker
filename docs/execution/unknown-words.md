@@ -105,6 +105,27 @@ text — no character, event or place of the story, nothing about who speaks to 
 is read before the story. `タオ` is now "Tao is a given name, used here for a character." The
 passage is still sent: it is what the kind of word is judged by.
 
+That rule had two holes, found by the whole volume through Sonnet 5.5 on 2026-10-19. The passage
+marks the word `⟨like this⟩`, as the sense prompt's does, but this prompt never said so, and Sonnet
+took the marks for the manga's own: `タオ`, `アルマ` and `宝来` were each "shown in angle brackets".
+And `マガ` is no character, event or place, so nothing forbade it being explained as the volume's
+monster — reanimated corpses that drink blood and eat flesh — which the story itself says three
+bubbles later. The prompt now says what the marks are and that an explanation never mentions them;
+that an explanation is what a dictionary would say, not what the passage shows the word doing; and
+that a word the work coins or gives a meaning of its own is explained by its meaning outside the
+work. On the bubbles concerned the names came back as "Yaya is a given name" and "Horai is the name
+of a shop", `マガ` was judged unrecognizable and has no card — less than "a reading of 禍,
+calamity", but nothing false and nothing told early — and `ガッツ`, which had been "the name of a
+character", became the widely known borrowing it is. `血袋` is still "a person or animal used as a
+source of blood", which is closer to the volume than to a dictionary, since no dictionary has it.
+
+Over the whole volume (`decks/japanese.apkg`, rebuilt with `--update`, 179,446 tokens in and 11,426
+out to re-ask the 107 words): no explanation mentions the marks, `マガ` has no card, and 24
+explanations stand where there were 23. Two still lean on the text. `宝来` is "a restaurant or
+eatery where one can run a tab", read off `宝来のツケが先だ`; and `血袋` is "a living creature
+kept or used as a source of blood". Neither tells the plot. Tuning the prompt until those two pass
+would be fitting it to them, the trap the `よお` clause above fell into.
+
 The drawn-out clause was tuned on one bubble and not past it: `よお` at the end of
 `出てくださいよお` is a stretched `よ`, and Haiku corrects it to `よう` with or without the sentence
 saying "the word with the stretch taken out". よお/よう is a real spelling ambiguity, and a prompt
