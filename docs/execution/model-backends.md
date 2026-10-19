@@ -86,8 +86,8 @@ thing to get wrong makes that worse, so:
 
 ## The Anthropic backend, as built (2026-10-18)
 
-The first hosted backend, and so far the only one; the OpenAI-compatible one is still only the
-design above. What was decided while building it:
+The first hosted backend; the OpenAI-compatible one came a day later, as OpenRouter, below. What
+was decided while building it:
 
 - **`--backend anthropic`, or `DECKER_BACKEND=anthropic`.** Its own flag, per the section above;
   `--ollama-host` is ignored by it. `pages.HOST`'s pattern: the CLI sets `ollama.BACKEND`, and a
@@ -215,6 +215,37 @@ So Sonnet is an upgrade on gemma4 where Haiku was a peer: about five right answe
 lost, among the differences that are not a draw, and a better reading of the words Sudachi broke. It
 costs half an hour without the GPU box and the tokens above; the benchmark is still what would rank
 it without resting on one reader.
+
+## The OpenRouter backend, as built (2026-10-19)
+
+The OpenAI-compatible backend, built for Bru's first paid DeepSeek run and pointed at OpenRouter
+rather than at DeepSeek's own API: one key reaches every vendor, and the account came with a spend
+limit set on the key itself. What was decided:
+
+- **`--backend openrouter`, key in `OPENROUTER_API_KEY`.** Named for the service, not for the wire
+  shape, because what it sends beyond the OpenAI fields — provider preferences, the reasoning
+  switch — is OpenRouter's. Another OpenAI-compatible endpoint is `OPENROUTER_BASE` and those two
+  fields away. The key is read from a file outside the repository (`~/.config/openrouter/key`, mode
+  600) by the shell profile; it is never in the tree.
+- **Default model `deepseek/deepseek-v4.1-flash`.** The first one asked through it.
+- **No new dependency.** The call is one POST, made with `httpx`, which `anthropic` and `ollama`
+  already bring; `pyproject.toml` is Bru's.
+- **The schema as OpenAI's strict `json_schema`,** closed with the same `_closed` Anthropic needs.
+  With `provider.require_parameters` the call is routed only to a provider that honours the schema
+  and the reasoning switch; without it, OpenRouter may pick one that drops them silently, and the
+  answer is whatever shape that provider felt like.
+- **`provider.data_collection: deny`.** The sentences still leave the machine, but only to
+  providers that say they do not keep prompts to train on. This narrows the routing; it does not
+  make a hosted backend private.
+- **Reasoning off with `reasoning: {enabled: false}`,** and the Anthropic backend's once-per-run
+  retreat to low effort if a model's 400 names reasoning. DeepSeek V4.1 Flash takes it: a test
+  call answered in 2 s with no reasoning tokens.
+- **Busy is waited out.** A 429 or a 5xx — as a status, or as the `error` OpenRouter puts in a
+  200's body when a provider fails mid-call — is a `ConnectionError` to the gate, like a dropped
+  tunnel. A 402 (no credit), a bad key or an unknown model stops the run; an unknown model lists
+  what OpenRouter serves from the same vendor.
+- **Tokens, not dollars.** OpenRouter reports a `cost` per call; decker does not read it, for the
+  reason `spending` gives — the console is where the bill is.
 
 ## What this costs in privacy, stated plainly
 

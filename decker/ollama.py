@@ -8,7 +8,8 @@ run stopped when it cannot be had -- never a deck built without it. That shape l
 prompts live with the stage that writes them.
 
 The model is served by a backend: ollama, the default and the only one that
-keeps the text on hardware Bru owns, or Anthropic's API when a run names it.
+keeps the text on hardware Bru owns, or Anthropic's API or OpenRouter when a
+run names one.
 A backend is how a call is sent and what to list when it fails; everything
 else -- the answer cache, the waiting, the warning -- is shared. See
 docs/execution/model-backends.md.
@@ -78,7 +79,7 @@ MODEL_VARIABLE = "DECKER_MODEL"
 #: keeps meaning ollama and nothing else. ollama is the default because it is
 #: the one that sends no sentence anywhere; a hosted backend is used only by a
 #: run that asks for it.
-BACKENDS = ("ollama", "anthropic")
+BACKENDS = ("ollama", "anthropic", "openrouter")
 BACKEND_VARIABLE = "DECKER_BACKEND"
 
 #: Set from `--backend`, the way `pages.HOST` is set from `--wiktionary-host`;
@@ -86,8 +87,18 @@ BACKEND_VARIABLE = "DECKER_BACKEND"
 BACKEND: str | None = None
 
 #: Each backend's default, since a tag one serves is a name the other has
-#: never heard of. Claude Haiku 5.5 is Anthropic's cheapest tier.
-DEFAULT_MODELS = {"ollama": DEFAULT_MODEL, "anthropic": "claude-haiku-5-5"}
+#: never heard of. Claude Haiku 5.5 is Anthropic's cheapest tier; DeepSeek
+#: V4.1 Flash is the first model asked through OpenRouter, 2026-10-19.
+DEFAULT_MODELS = {
+    "ollama": DEFAULT_MODEL,
+    "anthropic": "claude-haiku-5-5",
+    "openrouter": "deepseek/deepseek-v4.1-flash",
+}
+
+#: OpenRouter speaks the OpenAI chat-completions shape, so this is the one
+#: line between it and any other endpoint that does; the key is its own.
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+OPENROUTER_KEY_VARIABLE = "OPENROUTER_API_KEY"
 
 
 def current_backend() -> str:
@@ -165,6 +176,25 @@ def _anthropic_gate() -> Gate:
 
             _GATES["anthropic"] = Gate("the Anthropic API", probe)
         return _GATES["anthropic"]
+
+
+def _openrouter_gate() -> Gate:
+    with _GATES_LOCK:
+        if "openrouter" not in _GATES:
+            def probe() -> bool:
+                import httpx
+
+                httpx.get(f"{OPENROUTER_BASE}/models", timeout=10).raise_for_status()
+                return True
+
+            _GATES["openrouter"] = Gate("OpenRouter", probe)
+        return _GATES["openrouter"]
+
+
+class _Busy(ConnectionError):
+    """A hosted endpoint that answered, but only to say not now: a 429 or a
+    5xx, from OpenRouter itself or passed through from the provider behind
+    it. Waited out like a dropped connection, which is what it amounts to."""
 
 
 def _unreachable(error: BaseException) -> bool:
@@ -284,6 +314,19 @@ class Session:
                 #: calls, and an overloaded API is backed off from here before
                 #: it is waited out at the gate.
                 self._client = anthropic.Anthropic(max_retries=8)
+            elif self.backend == "openrouter":
+                import httpx
+
+                key = os.environ.get(OPENROUTER_KEY_VARIABLE)
+                if not key:
+                    raise RuntimeError(f"no key in ${OPENROUTER_KEY_VARIABLE}")
+                #: Thread-safe and pooled: the prefetcher and the gloss loop
+                #: share it, as they share ollama's client.
+                self._client = httpx.Client(
+                    base_url=OPENROUTER_BASE,
+                    headers={"Authorization": f"Bearer {key}"},
+                    timeout=120,
+                )
             else:
                 import ollama
 
@@ -293,6 +336,8 @@ class Session:
     def _gate(self) -> Gate:
         if self.backend == "anthropic":
             return _anthropic_gate()
+        if self.backend == "openrouter":
+            return _openrouter_gate()
         return _gate(self._host(), self._named())
 
     def ask(self, prompt: str, schema: dict, check=None) -> dict:
@@ -438,7 +483,11 @@ class Session:
         #: those are three different fixes.
         #: What the backend holds is the answer to a model it does not have,
         #: and noise after any other failure.
-        missing = "not found" in reason.lower() or "not_found" in reason
+        missing = (
+            "not found" in reason.lower()
+            or "not_found" in reason
+            or "not a valid model" in reason
+        )
         raise Unavailable(
             f"{self.what}: {self.model} unavailable from {self.backend} "
             f"({reason}){self._held() if missing else ''}"
@@ -460,6 +509,16 @@ class Session:
             except Exception:  # no key, or no network; the warning says which
                 return ""
             return f"; the API serves {', '.join(sorted(names))}" if names else ""
+        if self.backend == "openrouter":
+            #: OpenRouter serves hundreds; the vendor's own are the ones a
+            #: misspelled name was meant to be.
+            vendor = self.model.split("/")[0] + "/"
+            try:
+                listed = self.client().get("/models").json()["data"]
+                names = [entry["id"] for entry in listed if entry["id"].startswith(vendor)]
+            except Exception:
+                return ""
+            return f"; OpenRouter serves {', '.join(sorted(names))}" if names else ""
         try:
             response = self.client().list()
         except Exception:  # the host is unreachable; the warning says so
@@ -483,6 +542,8 @@ class Session:
         """The text of one answer, from whichever backend serves the model."""
         if self.backend == "anthropic":
             return self._message(prompt, schema)
+        if self.backend == "openrouter":
+            return self._completion(prompt, schema)
         response = self._chat(prompt, schema)
         return response["message"]["content"]
 
@@ -535,6 +596,81 @@ class Session:
         if response.stop_reason == "refusal":
             raise ValueError(f"{self.model} declined to answer")
         return "".join(block.text for block in response.content if block.type == "text")
+
+    def _completion(self, prompt: str, schema: dict) -> str:
+        """One call to OpenRouter, reasoning off where the model allows it.
+
+        The schema goes as OpenAI's strict ``json_schema``, closed as
+        Anthropic's is. Two provider preferences ride along:
+        ``require_parameters``, so the call is routed only to a provider that
+        honours the schema and the reasoning switch rather than to one that
+        silently drops them, and ``data_collection: deny``, so it is never
+        routed to one that keeps the prompt to train on -- the sentences are
+        sent all the same, but to no one who says they keep them.
+
+        Temperature zero is sent, as to ollama; the answer cache keeps a
+        second run's answers the first one's either way.
+        """
+        arguments = dict(
+            model=self.model,
+            max_tokens=4096,
+            temperature=0,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "answer", "strict": True, "schema": _closed(schema)},
+            },
+            provider={"require_parameters": True, "data_collection": "deny"},
+        )
+        if self._thinkable:
+            try:
+                return self._completed(arguments, reasoning={"enabled": False})
+            except ValueError as error:
+                if "reasoning" not in str(error).lower():
+                    raise
+                self._thinkable = False
+                log(
+                    f"[decker] {self.model} will not answer with its reasoning "
+                    "turned off; leaving it on at low effort for this run",
+                    kind="warn",
+                )
+        return self._completed(arguments, reasoning={"effort": "low"})
+
+    def _completed(self, arguments: dict, **more) -> str:
+        """The text of one chat completion, or the error that stands for it.
+
+        OpenRouter reports a failure either as an HTTP status or, once the
+        stream has begun, as an ``error`` in a 200's body; both are read the
+        same way. Busy is waited out, anything else is the answer.
+        """
+        response = self.client().post("/chat/completions", json={**arguments, **more})
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        failure = body.get("error") if isinstance(body, dict) else None
+        if failure is not None or response.status_code >= 400:
+            if not isinstance(failure, dict):
+                failure = {"message": str(failure or response.text[:300])}
+            code = failure.get("code", response.status_code)
+            if not isinstance(code, int):
+                code = response.status_code
+            reason = f"OpenRouter {code}: {failure.get('message', '')}"
+            if code == 429 or code >= 500:
+                raise _Busy(reason)
+            #: A ValueError is what `_completion` reads as the model refusing
+            #: the reasoning switch, and what `ask` asks again; anything
+            #: else -- no credit, no such model, a bad key -- stops the run.
+            if code == 400 and "reasoning" in reason.lower():
+                raise ValueError(reason)
+            raise RuntimeError(reason)
+        usage = body.get("usage") or {}
+        count("tokens.in", usage.get("prompt_tokens", 0))
+        count("tokens.out", usage.get("completion_tokens", 0))
+        choice = body["choices"][0]
+        if choice.get("message", {}).get("refusal"):
+            raise ValueError(f"{self.model} declined to answer")
+        return choice["message"].get("content") or ""
 
     def _chat(self, prompt: str, schema: dict):
         """One call to ollama, with the model's own reasoning turned off if it has any.
