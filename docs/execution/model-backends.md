@@ -160,6 +160,53 @@ glosses, and a habit of keeping the vulgar sense that a learner's deck should no
 that it needs no GPU box, for a quarter of a dollar a volume. The 211-check benchmark is still the
 way to rank it properly.
 
+### Sonnet 5.5 on Gokurakugai 0001, against gemma4, 2026-10-19
+
+The same flags and the same rule-book arrangement as Haiku's run, thinking on at low effort (Sonnet
+refuses it off). The answer cache was cold, so every question went to the API.
+
+| | gemma4 (tunnel) | Sonnet 5.5 |
+|---|---|---|
+| glosses / cards | 1,524 / 2,986 | 1,563 / 3,067 |
+| rules written | 0 (22 reused) | 20, no rule card past culling |
+| wall clock | — | 34 min |
+| tokens | — | 2,394,384 in, 50,694 out |
+
+**The comparison is not clean, and Haiku's was not either.** `decks/japanese.apkg` was built at
+13:21 on 2026-10-18, before the commits of that evening — untitled words as terms, one bubble a
+line, multi-sense follow-ups, no-spoiler explanations. So the 118 terms only Sonnet's deck has
+(`タオ`, `ユキ`, `メシ`, `ガッツ`, `血袋`, the names and slang the unknown-word stage now explains)
+are the code's, not the model's, and the senses chosen differ partly because the prompt does. A
+gemma4 rebuild on the current code is what would separate the two.
+
+1,264 glosses are shared. Of the 140 terms whose senses differ, every one was read against the
+bubbles it came from. About ninety are a draw: OCR noise (`午短短短知短う`, `研カレヤヤ`), the
+one-kana fragments a component or a wrong cut leaves (`け`, `せ`, `す`, `ど`, `ふ`, `む`), two
+glosses that say the same thing (`ツケ` *account* or *bill*), and particles used fifty times where
+both decks hold a defensible sense. Of the rest:
+
+- **Sonnet right, gemma4 wrong: 42.** Mostly the sense the bubble actually uses, where gemma4 took
+  the first or the most concrete one: `出て(ください)` *answer the door*, `一文負けねえ` *won't knock
+  a mon off*, `金蔓` *a cash cow* not *vine*, `良かった` *thank goodness*, `表向き` *ostensibly*,
+  `様に見える` *to seem*, `悪い目にあう` *experience*, `話長ェ` 長 *long* not *headman*, `いい加減`
+  *enough already*, `対人` *versus*, `舐め回す` 回す *around* not *refer someone*, `ハイハイ`, `やった`,
+  `段ボール`'s `ボール`, `これ以上`, `見て回んなきゃ` *must*, `大方⋯` *probably*.
+- **gemma4 right, Sonnet wrong: 9.** `またまたお嬢` *come off it* (Sonnet: *again and again*, as
+  Haiku), `どうもありがとう`, `いや`, `が` as the case marker, `出回る` *to circulate*, `お前`'s `前`
+  as the old honorific, `どの口が` *one's words*, `連れて`, `大丈夫？`.
+- **Sonnet trims a flooded page**, as Haiku did: gemma4's eight senses of 管 for `くだ`, four of
+  `世の中`, three of `心` become one each.
+
+**Two answers a learner's deck should not carry.** `アル`, the short of アルマ in
+`アルは半禍の子なんだよ`, is glossed as *the stereotypical sentence-final particle used by Chinese* —
+the same kind of answer as Haiku's slur on the same word. And the explanation of the name `アルマ`
+says it is "shown in angle brackets as a speaker": the ⟨⟩ that mark a term in the prompt leaked into
+card text. `病気だろ` is plain *sickness*, missing the slang Haiku caught.
+
+So Sonnet is an upgrade on gemma4 where Haiku was a peer: about four right answers to every one
+lost, among the differences that are not a draw. It costs a GPU-free run of half an hour and the
+tokens above, and it still needs the benchmark for a ranking that does not rest on one reader.
+
 ## What this costs in privacy, stated plainly
 
 [A local Wiktionary](local-wiktionary.md) exists in large part because "the model runs on hardware
