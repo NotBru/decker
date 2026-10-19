@@ -1395,6 +1395,13 @@ def build(
                     _gloss_term(builder, term, sentence.text, around)
                     if _enough(builder, limit):
                         break
+                #: And the letters no term carried. Sudachi calls a stray small
+                #: kana punctuation -- the `ェ` of `長ェ`, the `ぅ` of `ますぅ` --
+                #: so it is never a term, and the reader still has to read it.
+                #: Only letters: a stop or a bracket is not a symbol to learn.
+                builder.symbols_in(
+                    "".join(one for one in sentence.text if one.isalpha())
+                )
                 console.advance(len(sentence.text))
     finally:
         ahead.close()
@@ -1804,7 +1811,16 @@ def _no_entry(
     word that was meant and glossed as that word, a foreign word the reader
     would not know is taught with the model's own explanation, and a foreign
     word they would know is dropped like any other thing not worth a card.
+
+    **Its characters are taught whatever becomes of it.** The word is on the
+    page whether or not it earns a card, and the reader has to be able to read
+    it there: Gokurakugai 0001 left twelve characters untaught this way, 2026-10-19
+    -- `昨` of a split `一昨日`, `ゴ` of a dropped `ゴッ`, `エ` of a `テメエ` corrected
+    to `てめえ`, and the small `ァ`, `ォ`, `ぅ` of every stretched vowel. A dropped
+    word's characters stand alone, where it was met; a corrected word's card
+    waits for the spelling the text used as well as its own.
     """
+    shapes = builder.symbols_in(term.surface)
     unknowns = builder.unknowns
     if unknowns is None or not unknowns.enabled:
         log(
@@ -1842,7 +1858,12 @@ def _no_entry(
         corrected = dataclasses.replace(
             term, surface=verdict.correction, joined="", entries=(verdict.correction,)
         )
+        before = len(builder.glosses)
         _gloss_term(builder, corrected, sentence, around)
+        for index in range(before, len(builder.glosses)):
+            if not builder.glosses[index].surface.startswith(SYMBOL_PREFIX):
+                for shape in shapes:
+                    builder._after(index, shape)
         return
 
     if verdict.is_native:

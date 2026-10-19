@@ -243,6 +243,19 @@ there was before.
 - **A character the text teaches as a word is not taught twice.** The first gloss whose form *is*
   that character answers for it: the reader has met the shape, which is all the dependency asserts.
   It is what keeps a Chinese deck from carrying a `Symbol: 水` behind its `水`.
+- **A word that earns no card still teaches its characters** (2026-10-19). Symbols were made only
+  from a term that became a gloss, and Gokurakugai 0001 under Sonnet left twelve characters of the
+  text untaught: `昨` of a `一昨日` Sudachi split and the model dropped, `ゴ` of a dropped `ゴッ`,
+  `フ` and `ド` of a `フライド` known as a borrowing, `ウ` and `ゾ` of words with no entry, `エ` of a
+  `テメエ` corrected to `てめえ`. The word is on the page whatever becomes of it, so a word with no
+  entry has its characters taught first, where it was met; a corrected one's card waits for the
+  spelling the text used as well as its own, so `てめえ` comes after `Symbol: エ`.
+- **And so do the letters no term carried.** Sudachi tags a stray small kana as punctuation — the
+  `ェ` of `長ェ`, the `ぅ` of `ますぅ`, the `ぉ` of `けどぉ` — so it never becomes a term at all.
+  After a sentence's terms, every letter of it (`str.isalpha`, so no stop, bracket or digit) in a
+  script the reader lacks is taught if nothing has taught it. This reads the sentence, not only the
+  term, which is wider than the rule above; it adds nothing a term would not have, had extraction
+  called those letters a word, and it is the text's writing still, not a definition's or a reading's.
 - **Symbol cards have no dependencies of their own.** They did in the first version, which read each
   letter's own definition and reading and so pulled a whole alphabet in behind one word, cycles
   included — `ж` is defined in terms of `э`, and `э` in terms of `ж`. Reading only the term removes
