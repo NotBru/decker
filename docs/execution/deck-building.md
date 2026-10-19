@@ -342,15 +342,45 @@ user's own it is a copyright question too, and the ollama default is what keeps 
   move a card around inside its week and nowhere else, which is the design's window without any
   arithmetic about where a card is allowed to land.
 
-- The topological sort is Kahn's algorithm over a heap keyed by those shuffled positions: at every
-  step the ready card with the smallest key. That is what makes it *stable* in the shuffled order —
-  a card waits exactly as long as its dependencies make it wait, and not one place longer.
+- **Each window is shuffled and then put in dependency order by swaps** (since 2026-10-19). The
+  sort sees one window's list and nothing else. It reads the list front to back; a card one of whose
+  dependencies is still ahead of it swaps with a card drawn at random from that dependency's place to
+  the end of the list, and the card that comes back is read next. A card that has to wait therefore
+  lands uniformly somewhere after what it waits for, and one card moves for it, not everything in
+  between. Swaps only send a card forward and past its dependency, so with no cycle it ends; a
+  cycle, which cannot be built, stops it after a bounded number of swaps rather than hanging the run.
+  A card whose dependency the source put in a *later* window is carried into the next window before
+  that one is shuffled. One run's glosses never make such an edge (none in Gokurakugai 0001), but the
+  backwards edge `glosses._after` draws could.
 
-- A dependency can still carry a card a little past the end of its window, when what it waits for
-  lands late in the same window. Ordering wins over the window on purpose: a card whose dependency
-  the reader has not met yet teaches nothing, while a card a few places into the next week is only
-  slightly out of place. Over 400 cards with the design's window of 140, the furthest a card moved
-  was 135.
+- **What it replaced, and why.** Until then the order was a stable topological sort, Kahn's
+  algorithm taking the ready card with the smallest shuffled key: a card waited exactly as long as
+  its dependencies made it wait and not one place longer. That last property was the fault. A
+  production card whose key fell before its recognition card's — a coin flip — became ready with its
+  turn already past, was the smallest key ready, and went out next: **half of all production cards
+  sat directly behind their recognition card** (755 of 1,524 in `decks/japanese.apkg`), and a word
+  directly behind its last symbol the same way. Bru's algorithm, with the swap his: shuffle without
+  regard to order, walk the list, and send a card that is too early to a random place forwards.
+
+  Over Gokurakugai 0001's own graph (3,108 cards, 4,239 edges, 1,524 recognition–production pairs),
+  200 seeds each, window 140:
+
+  | | toposort | swap sort |
+  |---|---|---|
+  | dependency violations | 0 | 0 |
+  | production directly after recognition | 48.9% | 3.5% |
+  | any dependent directly after its dependency | 22.3% | 1.7% |
+  | median recognition → production gap | 1.8 | 22.6 |
+  | mean distance a card moves from the source's place | 45.7 | 45.4 |
+  | cards outside their source window | 0 | 0 |
+  | time per deck | 3.6 ms | 4.0 ms |
+
+  An ordered pair dropped at random into a 140-card window is adjacent 1.4% of the time; the swap
+  sort's 3.5% is above that because a recognition card late in its week leaves its production card
+  few places to land. The cost is a lean: dependents sit later in their week and free cards earlier
+  — production cards at a mean place of 84 of 140 against 79 under the toposort, cards with no
+  dependency at 40 against 49 — which is what "after what it waits for" means once it is not "right
+  after".
 
 - The seed is a parameter (`--seed`), so a deck can be rebuilt exactly. Without one the shuffle is
   fresh each run, which is what a first build wants.
