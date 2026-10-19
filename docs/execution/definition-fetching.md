@@ -633,6 +633,20 @@ design wins and the code is wrong.
   reading nested under it. The nested list is looked for anywhere beneath the item rather than as a
   direct child, because Wiktionary sometimes puts it inside the item's `dd`.
 
+  Since 2026-10-19 the prefix is not a header's alone: **every** sub-sense carries the line it sits
+  under, header or not, because a sub-sense narrows its parent and does not stand without it.
+  下さる's sense 5 is `(honorific) to do something for the recipient` with two sub-senses beneath,
+  `used after the conjunctive 〜て form of a verb` and `used after お/御 + noun`; the parent did not
+  end in a colon, so each sub-sense was a sense of its own, and the one the model rightly chose for
+  下さい reached the Japanese deck saying only where the word goes. A parent that is a meaning stays a
+  sense too. A parent that is labels and nothing else — 来る's `(auxiliary) [with (verb in
+  ren'yōkei +) て (te)]` — is a header now, colon or no colon, since as a card it means nothing.
+
+- The attestation date a sense opens with, `[from 1715]` (`span.defdate`), is not read. It says
+  when a sense is first recorded, not what it is, and 35 recognition cards of the Sonnet Japanese
+  deck of 2026-10-19 opened with one — 来る, 見える, 本当, 電話, 僕 among them — as if the year
+  were part of the meaning. `_text` leaves it out wherever it appears.
+
   It was harder to recover from REST, which flattened the shape into siblings: a header sense
   holding every reading glued together, then each reading alone, without the lemma. `_unflattened`
   put them back by containment — the header sense is literally its first clause followed by every

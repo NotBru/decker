@@ -1344,6 +1344,12 @@ def _text(node, *, skip=()) -> str:
         return node
     if node.get("tag") in skip or node.get("tag") in _UNREADABLE:
         return ""
+    #: The date a sense is first attested, `[from 1715]`, set small in front
+    #: of the definition. It says when, not what: a card that opened with it
+    #: read as if the year were part of the meaning, 35 of them in the
+    #: Japanese deck of 2026-10-19.
+    if "defdate" in _classes(node):
+        return ""
     return "".join(_text(child, skip=skip) for child in node["children"])
 
 
@@ -1596,8 +1602,12 @@ def _senses_of(items: list, language: str) -> list[Sense]:
     """One sense per list item, with a nested list read as what it nests under.
 
     An item whose own text ends in a colon is a header and not a meaning --
-    `inflection of auswandern:` -- so it is not a sense of its own and its text
-    goes in front of each item nested under it.
+    `inflection of auswandern:` -- so it is not a sense of its own. Either way
+    its text goes in front of each item nested under it: a sub-sense narrows
+    the line it sits under and is not read without it. 下さる's `used after the
+    conjunctive 〜て form of a verb` sits under `to do something for the
+    recipient`, and alone it was a card that said where the word goes and not
+    what it means, 2026-10-19.
 
     A sense that is a Lua or script error is not a sense at all and is dropped
     here, counted rather than glossed.
@@ -1618,7 +1628,12 @@ def _senses_of(items: list, language: str) -> list[Sense]:
             for child in sublist["children"]
             if not isinstance(child, str) and child.get("tag") == "li"
         ]
-        header = raw.strip().endswith(":") or (nested and not own)
+        #: Or a parent that is labels and nothing else -- 来る's `(auxiliary)
+        #: [with (verb in ren'yōkei +) て (te)]` -- which says what its
+        #: sub-senses have in common and means nothing on its own.
+        header = raw.strip().endswith(":") or bool(
+            nested and not _tidy(re.sub(r"\([^()]*\)|\[[^\[\]]*\]", "", own))
+        )
         #: Over the same subtree `raw` was read over, so the terminology a
         #: sense is credited with is the terminology its own definition names.
         own_concepts = _concepts_in(item, skip=("dl", "ol", "ul"))
@@ -1649,19 +1664,19 @@ def _senses_of(items: list, language: str) -> list[Sense]:
             inner_quoted = _quoted_in(child, language, skip=("dl", "ol", "ul"))
             senses.append(
                 Sense(
-                    definition=f"{own}: {inner}".strip() if header and own else inner,
+                    definition=f"{own}: {inner}" if own else inner,
                     examples=tuple(_html_examples(child)),
-                    #: A header's text is prefixed to its children, so its
+                    #: The parent's text is prefixed to its children, so its
                     #: terminology is theirs too -- `inflection of curar:`
                     #: carries the word, the lines under it carry the tags.
-                    concepts=_merge(own_concepts if header else (), inner_concepts),
+                    concepts=_merge(own_concepts, inner_concepts),
                     #: And so is the word it names: `inflection of curar:` is
                     #: where the link sits, and the lines under it are the
                     #: inflections *of* it.
-                    targets=_merge(own_targets if header else (), inner_targets),
-                    #: A header's text is prefixed to the line, so a word it
-                    #: quotes is quoted in the definition the card shows.
-                    quoted=_merge(own_quoted if header else (), inner_quoted),
+                    targets=_merge(own_targets, inner_targets),
+                    #: And a word it quotes is quoted in the definition the
+                    #: card shows.
+                    quoted=_merge(own_quoted, inner_quoted),
                 )
             )
     return senses
